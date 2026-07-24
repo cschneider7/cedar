@@ -29,6 +29,8 @@ describe("classroom loader", () => {
       id: classroomId,
       period: 2,
       subject: "Math",
+      boundary_width: 1080,
+      boundary_height: 820,
     }
     const seatingChart: SeatingChart = {
       tables: [

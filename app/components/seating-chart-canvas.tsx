@@ -9,11 +9,14 @@ import {
 } from "@xyflow/react"
 import React, {
   useCallback,
+  useImperativeHandle,
+  useMemo,
   useRef,
   type Dispatch,
   type SetStateAction,
 } from "react"
-import { LockedContext } from "~/components/nodes/context"
+import { BoundaryNode } from "~/components/nodes/boundary-node"
+import { BoundaryContext, LockedContext } from "~/components/nodes/context"
 import { SeatNode } from "~/components/nodes/seat-node"
 import { StudentCardContent } from "~/components/nodes/student-card-content"
 import { StudentNode } from "~/components/nodes/student-node"
@@ -31,9 +34,15 @@ import {
   type SeatingChartStudentNode,
 } from "~/lib/seating-chart-utils"
 
-const nodeTypes = { table: TableNode, seat: SeatNode, student: StudentNode }
+const nodeTypes = {
+  table: TableNode,
+  seat: SeatNode,
+  student: StudentNode,
+  boundary: BoundaryNode,
+}
 
 const STUDENT_DATA_TRANSFER_TYPE = "application/x-student-id"
+const CANVAS_PADDING = 1000
 
 function StudentChip({
   student,
@@ -99,19 +108,50 @@ interface SeatingChartCanvasProps {
   setNodes: Dispatch<SetStateAction<SeatingChartNode[]>>
   locked: boolean
   studentsById: Map<string, Student>
+  boundary: { width: number; height: number }
+  ref?: React.Ref<SeatingChartCanvasHandle>
+}
+
+export type SeatingChartCanvasHandle = {
+  fitView: () => void
 }
 
 type DragSnapshot = { parentId?: string; position: Point }
 
-function SeatingChartCanvasInner({
+function SeatingChartFlow({
   nodes,
   onNodesChange,
   setNodes,
   locked,
   studentsById,
+  boundary,
+  ref,
 }: SeatingChartCanvasProps) {
-  const { getIntersectingNodes, getInternalNode, screenToFlowPosition } =
-    useReactFlow<SeatingChartNode>()
+  const {
+    getIntersectingNodes,
+    getInternalNode,
+    screenToFlowPosition,
+    fitView,
+  } = useReactFlow<SeatingChartNode>()
+
+  useImperativeHandle(ref, () => ({ fitView: () => fitView() }), [fitView])
+
+  // The synthetic boundary node isn't part of `nodes` state (it's derived
+  // from the `boundary` prop), so forwarding its own dimension-change events
+  // back into `onNodesChange` would produce a same-content-but-new-array
+  // update on every measurement, causing `displayNodes` to recompute and the
+  // boundary to be remeasured again -- an infinite loop.
+  const handleNodesChange: OnNodesChange<SeatingChartNode> = useCallback(
+    (changes) => {
+      const relevant = changes.filter(
+        (c) => !("id" in c) || c.id !== "__boundary__"
+      )
+      if (relevant.length > 0) {
+        onNodesChange(relevant)
+      }
+    },
+    [onNodesChange]
+  )
 
   // Captures a dragged student's parentId/position before a drag
   const dragStartState = useRef(new Map<string, DragSnapshot>())
@@ -237,6 +277,7 @@ function SeatingChartCanvasInner({
     [locked]
   )
 
+  // Handle dragging a student from the unassigned list onto the canvas
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault()
@@ -261,20 +302,22 @@ function SeatingChartCanvasInner({
         height: STUDENT_NODE_SIZE,
       }
 
-      const hitSeat = getIntersectingNodes(dropRect).find(
+      const intersectingNodes = getIntersectingNodes(dropRect).find(
         (n) => n.type === "seat"
       )
-      const occupied =
-        !!hitSeat &&
-        nodes.some((n) => n.type === "student" && n.parentId === hitSeat.id)
+      const studentInSeat =
+        !!intersectingNodes &&
+        nodes.some(
+          (n) => n.type === "student" && n.parentId === intersectingNodes.id
+        )
 
       const newNode: SeatingChartStudentNode =
-        hitSeat && !occupied
+        intersectingNodes && !studentInSeat
           ? {
               id: studentId,
               type: "student",
               position: { x: 0, y: 0 },
-              parentId: hitSeat.id,
+              parentId: intersectingNodes.id,
               deletable: false,
               data: { student },
             }
@@ -298,37 +341,82 @@ function SeatingChartCanvasInner({
     ]
   )
 
+  const displayNodes = useMemo(() => {
+    const boundaryNode = {
+      id: "__boundary__",
+      type: "boundary" as const,
+      position: { x: 0, y: 0 },
+      width: boundary.width,
+      height: boundary.height,
+      draggable: false,
+      selectable: false,
+      deletable: false,
+      zIndex: -1,
+      data: {
+        width: boundary.width,
+        height: boundary.height,
+      },
+    }
+
+    // Restrict table nodes to boundary node
+    const updatedNodes = nodes.map((n) => {
+      if (n.type !== "table") {
+        return n
+      }
+      return {
+        ...n,
+        extent: [
+          [0, 0],
+          [boundary.width, boundary.height],
+        ] as [[number, number], [number, number]],
+      }
+    })
+    return [boundaryNode, ...updatedNodes] as unknown as SeatingChartNode[]
+  }, [nodes, boundary])
+
+  const translateExtent = useMemo<[[number, number], [number, number]]>(
+    () => [
+      [-CANVAS_PADDING, -CANVAS_PADDING],
+      [boundary.width + CANVAS_PADDING, boundary.height + CANVAS_PADDING],
+    ],
+    [boundary]
+  )
+
   return (
     <div className="relative min-h-0 w-full flex-1 overflow-hidden rounded-lg border-2">
       <LockedContext value={locked}>
-        <ReactFlow
-          nodes={nodes}
-          onNodesChange={onNodesChange}
-          nodeTypes={nodeTypes}
-          onNodeDragStart={onNodeDragStart}
-          onNodeDrag={onNodeDrag}
-          onNodeDragStop={onNodeDragStop}
-          onDrop={onDrop}
-          onDragOver={onDragOver}
-          nodesDraggable={!locked}
-          elementsSelectable={!locked}
-          snapToGrid
-          snapGrid={[GRID_STEP, GRID_STEP]}
-          minZoom={0.25}
-          maxZoom={2}
-        >
-          <Background gap={GRID_STEP} size={2} />
-        </ReactFlow>
-        <Controls showInteractive={false} />
+        <BoundaryContext value={boundary}>
+          <ReactFlow
+            nodes={displayNodes}
+            onNodesChange={handleNodesChange}
+            nodeTypes={nodeTypes}
+            onNodeDragStart={onNodeDragStart}
+            onNodeDrag={onNodeDrag}
+            onNodeDragStop={onNodeDragStop}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            nodesDraggable={!locked}
+            elementsSelectable={!locked}
+            translateExtent={translateExtent}
+            fitView
+            snapToGrid
+            snapGrid={[GRID_STEP, GRID_STEP]}
+            minZoom={0.25}
+            maxZoom={2}
+          >
+            <Background gap={GRID_STEP} size={2} />
+          </ReactFlow>
+          <Controls showInteractive={false} />
+        </BoundaryContext>
       </LockedContext>
     </div>
   )
 }
 
-export function SeatingChartCanvas(props: SeatingChartCanvasProps) {
+export function SeatingChartCanvas({ ref, ...props }: SeatingChartCanvasProps) {
   return (
     <ReactFlowProvider>
-      <SeatingChartCanvasInner {...props} />
+      <SeatingChartFlow {...props} ref={ref} />
     </ReactFlowProvider>
   )
 }

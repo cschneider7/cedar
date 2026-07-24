@@ -7,14 +7,19 @@ import {
   createCanvasTable,
   DEFAULT_TABLE_COLS,
   DEFAULT_TABLE_ROWS,
+  findNewTablePosition,
+  getBoundaryMinSize,
   getSeatId,
   getSeatPosition,
   getTableGeometry,
+  getTableNodeSize,
   getUnassignedStudents,
+  MIN_BOUNDARY_SIZE,
   reorderNodes,
+  TABLE_GAP,
   TABLE_OFFSET,
-  TABLE_SPACING,
   type SeatingChartNode,
+  type TableGeometry,
 } from "./seating-chart-utils"
 
 function makeStudent(id: string): Student {
@@ -39,34 +44,18 @@ function makeSeatingChart(
 
 describe("createCanvasTable", () => {
   it("defaults to a 2x2 grid of seats", () => {
-    const table = createCanvasTable(0)
+    const table = createCanvasTable({ x: TABLE_OFFSET, y: TABLE_OFFSET })
 
     expect(table.rows).toBe(DEFAULT_TABLE_ROWS)
     expect(table.cols).toBe(DEFAULT_TABLE_COLS)
     expect(table.seats).toHaveLength(DEFAULT_TABLE_ROWS * DEFAULT_TABLE_COLS)
   })
 
-  it("lays out tables left-to-right within a row", () => {
-    const first = createCanvasTable(0)
-    const second = createCanvasTable(1)
+  it("places the table at the given position", () => {
+    const table = createCanvasTable({ x: 100, y: 200 })
 
-    expect(second.y_pos).toBe(first.y_pos)
-    expect(second.x_pos - first.x_pos).toBe(TABLE_SPACING)
-  })
-
-  it("wraps to the next row after 4 tables", () => {
-    const first = createCanvasTable(0)
-    const fifth = createCanvasTable(4)
-
-    expect(fifth.x_pos).toBe(first.x_pos)
-    expect(fifth.y_pos).toBeGreaterThan(first.y_pos)
-  })
-
-  it("snaps the initial position to the grid offset", () => {
-    const table = createCanvasTable(0)
-
-    expect(table.x_pos).toBe(TABLE_OFFSET)
-    expect(table.y_pos).toBe(TABLE_OFFSET)
+    expect(table.x_pos).toBe(100)
+    expect(table.y_pos).toBe(200)
   })
 })
 
@@ -420,6 +409,123 @@ describe("getTableGeometry", () => {
       { rows: 2, cols: 3, x_pos: 40, y_pos: 60 },
       { rows: 1, cols: 1, x_pos: 300, y_pos: 60 },
     ])
+  })
+})
+
+describe("findNewTablePosition", () => {
+  const boundary = { width: 1080, height: 820 }
+
+  it("fits at the top-left grid offset when there are no existing tables", () => {
+    expect(
+      findNewTablePosition(boundary, [], DEFAULT_TABLE_ROWS, DEFAULT_TABLE_COLS)
+    ).toEqual({
+      x: TABLE_OFFSET,
+      y: TABLE_OFFSET,
+    })
+  })
+
+  it("skips an occupied first slot and returns the next open one, row-major", () => {
+    const size = { rows: DEFAULT_TABLE_ROWS, cols: DEFAULT_TABLE_COLS }
+    const occupied: TableGeometry = {
+      ...size,
+      x_pos: TABLE_OFFSET,
+      y_pos: TABLE_OFFSET,
+    }
+
+    const slot = findNewTablePosition(
+      boundary,
+      [occupied],
+      DEFAULT_TABLE_ROWS,
+      DEFAULT_TABLE_COLS
+    )
+
+    expect(slot).not.toBeNull()
+    expect(slot).not.toEqual({ x: TABLE_OFFSET, y: TABLE_OFFSET })
+    expect(slot!.y).toBe(TABLE_OFFSET)
+    expect(slot!.x).toBeGreaterThan(TABLE_OFFSET)
+  })
+
+  it("returns null when the boundary is completely full", () => {
+    const tiny = { width: MIN_BOUNDARY_SIZE, height: MIN_BOUNDARY_SIZE }
+    const existing: TableGeometry = {
+      rows: DEFAULT_TABLE_ROWS,
+      cols: DEFAULT_TABLE_COLS,
+      x_pos: TABLE_OFFSET,
+      y_pos: TABLE_OFFSET,
+    }
+
+    expect(
+      findNewTablePosition(
+        tiny,
+        [existing],
+        DEFAULT_TABLE_ROWS,
+        DEFAULT_TABLE_COLS
+      )
+    ).toBeNull()
+  })
+
+  it("never returns a position violating the TABLE_OFFSET margin", () => {
+    const slot = findNewTablePosition(
+      boundary,
+      [],
+      DEFAULT_TABLE_ROWS,
+      DEFAULT_TABLE_COLS
+    )
+
+    expect(slot).not.toBeNull()
+    expect(slot!.x).toBeGreaterThanOrEqual(TABLE_OFFSET)
+    expect(slot!.y).toBeGreaterThanOrEqual(TABLE_OFFSET)
+  })
+
+  it("leaves at least TABLE_GAP between a new table and an existing one", () => {
+    const size = getTableNodeSize(DEFAULT_TABLE_ROWS, DEFAULT_TABLE_COLS)
+    const existing: TableGeometry = {
+      rows: DEFAULT_TABLE_ROWS,
+      cols: DEFAULT_TABLE_COLS,
+      x_pos: TABLE_OFFSET,
+      y_pos: TABLE_OFFSET,
+    }
+
+    const slot = findNewTablePosition(
+      boundary,
+      [existing],
+      DEFAULT_TABLE_ROWS,
+      DEFAULT_TABLE_COLS
+    )
+
+    expect(slot).not.toBeNull()
+    const xGap =
+      slot!.x >= existing.x_pos
+        ? slot!.x - (existing.x_pos + size.width)
+        : existing.x_pos - (slot!.x + size.width)
+    const yGap =
+      slot!.y >= existing.y_pos
+        ? slot!.y - (existing.y_pos + size.height)
+        : existing.y_pos - (slot!.y + size.height)
+    expect(xGap >= TABLE_GAP || yGap >= TABLE_GAP).toBe(true)
+  })
+})
+
+describe("getBoundaryMinSize", () => {
+  it("returns MIN_BOUNDARY_SIZE for an empty table list", () => {
+    expect(getBoundaryMinSize([])).toEqual({
+      width: MIN_BOUNDARY_SIZE,
+      height: MIN_BOUNDARY_SIZE,
+    })
+  })
+
+  it("grows past MIN_BOUNDARY_SIZE when a table sits far from the origin", () => {
+    const farTable: TableGeometry = {
+      rows: DEFAULT_TABLE_ROWS,
+      cols: DEFAULT_TABLE_COLS,
+      x_pos: 2000,
+      y_pos: 3000,
+    }
+
+    const min = getBoundaryMinSize([farTable])
+
+    expect(min.width).toBeGreaterThan(MIN_BOUNDARY_SIZE)
+    expect(min.height).toBeGreaterThan(MIN_BOUNDARY_SIZE)
   })
 })
 

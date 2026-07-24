@@ -14,7 +14,12 @@ stubFetch()
 
 describe("create-classroom action", () => {
   it("creates the classroom and returns its id", async () => {
-    const createdClassroom = { id: "classroom-1", ...validPayload }
+    const createdClassroom = {
+      id: "classroom-1",
+      ...validPayload,
+      boundary_width: 1080,
+      boundary_height: 820,
+    }
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response(JSON.stringify({ data: createdClassroom }), {
         status: 200,

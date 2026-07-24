@@ -17,7 +17,6 @@ import {
 } from "~/components/ui/input-group"
 import { Item, ItemGroup } from "~/components/ui/item"
 import { ScrollArea } from "~/components/ui/scroll-area"
-import { Separator } from "~/components/ui/separator"
 import {
   Sheet,
   SheetContent,
@@ -110,14 +109,14 @@ function RosterList({
           </ItemGroup>
         </ScrollArea>
       ) : students.length === 0 ? (
-        <Empty className="gap-2 rounded-none border-none p-4">
+        <Empty className="justify-start gap-2 rounded-none border-none p-4">
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <UsersIcon />
             </EmptyMedia>
-            <EmptyTitle>No students yet</EmptyTitle>
+            <EmptyTitle>No Students</EmptyTitle>
             <EmptyDescription>
-              Use the + button above to add your first student.
+              Click on + to create your first student.
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
