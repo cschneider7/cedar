@@ -11,6 +11,8 @@ use tower_http::trace::TraceLayer;
 use crate::error::log_app_errors;
 use crate::{AppState, handlers};
 
+/// Builds the full `/api/v1/*` router, wiring every handler to its route
+/// and attaching shared state plus tracing/error-logging middleware.
 pub fn create_router(app_state: Arc<AppState>) -> Router {
     Router::new()
         .route(

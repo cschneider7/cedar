@@ -38,6 +38,28 @@
       },
       {
         "ordinal": 3,
+        "name": "boundary_width",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "boundary_width"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "boundary_height",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "boundary_height"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
         "name": "created_time",
         "type_info": "Timestamptz",
         "origin": {
@@ -54,6 +76,8 @@
       ]
     },
     "nullable": [
+      false,
+      false,
       false,
       false,
       false,

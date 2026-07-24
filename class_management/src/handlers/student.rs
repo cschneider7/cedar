@@ -16,6 +16,7 @@ use crate::{
     schema::{StudentSchema, UpdateStudentSchema},
 };
 
+/// Lists every student, ordered by name.
 pub async fn student_list_handler(
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
@@ -26,6 +27,7 @@ pub async fn student_list_handler(
     Ok((StatusCode::OK, Json(json!({"data": students}))))
 }
 
+/// Fetches a single student by its uuid.
 pub async fn get_student_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
@@ -37,6 +39,7 @@ pub async fn get_student_handler(
     Ok((StatusCode::OK, Json(json!({"data": student}))))
 }
 
+/// Creates a new student, optionally assigned to a classroom.
 pub async fn create_student_handler(
     State(data): State<Arc<AppState>>,
     Json(body): Json<StudentSchema>,
@@ -60,6 +63,8 @@ pub async fn create_student_handler(
     Ok((StatusCode::CREATED, Json(json!({"data": student}))))
 }
 
+/// Partially updates a student, merging provided fields over its existing
+/// values before writing them back.
 pub async fn update_student_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
@@ -92,6 +97,7 @@ pub async fn update_student_handler(
     Ok((StatusCode::OK, Json(json!({"data": updated_student}))))
 }
 
+/// Deletes a student by its uuid.
 pub async fn delete_student_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,

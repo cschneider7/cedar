@@ -9,10 +9,15 @@ use axum::{
 };
 use serde::Serialize;
 
+/// Application-wide error type returned by handlers; its `IntoResponse` impl
+/// maps each variant to an HTTP status code and a `{"message": ...}` body.
 #[derive(Debug)]
 pub enum AppError {
+    /// The requested resource does not exist.
     NotFound(String),
+    /// An unexpected, non-recoverable failure occurred.
     Internal(String),
+    /// The request was invalid; the message is shown directly to the caller.
     BadRequest(String),
 }
 
@@ -54,6 +59,8 @@ impl From<sqlx::Error> for AppError {
     }
 }
 
+/// Middleware that logs any `AppError` a handler attached to the response
+/// extensions, after the inner handler has already produced the response.
 pub async fn log_app_errors(request: Request, next: Next) -> Response {
     let response = next.run(request).await;
     if let Some(err) = response.extensions().get::<Arc<AppError>>() {
