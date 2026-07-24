@@ -506,6 +506,7 @@ export default function Component({ loaderData }: Route.ComponentProps) {
       width: classroom.boundary_width,
       height: classroom.boundary_height,
     })
+    setFitViewPending(true)
     setLocked(true)
   }
 
