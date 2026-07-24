@@ -6,7 +6,8 @@ import {
   type NodeProps,
 } from "@xyflow/react"
 import { GripVerticalIcon, MinusIcon, PlusIcon, Trash2Icon } from "lucide-react"
-import { memo, useState } from "react"
+import { memo, useContext, useState } from "react"
+import { toast } from "sonner"
 import { BaseNode, BaseNodeContent } from "~/components/base-node"
 import {
   AlertDialog,
@@ -22,6 +23,7 @@ import {
 import { Button } from "~/components/ui/button"
 import {
   MAX_TABLE_DIMENSION,
+  TABLE_OFFSET,
   getSeatId,
   getSeatPosition,
   getTableNodeSize,
@@ -29,6 +31,7 @@ import {
   type SeatingChartSeatNode,
   type TableNodeData,
 } from "~/lib/seating-chart-utils"
+import { BoundaryContext } from "./context"
 
 type PendingAction = "table" | "row" | "col" | null
 
@@ -56,8 +59,11 @@ function withTableDims(
 export const TableNode = memo(function TableNode({
   id,
   data,
+  positionAbsoluteX,
+  positionAbsoluteY,
 }: NodeProps<Node<TableNodeData, "table">>) {
   const { setNodes, getNodes } = useReactFlow<SeatingChartNode>()
+  const boundary = useContext(BoundaryContext)
   const [pendingAction, setPendingAction] = useState<PendingAction>(null)
 
   function seatsOccupied(seatIds: Set<string>) {
@@ -85,6 +91,14 @@ export const TableNode = memo(function TableNode({
 
   function handleAddRow() {
     if (data.rows >= MAX_TABLE_DIMENSION) return
+    const { width, height } = getTableNodeSize(data.rows + 1, data.cols)
+    if (
+      positionAbsoluteX + width > boundary.width - TABLE_OFFSET ||
+      positionAbsoluteY + height > boundary.height - TABLE_OFFSET
+    ) {
+      toast.error("Not enough room to grow this table")
+      return
+    }
     const newRow = data.rows
     setNodes((nds) => {
       const newSeats: SeatingChartSeatNode[] = Array.from(
@@ -151,6 +165,14 @@ export const TableNode = memo(function TableNode({
 
   function handleAddColumn() {
     if (data.cols >= MAX_TABLE_DIMENSION) return
+    const { width, height } = getTableNodeSize(data.rows, data.cols + 1)
+    if (
+      positionAbsoluteX + width > boundary.width - TABLE_OFFSET ||
+      positionAbsoluteY + height > boundary.height - TABLE_OFFSET
+    ) {
+      toast.error("Not enough room to grow this table")
+      return
+    }
     const newCol = data.cols
     setNodes((nds) => {
       const newSeats: SeatingChartSeatNode[] = Array.from(

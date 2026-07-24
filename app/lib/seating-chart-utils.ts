@@ -5,18 +5,17 @@ export const GRID_STEP = 20
 export const DEFAULT_TABLE_ROWS = 2
 export const DEFAULT_TABLE_COLS = 2
 export const MAX_TABLE_DIMENSION = 15
-export const TABLES_PER_ROW = 4
-export const TABLE_SPACING = GRID_STEP * 13
 export const TABLE_OFFSET = GRID_STEP * 2
+export const TABLE_GAP = GRID_STEP
 
-export const SEAT_PADDING = 6
-export const SEAT_NODE_SIZE = 91 // fixed seat cell size; a table's pixel size grows with rows/cols instead
+export const SEAT_PADDING = 10
+export const SEAT_NODE_SIZE = 90
 export const STUDENT_NODE_SIZE = SEAT_NODE_SIZE
 
 export type Point = { x: number; y: number }
 
 export type TableNodeData = { table_number: number; rows: number; cols: number }
-export type SeatNodeData = { row: number; col: number } // tableId is derivable via parentId
+export type SeatNodeData = { row: number; col: number }
 export type StudentNodeData = { student: Student }
 
 export type SeatingChartTableNode = {
@@ -91,16 +90,16 @@ export function getTableNodeSize(
 }
 
 /**
- * Creates a new table's initial canvas position and default seat grid.
- * @param index - Table's position among the classroom's other tables
+ * Creates a new table's default seat grid at the given canvas position.
+ * @param position - Canvas position for the new table
  * @returns A new table, ready to be added to the canvas
  */
-export function createCanvasTable(index: number): Table {
+export function createCanvasTable(position: Point): Table {
   return {
     id: crypto.randomUUID(), // Placeholder value
     tableNumber: 0, // Placeholder value
-    x_pos: TABLE_OFFSET + (index % TABLES_PER_ROW) * TABLE_SPACING,
-    y_pos: TABLE_OFFSET + Math.floor(index / TABLES_PER_ROW) * TABLE_SPACING,
+    x_pos: position.x,
+    y_pos: position.y,
     rows: DEFAULT_TABLE_ROWS,
     cols: DEFAULT_TABLE_COLS,
     seats: Array(DEFAULT_TABLE_ROWS * DEFAULT_TABLE_COLS),
@@ -278,20 +277,119 @@ export function getTableGeometry(nodes: SeatingChartNode[]): TableGeometry[] {
     }))
 }
 
+export const MIN_BOUNDARY_SIZE =
+  2 * TABLE_OFFSET +
+  getTableNodeSize(DEFAULT_TABLE_ROWS, DEFAULT_TABLE_COLS).width
+
+/**
+ * Checks whether two axis-aligned rectangles overlap.
+ * @param aPos - First rectangle's top-left position
+ * @param aSize - First rectangle's dimensions
+ * @param bPos - Second rectangle's top-left position
+ * @param bSize - Second rectangle's dimensions
+ * @returns Whether the rectangles overlap
+ */
+export function overlaps(
+  aPos: Point,
+  aSize: { width: number; height: number },
+  bPos: Point,
+  bSize: { width: number; height: number }
+): boolean {
+  return (
+    aPos.x < bPos.x + bSize.width &&
+    aPos.x + aSize.width > bPos.x &&
+    aPos.y < bPos.y + bSize.height &&
+    aPos.y + aSize.height > bPos.y
+  )
+}
+
+/**
+ * Finds the first open, in-boundary spot for a new table via a row-major
+ * grid-step scan, or `null` if none exists.
+ * @param boundary - Current boundary dimensions
+ * @param existingTables - Geometry of tables already on the canvas
+ * @param newTableRows - Row count for the new table
+ * @param newTableCols - Column count for the new table
+ * @returns The new table's position, or `null` if no space is available
+ */
+export function findNewTablePosition(
+  boundary: { width: number; height: number },
+  existingTables: TableGeometry[],
+  newTableRows: number,
+  newTableCols: number
+): Point | null {
+  const { width: tableWidth, height: tableHeight } = getTableNodeSize(
+    newTableRows,
+    newTableCols
+  )
+  for (
+    let y = TABLE_OFFSET;
+    y <= boundary.height - TABLE_OFFSET - tableHeight;
+    y += GRID_STEP
+  ) {
+    for (
+      let x = TABLE_OFFSET;
+      x <= boundary.width - TABLE_OFFSET - tableWidth;
+      x += GRID_STEP
+    ) {
+      const pos = { x, y }
+      const marginPos = { x: x - TABLE_GAP, y: y - TABLE_GAP }
+      const marginSize = {
+        width: tableWidth + 2 * TABLE_GAP,
+        height: tableHeight + 2 * TABLE_GAP,
+      }
+      const collides = existingTables.some((t) =>
+        overlaps(
+          marginPos,
+          marginSize,
+          { x: t.x_pos, y: t.y_pos },
+          getTableNodeSize(t.rows, t.cols)
+        )
+      )
+      if (!collides) {
+        return pos
+      }
+    }
+  }
+  return null
+}
+
+/**
+ * Computes the smallest boundary that still fits existing tables.
+ * @param existingTables - Geometry of tables already on the canvas
+ * @returns The minimum `{ width, height }` the boundary can be shrunk to
+ */
+export function getBoundaryMinSize(existingTables: TableGeometry[]): {
+  width: number
+  height: number
+} {
+  let maxExtentX = 0
+  let maxExtentY = 0
+  for (const t of existingTables) {
+    const size = getTableNodeSize(t.rows, t.cols)
+    maxExtentX = Math.max(maxExtentX, t.x_pos + size.width)
+    maxExtentY = Math.max(maxExtentY, t.y_pos + size.height)
+  }
+  return {
+    width: Math.max(MIN_BOUNDARY_SIZE, maxExtentX + TABLE_OFFSET),
+    height: Math.max(MIN_BOUNDARY_SIZE, maxExtentY + TABLE_OFFSET),
+  }
+}
+
 export const RANDOMIZE_TABLE_COUNT_WARNING_THRESHOLD = 20
 
 /**
  * Computes how many new tables a randomize request would create.
- * @param studentCount - Number of students to seat
- * @param keptTableCount - Number of tables being kept
+ * @param numStudents - Number of students to seat
+ * @param existingTableCount - Number of tables being retained
  * @param keptCapacity - Total seats across kept tables
  * @param newTableRows - Row count for each new table
  * @param newTableCols - Column count for each new table
  * @returns The number of new tables needed and the resulting total table count
  */
 export function computeRandomizeTableCount(
-  studentCount: number,
-  keptTableCount: number,
+  numStudents: number,
+  existingTableCount: number,
   keptCapacity: number,
   newTableRows: number,
   newTableCols: number
@@ -299,7 +397,7 @@ export function computeRandomizeTableCount(
   const seatsPerNewTable = newTableRows * newTableCols
   const neededNewTables =
     seatsPerNewTable > 0
-      ? Math.ceil(Math.max(0, studentCount - keptCapacity) / seatsPerNewTable)
+      ? Math.ceil(Math.max(0, numStudents - keptCapacity) / seatsPerNewTable)
       : 0
-  return { neededNewTables, totalTables: keptTableCount + neededNewTables }
+  return { neededNewTables, totalTables: existingTableCount + neededNewTables }
 }

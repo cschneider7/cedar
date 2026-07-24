@@ -17,6 +17,8 @@ const options = {
   new_table_rows: 2,
   new_table_cols: 2,
   existing_tables: [],
+  boundary_width: 1080,
+  boundary_height: 820,
 }
 
 stubFetch()

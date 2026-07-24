@@ -2,6 +2,7 @@ import { useNodesState } from "@xyflow/react"
 import {
   ArrowLeftIcon,
   Edit2Icon,
+  Maximize2Icon,
   MoreHorizontalIcon,
   ShuffleIcon,
   TableIcon,
@@ -10,11 +11,13 @@ import {
   UsersRoundIcon,
   UserXIcon,
 } from "lucide-react"
-import React, { useEffect, useMemo, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useFetcher } from "react-router"
+import { toast } from "sonner"
 import {
   RosterPanel,
   SeatingChartCanvas,
+  type SeatingChartCanvasHandle,
 } from "~/components/seating-chart-canvas"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import {
@@ -76,10 +79,13 @@ import {
   createCanvasTable,
   DEFAULT_TABLE_COLS,
   DEFAULT_TABLE_ROWS,
+  findNewTablePosition,
+  getBoundaryMinSize,
   getSeatId,
   getSeatPosition,
   getTableGeometry,
   getUnassignedStudents,
+  GRID_STEP,
   MAX_TABLE_DIMENSION,
   RANDOMIZE_TABLE_COUNT_WARNING_THRESHOLD,
   reorderNodes,
@@ -88,6 +94,7 @@ import {
   type TableGeometry,
 } from "~/lib/seating-chart-utils"
 import type { Route } from "./+types/classroom"
+import type { action as editClassroomAction } from "./edit-classroom"
 import type { action as randomizeSeatingChartAction } from "./randomize-seating-chart"
 
 export function meta({}: Route.MetaArgs) {
@@ -123,12 +130,14 @@ function RandomSeatingChartDialog({
   classroomId,
   studentCount,
   keptTables,
+  boundary,
   onGenerate,
   ...props
 }: React.ComponentProps<typeof Dialog> & {
   classroomId: string
   studentCount: number
   keptTables: TableGeometry[]
+  boundary: { width: number; height: number }
   onGenerate: (chart: SeatingChart) => void
 }) {
   const [keepExisting, setKeepExisting] = useState(keptTables.length > 0)
@@ -176,6 +185,8 @@ function RandomSeatingChartDialog({
       new_table_rows: rows,
       new_table_cols: cols,
       existing_tables: keepExisting ? keptTables : [],
+      boundary_width: boundary.width,
+      boundary_height: boundary.height,
     }
     fetcher.submit(payload, {
       method: "post",
@@ -298,6 +309,82 @@ function RandomSeatingChartDialog({
   )
 }
 
+function BoundarySizeDialog({
+  boundary,
+  tables,
+  onSave,
+  ...props
+}: React.ComponentProps<typeof Dialog> & {
+  boundary: { width: number; height: number }
+  tables: TableGeometry[]
+  onSave: (boundary: { width: number; height: number }) => void
+}) {
+  const min = getBoundaryMinSize(tables)
+  const [width, setWidth] = useState(boundary.width)
+  const [height, setHeight] = useState(boundary.height)
+
+  useEffect(() => {
+    if (!props.open) {
+      return
+    }
+    setWidth(boundary.width)
+    setHeight(boundary.height)
+  }, [props.open])
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    onSave({
+      width: Math.max(min.width, width),
+      height: Math.max(min.height, height),
+    })
+  }
+
+  return (
+    <Dialog {...props}>
+      <DialogContent className="sm:max-w-sm">
+        <form onSubmit={handleSubmit}>
+          <DialogHeader>
+            <DialogTitle>Boundary Size</DialogTitle>
+            <DialogDescription>
+              Nothing is saved until you click Save.
+            </DialogDescription>
+          </DialogHeader>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="boundary-width">Width</FieldLabel>
+              <Input
+                id="boundary-width"
+                type="number"
+                min={min.width}
+                step={GRID_STEP}
+                value={width}
+                onChange={(e) => setWidth(Number(e.target.value))}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="boundary-height">Height</FieldLabel>
+              <Input
+                id="boundary-height"
+                type="number"
+                min={min.height}
+                step={GRID_STEP}
+                value={height}
+                onChange={(e) => setHeight(Number(e.target.value))}
+              />
+            </Field>
+          </FieldGroup>
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" />}>
+              Cancel
+            </DialogClose>
+            <Button type="submit">Save</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function UnassignAllDialog({
   onUnassignAll,
   ...props
@@ -334,6 +421,11 @@ export default function Component({ loaderData }: Route.ComponentProps) {
   const [locked, setLocked] = useState(true)
   const [randomChartOpen, setRandomChartOpen] = useState(false)
   const [unassignAllOpen, setUnassignAllOpen] = useState(false)
+  const [boundarySizeOpen, setBoundarySizeOpen] = useState(false)
+  const [boundary, setBoundary] = useState({
+    width: classroom.boundary_width,
+    height: classroom.boundary_height,
+  })
 
   const studentsById = useMemo(
     () => new Map(students.map((s) => [s.id, s])),
@@ -346,9 +438,16 @@ export default function Component({ loaderData }: Route.ComponentProps) {
   )
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
+  const canvasRef = useRef<SeatingChartCanvasHandle>(null)
+  const [fitViewPending, setFitViewPending] = useState(false)
 
   const fetcher = useFetcher<typeof action>()
-  const saveError = fetcher.data && !fetcher.data.ok ? fetcher.data.error : null
+  const boundaryFetcher = useFetcher<typeof editClassroomAction>()
+  const savingBoundary = boundaryFetcher.state !== "idle"
+  const saveError =
+    (boundaryFetcher.data && !boundaryFetcher.data.ok
+      ? boundaryFetcher.data.error
+      : null) ?? (fetcher.data && !fetcher.data.ok ? fetcher.data.error : null)
 
   useEffect(() => {
     if (fetcher.state !== "idle" || !fetcher.data) {
@@ -356,6 +455,31 @@ export default function Component({ loaderData }: Route.ComponentProps) {
     }
     setLocked(fetcher.data.ok)
   }, [fetcher.state, fetcher.data])
+
+  // Deferred to an effect (rather than called inline) so it runs after the
+  // canvas has re-rendered with the new boundary, not against stale nodes
+  // from before this render's setBoundary took effect.
+  useEffect(() => {
+    if (!fitViewPending) {
+      return
+    }
+    canvasRef.current?.fitView()
+    setFitViewPending(false)
+  }, [fitViewPending])
+
+  // PATCH the boundary first; only PUT the seating chart once that succeeds,
+  // so a failed boundary save never leaves tables persisted without it.
+  useEffect(() => {
+    if (boundaryFetcher.state !== "idle" || !boundaryFetcher.data) {
+      return
+    }
+    if (!boundaryFetcher.data.ok) {
+      return
+    }
+    setFitViewPending(true)
+    const payload = buildSeatingChartPayload(nodes)
+    fetcher.submit(payload, { method: "post", encType: "application/json" })
+  }, [boundaryFetcher.state, boundaryFetcher.data])
 
   const unassigned = useMemo(
     () => getUnassignedStudents(students, nodes),
@@ -366,18 +490,39 @@ export default function Component({ loaderData }: Route.ComponentProps) {
     setNodes((nds) =>
       nds.map((n) => (n.selected ? { ...n, selected: false } : n))
     )
-    const payload = buildSeatingChartPayload(nodes)
-    fetcher.submit(payload, { method: "post", encType: "application/json" })
+    boundaryFetcher.submit(
+      { boundary_width: boundary.width, boundary_height: boundary.height },
+      {
+        method: "post",
+        action: `/classrooms/${classroom.id}/edit`,
+        encType: "application/json",
+      }
+    )
   }
 
   function handleCancel() {
     setNodes(buildInitialNodes(classroom.id, seatingChart, studentsById))
+    setBoundary({
+      width: classroom.boundary_width,
+      height: classroom.boundary_height,
+    })
+    setFitViewPending(true)
     setLocked(true)
   }
 
   function handleAddTable() {
     const tableNumber = nodes.filter((n) => n.type === "table").length
-    const table = createCanvasTable(tableNumber)
+    const position = findNewTablePosition(
+      boundary,
+      getTableGeometry(nodes),
+      DEFAULT_TABLE_ROWS,
+      DEFAULT_TABLE_COLS
+    )
+    if (!position) {
+      toast.error("Not enough room for a new table")
+      return
+    }
+    const table = createCanvasTable(position)
 
     const tableNode: SeatingChartTableNode = {
       id: table.id,
@@ -418,6 +563,12 @@ export default function Component({ loaderData }: Route.ComponentProps) {
     setRandomChartOpen(false)
   }
 
+  function handleBoundarySave(newBoundary: { width: number; height: number }) {
+    setBoundary(newBoundary)
+    setBoundarySizeOpen(false)
+    setFitViewPending(true)
+  }
+
   return (
     <div className="flex h-full flex-col">
       <div className="shrink-0">
@@ -452,7 +603,7 @@ export default function Component({ loaderData }: Route.ComponentProps) {
             ) : (
               <>
                 <Button
-                  disabled={fetcher.state !== "idle"}
+                  disabled={fetcher.state !== "idle" || savingBoundary}
                   variant="secondary"
                   onClick={handleCancel}
                   aria-label="Cancel seating chart changes"
@@ -460,11 +611,11 @@ export default function Component({ loaderData }: Route.ComponentProps) {
                   Cancel
                 </Button>
                 <Button
-                  disabled={fetcher.state !== "idle"}
+                  disabled={fetcher.state !== "idle" || savingBoundary}
                   onClick={handleSave}
                   aria-label="Save seating chart"
                 >
-                  {fetcher.state !== "idle" && <Spinner />}
+                  {(fetcher.state !== "idle" || savingBoundary) && <Spinner />}
                   Save
                 </Button>
               </>
@@ -510,6 +661,13 @@ export default function Component({ loaderData }: Route.ComponentProps) {
                   >
                     <ShuffleIcon /> Randomize
                   </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={locked}
+                    onClick={() => setBoundarySizeOpen(true)}
+                    aria-label="Boundary Size"
+                  >
+                    <Maximize2Icon /> Boundary Size
+                  </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
@@ -540,7 +698,15 @@ export default function Component({ loaderData }: Route.ComponentProps) {
           classroomId={classroom.id}
           studentCount={students.length}
           keptTables={keptTables}
+          boundary={boundary}
           onGenerate={handleRandomize}
+        />
+        <BoundarySizeDialog
+          open={boundarySizeOpen}
+          onOpenChange={setBoundarySizeOpen}
+          boundary={boundary}
+          onSave={handleBoundarySave}
+          tables={keptTables}
         />
         <UnassignAllDialog
           open={unassignAllOpen}
@@ -548,14 +714,16 @@ export default function Component({ loaderData }: Route.ComponentProps) {
           onUnassignAll={handleUnassignAll}
         />
       </div>
-      <div className="flex min-h-0 w-full flex-1 flex-col gap-4 md:flex-row">
+      <div className="flex min-h-0 w-full flex-1 flex-col gap-2 md:flex-row">
         <RosterPanel students={unassigned} locked={locked} />
         <SeatingChartCanvas
+          ref={canvasRef}
           nodes={nodes}
           onNodesChange={onNodesChange}
           setNodes={setNodes}
           locked={locked}
           studentsById={studentsById}
+          boundary={boundary}
         />
       </div>
     </div>

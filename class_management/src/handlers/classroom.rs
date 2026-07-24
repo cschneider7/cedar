@@ -20,6 +20,7 @@ use crate::{
     seating_chart::{self, MAX_TABLE_DIMENSION},
 };
 
+/// Lists every classroom, ordered by period.
 pub async fn classroom_list_handler(
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
@@ -33,6 +34,7 @@ pub async fn classroom_list_handler(
     Ok((StatusCode::OK, Json(json!({"data": classrooms}))))
 }
 
+/// Fetches a single classroom by its uuid.
 pub async fn get_classroom_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
@@ -48,6 +50,7 @@ pub async fn get_classroom_handler(
     Ok((StatusCode::OK, Json(json!({"data": classroom}))))
 }
 
+/// Creates a new classroom; boundary dimensions take their DB defaults.
 pub async fn create_classroom_handler(
     State(data): State<Arc<AppState>>,
     Json(body): Json<ClassroomSchema>,
@@ -69,6 +72,8 @@ pub async fn create_classroom_handler(
     Ok((StatusCode::CREATED, Json(json!({"data": classroom}))))
 }
 
+/// Partially updates a classroom, merging provided fields over its existing
+/// values before writing them back.
 pub async fn update_classroom_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
@@ -84,16 +89,22 @@ pub async fn update_classroom_handler(
 
     let new_subject = body.subject.as_ref().unwrap_or(&classroom.subject);
     let new_period = body.period.unwrap_or(classroom.period);
+    let new_boundary_width = body.boundary_width.unwrap_or(classroom.boundary_width);
+    let new_boundary_height = body.boundary_height.unwrap_or(classroom.boundary_height);
 
     let updated_classroom = sqlx::query_as!(
         ClassroomModel,
         r#"UPDATE classrooms SET
             subject = $1,
-            period = $2
-        WHERE id = $3
+            period = $2,
+            boundary_width = $3,
+            boundary_height = $4
+        WHERE id = $5
         RETURNING *"#,
         &new_subject,
         new_period,
+        new_boundary_width,
+        new_boundary_height,
         &classroom.id
     )
     .fetch_one(&data.db)
@@ -102,6 +113,7 @@ pub async fn update_classroom_handler(
     Ok((StatusCode::OK, Json(json!({"data": updated_classroom}))))
 }
 
+/// Deletes a classroom by its uuid.
 pub async fn delete_classroom_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
@@ -117,6 +129,8 @@ pub async fn delete_classroom_handler(
     Ok((StatusCode::OK, Json(json!({"data": classroom}))))
 }
 
+/// Fetches a classroom's full seating chart as a dense, `table_number`-ordered
+/// document, with unoccupied seats included as `null` entries.
 pub async fn get_seating_chart_handler(
     Path(classroom_id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
@@ -149,6 +163,8 @@ pub async fn get_seating_chart_handler(
     Ok((StatusCode::OK, Json(response)))
 }
 
+/// Replaces a classroom's entire seating chart in one transaction: every
+/// existing table/seat is deleted, then re-inserted from the request body.
 pub async fn update_seating_chart_handler(
     Path(classroom_id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
@@ -217,6 +233,8 @@ pub async fn update_seating_chart_handler(
     Ok((StatusCode::OK, Json(response)))
 }
 
+/// Proposes a randomized seating chart for a classroom's current roster and
+/// canvas geometry, without persisting anything.
 pub async fn randomize_seating_chart_handler(
     Path(classroom_id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
@@ -258,7 +276,15 @@ pub async fn randomize_seating_chart_handler(
         body.existing_tables,
         body.new_table_rows,
         body.new_table_cols,
-    );
+        body.boundary_width,
+        body.boundary_height,
+    )
+    .map_err(|_| {
+        AppError::BadRequest(
+            "Not enough room to fit the required tables within the seating chart boundary"
+                .to_string(),
+        )
+    })?;
 
     Ok((StatusCode::OK, Json(json!({"data": {"tables": tables}}))))
 }
@@ -400,6 +426,24 @@ mod tests {
         Ok(())
     }
 
+    #[sqlx::test(migrations = "../migrations")]
+    async fn create_classroom_defaults_boundary_dimensions(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool);
+        let body = json!({"subject": "Math 2", "period": 3});
+
+        let response = app
+            .oneshot(json_request("POST", "/api/v1/classrooms", body))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let json = body_json(response).await;
+        assert_eq!(json["data"]["boundary_width"], 1080);
+        assert_eq!(json["data"]["boundary_height"], 820);
+
+        Ok(())
+    }
+
     // No uniqueness constraint on (subject, period), so duplicates are accepted.
     #[sqlx::test(migrations = "../migrations")]
     async fn create_classroom_allows_duplicate_subject_and_period(
@@ -445,6 +489,63 @@ mod tests {
         let json = body_json(response).await;
         assert_eq!(json["data"]["subject"], "Algebra");
         assert_eq!(json["data"]["period"], existing.period);
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn update_classroom_partial_boundary_patch_leaves_other_boundary_field_unchanged(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let existing = insert_classroom(&pool, "Math 2", 3).await;
+        let app = app(pool);
+
+        let body = json!({"boundary_width": 2000});
+        let response = app
+            .oneshot(json_request(
+                "PATCH",
+                &format!("/api/v1/classrooms/{}", existing.id),
+                body,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        assert_eq!(json["data"]["boundary_width"], 2000);
+        assert_eq!(json["data"]["boundary_height"], existing.boundary_height);
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn update_classroom_full_boundary_patch_with_subject_and_period(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let existing = insert_classroom(&pool, "Math 2", 3).await;
+        let app = app(pool);
+
+        let body = json!({
+            "subject": "Algebra",
+            "period": 5,
+            "boundary_width": 1500,
+            "boundary_height": 1200
+        });
+        let response = app
+            .oneshot(json_request(
+                "PATCH",
+                &format!("/api/v1/classrooms/{}", existing.id),
+                body,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        assert_eq!(json["data"]["subject"], "Algebra");
+        assert_eq!(json["data"]["period"], 5);
+        assert_eq!(json["data"]["boundary_width"], 1500);
+        assert_eq!(json["data"]["boundary_height"], 1200);
 
         Ok(())
     }
@@ -738,7 +839,9 @@ mod tests {
             "keep_existing_tables": false,
             "new_table_rows": 0,
             "new_table_cols": 16,
-            "existing_tables": []
+            "existing_tables": [],
+            "boundary_width": 1080,
+            "boundary_height": 820
         });
         let response = app
             .oneshot(json_request(
@@ -769,7 +872,9 @@ mod tests {
             "keep_existing_tables": false,
             "new_table_rows": 2,
             "new_table_cols": 2,
-            "existing_tables": []
+            "existing_tables": [],
+            "boundary_width": 1080,
+            "boundary_height": 820
         });
         let response = app
             .oneshot(json_request(
@@ -802,7 +907,9 @@ mod tests {
             "keep_existing_tables": false,
             "new_table_rows": 2,
             "new_table_cols": 2,
-            "existing_tables": []
+            "existing_tables": [],
+            "boundary_width": 1080,
+            "boundary_height": 820
         });
         let response = app
             .oneshot(json_request(
@@ -846,7 +953,9 @@ mod tests {
             "new_table_cols": 2,
             "existing_tables": [
                 { "rows": 2, "cols": 2, "x_pos": 40, "y_pos": 40 }
-            ]
+            ],
+            "boundary_width": 1080,
+            "boundary_height": 820
         });
         let response = app
             .oneshot(json_request(
@@ -875,6 +984,104 @@ mod tests {
         .unwrap();
         assert_eq!(seats_after.len(), 1);
         assert_eq!(seats_after[0].student_id, Some(student_id));
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn randomize_seating_chart_errors_when_boundary_too_small(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let classroom = insert_classroom(&pool, "Math 2", 3).await;
+        for i in 0..8 {
+            insert_student_in_classroom(&pool, classroom.id, i, "Student").await;
+        }
+        let app = app(pool);
+
+        // A boundary that only fits one 2x2 table, but 8 students need two.
+        let body = json!({
+            "keep_existing_tables": false,
+            "new_table_rows": 2,
+            "new_table_cols": 2,
+            "existing_tables": [],
+            "boundary_width": 377,
+            "boundary_height": 377
+        });
+        let response = app
+            .oneshot(json_request(
+                "POST",
+                &format!(
+                    "/api/v1/classrooms/{}/seating-chart/randomize",
+                    classroom.id
+                ),
+                body,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let json = body_json(response).await;
+        assert!(json["message"].is_string());
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn randomize_seating_chart_packs_within_constrained_boundary(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let classroom = insert_classroom(&pool, "Math 2", 3).await;
+        for i in 0..16 {
+            insert_student_in_classroom(&pool, classroom.id, i, "Student").await;
+        }
+        let app = app(pool);
+
+        // Boundary just big enough for a 2x2 grid of 2x2 tables (4 tables).
+        let body = json!({
+            "keep_existing_tables": false,
+            "new_table_rows": 2,
+            "new_table_cols": 2,
+            "existing_tables": [],
+            "boundary_width": 680,
+            "boundary_height": 680
+        });
+        let response = app
+            .oneshot(json_request(
+                "POST",
+                &format!(
+                    "/api/v1/classrooms/{}/seating-chart/randomize",
+                    classroom.id
+                ),
+                body,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        let tables = json["data"]["tables"].as_array().unwrap();
+        assert_eq!(tables.len(), 4);
+
+        let rects: Vec<(i32, i32, i32, i32)> = tables
+            .iter()
+            .map(|t| {
+                let x = t["x_pos"].as_i64().unwrap() as i32;
+                let y = t["y_pos"].as_i64().unwrap() as i32;
+                // 2x2 table pixel size: 2 * (SEAT_NODE_SIZE + SEAT_PADDING) + SEAT_PADDING = 210.
+                (x, y, x + 210, y + 210)
+            })
+            .collect();
+        for &(x0, y0, x1, y1) in &rects {
+            assert!(x0 >= 40 && y0 >= 40 && x1 <= 680 - 40 && y1 <= 680 - 40);
+        }
+        for i in 0..rects.len() {
+            for j in (i + 1)..rects.len() {
+                let (ax0, ay0, ax1, ay1) = rects[i];
+                let (bx0, by0, bx1, by1) = rects[j];
+                let overlap = ax0 < bx1 && ax1 > bx0 && ay0 < by1 && ay1 > by0;
+                assert!(!overlap);
+            }
+        }
 
         Ok(())
     }

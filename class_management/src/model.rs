@@ -1,14 +1,18 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// Row shape of the `classrooms` table.
 #[derive(Debug, Deserialize, Serialize, sqlx::FromRow)]
 pub struct ClassroomModel {
     pub id: Uuid,
     pub subject: String,
     pub period: i16,
+    pub boundary_width: i32,
+    pub boundary_height: i32,
     pub created_time: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+/// Row shape of the `students` table.
 #[derive(Debug, Deserialize, Serialize, sqlx::FromRow)]
 pub struct StudentModel {
     pub id: Uuid,
@@ -18,6 +22,8 @@ pub struct StudentModel {
     pub created_time: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+/// Row shape of the `tables` table. Handlers build `TableSchema` directly
+/// instead of deserializing into this; it's only used by test helpers.
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Serialize, sqlx::FromRow)]
 pub struct TableModel {
@@ -30,6 +36,8 @@ pub struct TableModel {
     pub y_pos: i32,
 }
 
+/// Row shape of the `seats` table. Handlers build `TableSchema` directly
+/// instead of deserializing into this; it's only used by test helpers.
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Serialize, sqlx::FromRow)]
 pub struct SeatModel {

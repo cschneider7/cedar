@@ -3,6 +3,8 @@ CREATE TABLE IF NOT EXISTS classrooms (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     subject TEXT NOT NULL,
     period SMALLINT NOT NULL,
+    boundary_width INTEGER NOT NULL DEFAULT 1080,
+    boundary_height INTEGER NOT NULL DEFAULT 820,
     created_time TIMESTAMPTZ DEFAULT now()
 );
 

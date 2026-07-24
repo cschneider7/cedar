@@ -17,6 +17,7 @@ mod test_support;
 
 const MAX_CONNECTIONS: u32 = 10;
 
+/// Shared state threaded through every handler via `Arc<AppState>`.
 pub struct AppState {
     db: PgPool,
 }

@@ -45,6 +45,8 @@ export const CreateClassroomSchema = z.object({
 
 export const ClassroomSchema = CreateClassroomSchema.extend({
   id: z.string().min(1),
+  boundary_width: z.int(),
+  boundary_height: z.int(),
 })
 export type Classroom = z.infer<typeof ClassroomSchema>
 
@@ -57,6 +59,8 @@ export const UpdateClassroomSchema = z.object({
       .min(1, "Subject must be at least 0 characters.")
       .max(50, "Subject must be at most 30 characters.")
   ),
+  boundary_width: z.optional(z.int().positive()),
+  boundary_height: z.optional(z.int().positive()),
 })
 
 export const SeatingChartSchema = z.object({
@@ -85,6 +89,8 @@ export const RandomizeSeatingChartOptionsSchema = z.object({
       y_pos: z.int(),
     })
   ),
+  boundary_width: z.int().positive(),
+  boundary_height: z.int().positive(),
 })
 export type RandomizeSeatingChartOptions = z.infer<
   typeof RandomizeSeatingChartOptionsSchema
