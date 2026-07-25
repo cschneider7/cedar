@@ -33,6 +33,8 @@ describe("classroom loader", () => {
       boundary_height: 820,
     }
     const seatingChart: SeatingChart = {
+      boundary_width: 1080,
+      boundary_height: 820,
       tables: [
         {
           table_number: 1,
@@ -92,6 +94,8 @@ describe("classroom loader", () => {
 
 describe("classroom action", () => {
   const chart: SeatingChart = {
+    boundary_width: 1080,
+    boundary_height: 820,
     tables: [
       {
         table_number: 0,

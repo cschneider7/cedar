@@ -47,10 +47,11 @@ pub struct UpdateStudentSchema {
     pub name: Option<String>,
 }
 
-/// A classroom's entire seating chart, as read/written in one document via
-/// `GET`/`PUT /api/v1/classrooms/{classroom_id}/seating-chart`.
+/// A classroom's entire seating chart
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SeatingChartSchema {
+    pub boundary_width: i32,
+    pub boundary_height: i32,
     pub tables: Vec<TableSchema>,
 }
 

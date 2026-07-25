@@ -1,7 +1,11 @@
 import type { SeatingChart, Student } from "~/lib/schemas"
 import type { Table } from "~/lib/types"
 
+export const BOUNDARY_NODE_ID = "__boundary__"
+
+export const CANVAS_PADDING = 1000
 export const GRID_STEP = 20
+
 export const DEFAULT_TABLE_ROWS = 2
 export const DEFAULT_TABLE_COLS = 2
 export const MAX_TABLE_DIMENSION = 15
@@ -17,7 +21,22 @@ export type Point = { x: number; y: number }
 export type TableNodeData = { table_number: number; rows: number; cols: number }
 export type SeatNodeData = { row: number; col: number }
 export type StudentNodeData = { student: Student }
+export type BoundaryNodeData = { width: number; height: number }
 
+export type SeatingChartBoundaryNode = {
+  id: string
+  type: "boundary"
+  position: Point
+  width: number
+  height: number
+  draggable: false
+  selectable: false
+  deletable: false
+  selected?: boolean
+  className?: string
+  zIndex: number
+  data: BoundaryNodeData
+}
 export type SeatingChartTableNode = {
   id: string
   type: "table"
@@ -25,6 +44,7 @@ export type SeatingChartTableNode = {
   deletable: false // deletion goes through TableNode's toolbar, which cascades to seats/students
   selected?: boolean
   className?: string
+  extent?: [[number, number], [number, number]] // clamped to the boundary node's current size, kept in sync at construction/update time
   data: TableNodeData
 }
 export type SeatingChartSeatNode = {
@@ -44,13 +64,16 @@ export type SeatingChartStudentNode = {
   type: "student"
   position: Point
   parentId?: string // set == seated (value is the owning seat's id), unset == unassigned
-  deletable: false // removal goes through StudentNode's delete button, which unassigns cleanly
+  deletable: false
   selected?: boolean
   className?: string
   data: StudentNodeData
 }
 export type SeatingChartNode =
-  SeatingChartTableNode | SeatingChartSeatNode | SeatingChartStudentNode
+  | SeatingChartBoundaryNode
+  | SeatingChartTableNode
+  | SeatingChartSeatNode
+  | SeatingChartStudentNode
 
 /**
  * Builds a seat node's id from its table id and grid coordinate.
@@ -107,18 +130,81 @@ export function createCanvasTable(position: Point): Table {
 }
 
 /**
- * Builds the initial state of the table, seat, and student nodes
+ * Builds the synthetic boundary node from a classroom's boundary dimensions.
+ * @param width - Boundary width in pixels
+ * @param height - Boundary height in pixels
+ * @returns The boundary node
+ */
+export function buildBoundaryNode(
+  width: number,
+  height: number
+): SeatingChartBoundaryNode {
+  return {
+    id: BOUNDARY_NODE_ID,
+    type: "boundary",
+    position: { x: 0, y: 0 },
+    width,
+    height,
+    draggable: false,
+    selectable: false,
+    deletable: false,
+    zIndex: -1,
+    data: { width, height },
+  }
+}
+
+/**
+ * Computes the `extent` that clamps a table node to a boundary's bounds.
+ * @param boundary - Boundary dimensions to clamp against
+ * @returns A React Flow node `extent` tuple
+ */
+export function boundaryArea(boundary: {
+  width: number
+  height: number
+}): [[number, number], [number, number]] {
+  return [
+    [0, 0],
+    [boundary.width, boundary.height],
+  ]
+}
+
+/**
+ * Reads the current boundary dimensions from a node list.
+ * @param nodes - List of seating chart nodes
+ * @returns The boundary node's dimensions
+ */
+export function getBoundary(nodes: SeatingChartNode[]): {
+  width: number
+  height: number
+} {
+  const boundaryNode = nodes.find(
+    (n): n is SeatingChartBoundaryNode => n.type === "boundary"
+  )
+  if (!boundaryNode) {
+    throw new Error("Seating chart nodes are missing a boundary node")
+  }
+  return boundaryNode.data
+}
+
+/**
+ * Builds the initial state of the boundary, table, seat, and student nodes
  * @param classroomId - Id of the classroom the chart belongs to
  * @param seatingChart - Seating chart persisted state
  * @param studentsById - Map of students keyed by their id
- * @returns Initial seating chart canvas nodes, grouped table -> seat -> student
+ * @returns Initial seating chart canvas nodes, grouped boundary -> table -> seat -> student
  */
 export function buildInitialNodes(
   classroomId: string,
   seatingChart: SeatingChart,
   studentsById: Map<string, Student>
 ): SeatingChartNode[] {
-  const nodes: SeatingChartNode[] = []
+  const boundary = {
+    width: seatingChart.boundary_width,
+    height: seatingChart.boundary_height,
+  }
+  const nodes: SeatingChartNode[] = [
+    buildBoundaryNode(boundary.width, boundary.height),
+  ]
 
   for (const table of seatingChart.tables) {
     const tableId = `${classroomId}:${table.table_number}`
@@ -128,6 +214,7 @@ export function buildInitialNodes(
       type: "table",
       position: { x: table.x_pos, y: table.y_pos },
       deletable: false,
+      extent: boundaryArea(boundary),
       data: {
         table_number: table.table_number,
         rows: table.rows,
@@ -182,12 +269,13 @@ export function buildInitialNodes(
 }
 
 /**
- * Reorders nodes into table -> seat -> student order (parents before children).
+ * Reorders nodes into boundary -> table -> seat -> student order (parents before children).
  * @param nodes - Unordered list of seating chart nodes
- * @return List of nodes in the order table -> seat -> student
+ * @return List of nodes in the order boundary -> table -> seat -> student
  */
 export function reorderNodes(nodes: SeatingChartNode[]): SeatingChartNode[] {
   return [
+    ...nodes.filter((n) => n.type === "boundary"),
     ...nodes.filter((n) => n.type === "table"),
     ...nodes.filter((n) => n.type === "seat"),
     ...nodes.filter((n) => n.type === "student"),
@@ -216,8 +304,11 @@ export function buildSeatingChartPayload(
       .filter((student) => student.parentId)
       .map((student) => [student.parentId, student])
   )
+  const boundary = getBoundary(nodes)
 
   return {
+    boundary_width: boundary.width,
+    boundary_height: boundary.height,
     tables: tableNodes.map((table, idx) => {
       const seats = seatNodes
         .filter((seat) => seat.parentId === table.id)
@@ -381,23 +472,25 @@ export const RANDOMIZE_TABLE_COUNT_WARNING_THRESHOLD = 20
 /**
  * Computes how many new tables a randomize request would create.
  * @param numStudents - Number of students to seat
- * @param existingTableCount - Number of tables being retained
- * @param keptCapacity - Total seats across kept tables
+ * @param numExistingTables - Number of tables being retained
+ * @param numExistingSeats - Total seats across kept tables
  * @param newTableRows - Row count for each new table
  * @param newTableCols - Column count for each new table
  * @returns The number of new tables needed and the resulting total table count
  */
 export function computeRandomizeTableCount(
   numStudents: number,
-  existingTableCount: number,
-  keptCapacity: number,
+  numExistingTables: number,
+  numExistingSeats: number,
   newTableRows: number,
   newTableCols: number
 ): { neededNewTables: number; totalTables: number } {
   const seatsPerNewTable = newTableRows * newTableCols
   const neededNewTables =
     seatsPerNewTable > 0
-      ? Math.ceil(Math.max(0, numStudents - keptCapacity) / seatsPerNewTable)
+      ? Math.ceil(
+          Math.max(0, numStudents - numExistingSeats) / seatsPerNewTable
+        )
       : 0
-  return { neededNewTables, totalTables: existingTableCount + neededNewTables }
+  return { neededNewTables, totalTables: numExistingTables + neededNewTables }
 }

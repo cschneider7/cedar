@@ -26,6 +26,8 @@ stubFetch()
 describe("randomize-seating-chart action", () => {
   it("posts to the randomize endpoint and returns the generated chart", async () => {
     const chart: SeatingChart = {
+      boundary_width: 1080,
+      boundary_height: 820,
       tables: [
         {
           table_number: 0,

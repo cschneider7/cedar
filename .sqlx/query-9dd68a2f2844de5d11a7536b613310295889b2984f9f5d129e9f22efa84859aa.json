@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT boundary_width, boundary_height FROM classrooms WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "boundary_width",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "boundary_width"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "boundary_height",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "boundary_height"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "9dd68a2f2844de5d11a7536b613310295889b2984f9f5d129e9f22efa84859aa"
+}

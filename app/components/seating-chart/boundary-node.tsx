@@ -1,12 +1,9 @@
 import type { Node, NodeProps } from "@xyflow/react"
 import { memo } from "react"
 import { BaseNode } from "~/components/base-node"
+import type { BoundaryNodeData } from "~/lib/seating-chart-utils"
 
-export type BoundaryNodeData = {
-  width: number
-  height: number
-}
-
+/** Renders the seating chart's boundary rectangle as a React Flow node. */
 export const BoundaryNode = memo(function BoundaryNode({
   data,
 }: NodeProps<Node<BoundaryNodeData, "boundary">>) {

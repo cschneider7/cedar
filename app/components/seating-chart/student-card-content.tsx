@@ -1,6 +1,7 @@
 import { ItemContent, ItemHeader, ItemTitle } from "~/components/ui/item"
 import type { Student } from "~/lib/schemas"
 
+/** Renders a student's avatar and name as shared card content. */
 export function StudentCardContent({ student }: { student: Student }) {
   return (
     <>

@@ -6,7 +6,7 @@ import {
   type NodeProps,
 } from "@xyflow/react"
 import { GripVerticalIcon, MinusIcon, PlusIcon, Trash2Icon } from "lucide-react"
-import { memo, useContext, useState } from "react"
+import { memo, useState } from "react"
 import { toast } from "sonner"
 import { BaseNode, BaseNodeContent } from "~/components/base-node"
 import {
@@ -22,16 +22,16 @@ import {
 } from "~/components/ui/alert-dialog"
 import { Button } from "~/components/ui/button"
 import {
-  MAX_TABLE_DIMENSION,
-  TABLE_OFFSET,
+  getBoundary,
   getSeatId,
   getSeatPosition,
   getTableNodeSize,
+  MAX_TABLE_DIMENSION,
+  TABLE_OFFSET,
   type SeatingChartNode,
   type SeatingChartSeatNode,
   type TableNodeData,
 } from "~/lib/seating-chart-utils"
-import { BoundaryContext } from "./context"
 
 type PendingAction = "table" | "row" | "col" | null
 
@@ -56,6 +56,7 @@ function withTableDims(
   )
 }
 
+/** Renders a table as a React Flow node, with a toolbar for resizing/deleting it. */
 export const TableNode = memo(function TableNode({
   id,
   data,
@@ -63,7 +64,6 @@ export const TableNode = memo(function TableNode({
   positionAbsoluteY,
 }: NodeProps<Node<TableNodeData, "table">>) {
   const { setNodes, getNodes } = useReactFlow<SeatingChartNode>()
-  const boundary = useContext(BoundaryContext)
   const [pendingAction, setPendingAction] = useState<PendingAction>(null)
 
   function seatsOccupied(seatIds: Set<string>) {
@@ -92,6 +92,7 @@ export const TableNode = memo(function TableNode({
   function handleAddRow() {
     if (data.rows >= MAX_TABLE_DIMENSION) return
     const { width, height } = getTableNodeSize(data.rows + 1, data.cols)
+    const boundary = getBoundary(getNodes())
     if (
       positionAbsoluteX + width > boundary.width - TABLE_OFFSET ||
       positionAbsoluteY + height > boundary.height - TABLE_OFFSET
@@ -166,6 +167,7 @@ export const TableNode = memo(function TableNode({
   function handleAddColumn() {
     if (data.cols >= MAX_TABLE_DIMENSION) return
     const { width, height } = getTableNodeSize(data.rows, data.cols + 1)
+    const boundary = getBoundary(getNodes())
     if (
       positionAbsoluteX + width > boundary.width - TABLE_OFFSET ||
       positionAbsoluteY + height > boundary.height - TABLE_OFFSET

@@ -135,6 +135,13 @@ pub async fn get_seating_chart_handler(
     Path(classroom_id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
+    let classroom = sqlx::query!(
+        r#"SELECT boundary_width, boundary_height FROM classrooms WHERE id = $1"#,
+        &classroom_id
+    )
+    .fetch_one(&data.db)
+    .await?;
+
     let tables = sqlx::query_as!(
         TableSchema,
         r#"SELECT
@@ -157,6 +164,8 @@ pub async fn get_seating_chart_handler(
     let response = json!({
         "data": {
             "classroom_id": classroom_id,
+            "boundary_width": classroom.boundary_width,
+            "boundary_height": classroom.boundary_height,
             "tables": tables
         }
     });
@@ -171,6 +180,18 @@ pub async fn update_seating_chart_handler(
     Json(body): Json<SeatingChartSchema>,
 ) -> Result<impl IntoResponse, AppError> {
     let mut tx = data.db.begin().await?;
+
+    let result = sqlx::query!(
+        r#"UPDATE classrooms SET boundary_width = $1, boundary_height = $2 WHERE id = $3"#,
+        body.boundary_width,
+        body.boundary_height,
+        &classroom_id
+    )
+    .execute(&mut *tx)
+    .await?;
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("Classroom not found".to_string()));
+    }
 
     sqlx::query!(
         r#"DELETE FROM tables WHERE classroom_id = $1"#,
@@ -227,6 +248,8 @@ pub async fn update_seating_chart_handler(
     let response = json!({
         "data": {
             "classroom_id": classroom_id,
+            "boundary_width": body.boundary_width,
+            "boundary_height": body.boundary_height,
             "tables": chart_tables
         }
     });
@@ -286,7 +309,14 @@ pub async fn randomize_seating_chart_handler(
         )
     })?;
 
-    Ok((StatusCode::OK, Json(json!({"data": {"tables": tables}}))))
+    Ok((
+        StatusCode::OK,
+        Json(json!({"data": {
+            "boundary_width": body.boundary_width,
+            "boundary_height": body.boundary_height,
+            "tables": tables
+        }})),
+    ))
 }
 
 #[cfg(test)]
@@ -629,6 +659,8 @@ mod tests {
 
         let student_id = insert_student(&pool, 1, "Bob").await;
         let body = json!({
+            "boundary_width": 1500,
+            "boundary_height": 1200,
             "tables": [
                 { "table_number": 0, "rows": 1, "cols": 2, "x_pos": 20, "y_pos": 40, "seat_assignments": [student_id, null] },
             ]
@@ -665,6 +697,34 @@ mod tests {
         assert_eq!(seats[1].seat_number, 1);
         assert_eq!(seats[1].student_id, None);
 
+        let updated_classroom = fetch_classroom(&pool, classroom.id).await.unwrap();
+        assert_eq!(updated_classroom.boundary_width, 1500);
+        assert_eq!(updated_classroom.boundary_height, 1200);
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn update_seating_chart_nonexistent_classroom_returns_404(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool);
+
+        let body = json!({
+            "boundary_width": 1080,
+            "boundary_height": 820,
+            "tables": []
+        });
+        let response = app
+            .oneshot(json_request(
+                "PUT",
+                &format!("/api/v1/classrooms/{}/seating-chart", Uuid::new_v4()),
+                body,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
         Ok(())
     }
 
@@ -679,6 +739,8 @@ mod tests {
         // so the assertion below only passes if table_number is driven by
         // request array index and not incidentally by x_pos or insert order.
         let body = json!({
+            "boundary_width": 1080,
+            "boundary_height": 820,
             "tables": [
                 { "table_number": 0, "rows": 1, "cols": 1, "x_pos": 900, "y_pos": 0, "seat_assignments": [] },
                 { "table_number": 1, "rows": 1, "cols": 1, "x_pos": 100, "y_pos": 0, "seat_assignments": [] },
@@ -715,7 +777,11 @@ mod tests {
         insert_table(&pool, classroom.id, 0, 2, 2, 0, 0).await;
         let app = app(pool.clone());
 
-        let body = json!({ "tables": [] });
+        let body = json!({
+            "boundary_width": 1080,
+            "boundary_height": 820,
+            "tables": []
+        });
         let response = app
             .oneshot(json_request(
                 "PUT",
@@ -757,6 +823,8 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         let json = body_json(response).await;
+        assert_eq!(json["data"]["boundary_width"], 1080);
+        assert_eq!(json["data"]["boundary_height"], 820);
         assert_eq!(json["data"]["tables"][0]["rows"], 2);
         assert_eq!(json["data"]["tables"][0]["cols"], 2);
         let assignments = json["data"]["tables"][0]["seat_assignments"]
@@ -796,6 +864,8 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         let json = body_json(response).await;
+        assert_eq!(json["data"]["boundary_width"], 1080);
+        assert_eq!(json["data"]["boundary_height"], 820);
         let tables = json["data"]["tables"].as_array().unwrap();
         assert_eq!(tables.len(), 2);
         assert_eq!(tables[0]["seat_assignments"][0], student_a.to_string());
@@ -823,7 +893,33 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         let json = body_json(response).await;
+        assert_eq!(json["data"]["boundary_width"], 1080);
+        assert_eq!(json["data"]["boundary_height"], 820);
         assert!(json["data"]["tables"].as_array().unwrap().is_empty());
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn get_seating_chart_nonexistent_classroom_returns_404(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!(
+                        "/api/v1/classrooms/{}/seating-chart",
+                        Uuid::new_v4()
+                    ))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
         Ok(())
     }
@@ -1059,6 +1155,8 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         let json = body_json(response).await;
+        assert_eq!(json["data"]["boundary_width"], 680);
+        assert_eq!(json["data"]["boundary_height"], 680);
         let tables = json["data"]["tables"].as_array().unwrap();
         assert_eq!(tables.len(), 4);
 
