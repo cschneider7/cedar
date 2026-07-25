@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest"
 import type { SeatingChart, Student } from "~/lib/schemas"
 import {
+  BOUNDARY_NODE_ID,
+  boundaryArea,
+  buildBoundaryNode,
   buildInitialNodes,
   buildSeatingChartPayload,
   computeRandomizeTableCount,
@@ -8,6 +11,7 @@ import {
   DEFAULT_TABLE_COLS,
   DEFAULT_TABLE_ROWS,
   findNewTablePosition,
+  getBoundary,
   getBoundaryMinSize,
   getSeatId,
   getSeatPosition,
@@ -22,6 +26,8 @@ import {
   type TableGeometry,
 } from "./seating-chart-utils"
 
+const DEFAULT_BOUNDARY = { width: 1080, height: 820 }
+
 function makeStudent(id: string): Student {
   return { id, student_id: 1, name: id, classroom_id: "c1" }
 }
@@ -30,6 +36,8 @@ function makeSeatingChart(
   tables: Partial<SeatingChart["tables"][number]>[] = []
 ): SeatingChart {
   return {
+    boundary_width: DEFAULT_BOUNDARY.width,
+    boundary_height: DEFAULT_BOUNDARY.height,
     tables: tables.map((table, index) => ({
       table_number: index,
       rows: DEFAULT_TABLE_ROWS,
@@ -66,20 +74,33 @@ describe("getSeatId", () => {
 })
 
 describe("buildInitialNodes", () => {
-  it("returns no nodes when there are no tables", () => {
-    expect(buildInitialNodes("c1", makeSeatingChart([]), new Map())).toEqual([])
+  it("returns just the boundary node when there are no tables", () => {
+    expect(buildInitialNodes("c1", makeSeatingChart([]), new Map())).toEqual([
+      buildBoundaryNode(DEFAULT_BOUNDARY.width, DEFAULT_BOUNDARY.height),
+    ])
+  })
+
+  it("builds the boundary node from the seating chart's boundary dimensions", () => {
+    const seatingChart = makeSeatingChart([])
+    seatingChart.boundary_width = 500
+    seatingChart.boundary_height = 700
+    const nodes = buildInitialNodes("c1", seatingChart, new Map())
+
+    expect(nodes[0]).toEqual(buildBoundaryNode(500, 700))
+    expect(nodes[0].id).toBe(BOUNDARY_NODE_ID)
   })
 
   it("creates a table node followed by its seat nodes, in row-major canonical order", () => {
     const seatingChart = makeSeatingChart([{ x_pos: 40, y_pos: 60 }])
     const nodes = buildInitialNodes("c1", seatingChart, new Map())
 
-    expect(nodes).toHaveLength(1 + DEFAULT_TABLE_ROWS * DEFAULT_TABLE_COLS)
-    expect(nodes[0]).toEqual({
+    expect(nodes).toHaveLength(1 + 1 + DEFAULT_TABLE_ROWS * DEFAULT_TABLE_COLS)
+    expect(nodes[1]).toEqual({
       id: "c1:0",
       type: "table",
       position: { x: 40, y: 60 },
       deletable: false,
+      extent: boundaryArea(DEFAULT_BOUNDARY),
       data: {
         table_number: 0,
         rows: DEFAULT_TABLE_ROWS,
@@ -87,7 +108,7 @@ describe("buildInitialNodes", () => {
       },
     })
 
-    let i = 1
+    let i = 2
     for (let row = 0; row < DEFAULT_TABLE_ROWS; row++) {
       for (let col = 0; col < DEFAULT_TABLE_COLS; col++) {
         expect(nodes[i]).toEqual({
@@ -174,14 +195,33 @@ describe("buildInitialNodes", () => {
     ])
     const nodes = buildInitialNodes("c1", seatingChart, new Map())
 
-    expect(nodes).toHaveLength(1 + 6)
+    expect(nodes).toHaveLength(1 + 1 + 6)
     expect(nodes.some((n) => n.id === getSeatId("c1:0", 1, 2))).toBe(true)
   })
 })
 
 describe("buildSeatingChartPayload", () => {
+  it("throws when the node list has no boundary node", () => {
+    expect(() => buildSeatingChartPayload([])).toThrow()
+  })
+
   it("returns no tables when there are no table nodes", () => {
-    expect(buildSeatingChartPayload([])).toEqual({ tables: [] })
+    const nodes = [
+      buildBoundaryNode(DEFAULT_BOUNDARY.width, DEFAULT_BOUNDARY.height),
+    ]
+    expect(buildSeatingChartPayload(nodes)).toEqual({
+      boundary_width: DEFAULT_BOUNDARY.width,
+      boundary_height: DEFAULT_BOUNDARY.height,
+      tables: [],
+    })
+  })
+
+  it("includes the boundary node's dimensions in the payload", () => {
+    const nodes = [buildBoundaryNode(500, 700)]
+    const payload = buildSeatingChartPayload(nodes)
+
+    expect(payload.boundary_width).toBe(500)
+    expect(payload.boundary_height).toBe(700)
   })
 
   it("fills seat_assignments with null for an unoccupied table", () => {
@@ -189,6 +229,8 @@ describe("buildSeatingChartPayload", () => {
     const payload = buildSeatingChartPayload(nodes)
 
     expect(payload).toEqual({
+      boundary_width: DEFAULT_BOUNDARY.width,
+      boundary_height: DEFAULT_BOUNDARY.height,
       tables: [
         {
           table_number: 0,
@@ -240,6 +282,7 @@ describe("buildSeatingChartPayload", () => {
       studentNode,
       tableNode,
       ...seatNodes,
+      buildBoundaryNode(DEFAULT_BOUNDARY.width, DEFAULT_BOUNDARY.height),
     ])
 
     expect(payload.tables[0].seat_assignments).toEqual([null, null, "s1", null])
@@ -292,6 +335,24 @@ describe("buildSeatingChartPayload", () => {
 })
 
 describe("reorderNodes", () => {
+  it("keeps a boundary node first, ahead of table/seat/student nodes", () => {
+    const boundary = buildBoundaryNode(
+      DEFAULT_BOUNDARY.width,
+      DEFAULT_BOUNDARY.height
+    )
+    const table: SeatingChartNode = {
+      id: "t",
+      type: "table",
+      position: { x: 0, y: 0 },
+      deletable: false,
+      data: { table_number: 0, rows: 2, cols: 2 },
+    }
+
+    const result = reorderNodes([table, boundary])
+
+    expect(result).toEqual([boundary, table])
+  })
+
   it("reorders a mix of nodes into table, then seat, then student", () => {
     const table: SeatingChartNode = {
       id: "t",
@@ -344,6 +405,26 @@ describe("reorderNodes", () => {
     const result = reorderNodes([tableB, tableA])
 
     expect(result).toEqual([tableB, tableA])
+  })
+})
+
+describe("getBoundary", () => {
+  it("returns the boundary node's dimensions", () => {
+    const nodes = [buildBoundaryNode(500, 700)]
+    expect(getBoundary(nodes)).toEqual({ width: 500, height: 700 })
+  })
+
+  it("throws when no boundary node is present", () => {
+    expect(() => getBoundary([])).toThrow()
+  })
+})
+
+describe("boundaryArea", () => {
+  it("clamps to [[0, 0], [width, height]]", () => {
+    expect(boundaryArea({ width: 500, height: 700 })).toEqual([
+      [0, 0],
+      [500, 700],
+    ])
   })
 })
 

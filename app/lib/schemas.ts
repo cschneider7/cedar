@@ -64,6 +64,8 @@ export const UpdateClassroomSchema = z.object({
 })
 
 export const SeatingChartSchema = z.object({
+  boundary_width: z.int().positive(),
+  boundary_height: z.int().positive(),
   tables: z.array(
     z.object({
       table_number: z.int(),
