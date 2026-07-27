@@ -1,9 +1,21 @@
 import { Outlet } from "react-router"
 import { RouteErrorCard } from "~/components/route-error-card"
+import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 import type { Route } from "./+types/classrooms"
 
+export const handle: BreadcrumbHandle = {
+  breadcrumb: () => "Classrooms",
+  to: "/classrooms",
+}
+
 export default function Layout() {
-  return <Outlet />
+  return (
+    <div className="flex h-full p-6">
+      <main className="w-full">
+        <Outlet />
+      </main>
+    </div>
+  )
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

@@ -7,6 +7,12 @@ import {
   StudentSidebar,
 } from "~/components/students-sidebar"
 import { getStudents } from "~/lib/api"
+import type { BreadcrumbHandle } from "~/lib/breadcrumb"
+
+export const handle: BreadcrumbHandle = {
+  breadcrumb: () => "Students",
+  to: "/students",
+}
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -23,7 +29,7 @@ export async function loader() {
 export default function Layout({ loaderData }: Route.ComponentProps) {
   const { students } = loaderData
   return (
-    <div className="flex h-full">
+    <div className="flex h-full px-4 py-6">
       <StudentSidebar students={students} />
       <main className="w-full pl-0 md:pl-4">
         <MobileStudentDrawer students={students} />

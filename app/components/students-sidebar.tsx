@@ -96,7 +96,7 @@ function RosterList({
       </div>
       {filteredStudents.length > 0 ? (
         <ScrollArea className="min-h-0 flex-1">
-          <ItemGroup className="gap-1 pr-3">
+          <ItemGroup>
             {filteredStudents.map((student) => (
               <Item
                 key={student.id}
@@ -109,7 +109,7 @@ function RosterList({
           </ItemGroup>
         </ScrollArea>
       ) : students.length === 0 ? (
-        <Empty className="justify-start gap-2 rounded-none border-none p-4">
+        <Empty className="justify-start">
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <UsersIcon />
@@ -121,7 +121,7 @@ function RosterList({
           </EmptyHeader>
         </Empty>
       ) : (
-        <Empty className="justify-start gap-2 rounded-none border-none p-4">
+        <Empty className="justify-start">
           <EmptyDescription>No students found</EmptyDescription>
         </Empty>
       )}
@@ -133,8 +133,8 @@ export function StudentSidebar({ students }: { students: Student[] }) {
   const [query, setQuery] = useState("")
 
   return (
-    <div className="hidden h-full w-56 shrink-0 flex-col border-r border-border md:flex">
-      <div className="min-h-0 flex-1 p-3">
+    <div className="hidden h-full min-w-45 shrink-0 flex-col md:flex">
+      <div className="flex-1">
         <RosterList
           students={students}
           query={query}

@@ -36,13 +36,20 @@ import type { MutationResult } from "~/lib/action-results"
 import type { Classroom, Student } from "~/lib/schemas"
 import { CreateStudentSchema, UpdateStudentSchema } from "~/lib/schemas"
 
-type StudentFormDialogProps =
-  | { mode: "create"; trigger: React.ReactElement }
-  | { mode: "edit"; student: Student; trigger: React.ReactElement }
+type StudentFormDialogProps = (
+  | { mode: "create" }
+  | { mode: "edit"; student: Student }
+) & {
+  trigger?: React.ReactElement
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+}
 
 export function StudentFormDialog(props: StudentFormDialogProps) {
   const { mode, trigger } = props
-  const [open, setOpen] = useState(false)
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const open = props.open ?? uncontrolledOpen
+  const setOpen = props.onOpenChange ?? setUncontrolledOpen
   const navigate = useNavigate()
 
   const formPath =
@@ -129,7 +136,7 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={trigger} />
+      {trigger && <DialogTrigger render={trigger} />}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
