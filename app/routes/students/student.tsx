@@ -1,3 +1,4 @@
+import { Alert, AlertDescription } from "~/components/ui/alert"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -10,7 +11,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "~/components/ui/alert-dialog"
-import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import {
@@ -30,12 +30,20 @@ import {
 import { Trash2Icon } from "lucide-react"
 import { useEffect, useState } from "react"
 import { Link, useFetcher, useNavigate } from "react-router"
+import { toast } from "sonner"
 import { StudentFormDialog } from "~/components/student-form-dialog"
 import { Spinner } from "~/components/ui/spinner"
-import { toast } from "sonner"
 import type { MutationResult } from "~/lib/action-results"
 import { getClassroom, getStudent } from "~/lib/api"
+import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 import type { Route } from "./+types/student"
+
+export const handle: BreadcrumbHandle = {
+  breadcrumb: (data: Route.ComponentProps["loaderData"] | undefined) =>
+    data ? data.student.name : "",
+  to: (data: Route.ComponentProps["loaderData"] | undefined) =>
+    data ? `/students/${data.student.id}` : "/students",
+}
 
 export async function loader({ params }: Route.ClientLoaderArgs) {
   const student = await getStudent(params.studentId)

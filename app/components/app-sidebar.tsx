@@ -1,0 +1,244 @@
+import {
+  ClipboardList,
+  Home,
+  Monitor,
+  Moon,
+  MoreHorizontal,
+  Plus,
+  SheetIcon,
+  Sun,
+  UsersRound,
+} from "lucide-react"
+import { useState } from "react"
+import { Link, NavLink, useLocation, useRouteLoaderData } from "react-router"
+import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
+import { DeleteClassroomDialog } from "~/components/delete-classroom-dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "~/components/ui/dropdown-menu"
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupAction,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuAction,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "~/components/ui/sidebar"
+import { useTheme } from "~/components/ui/theme-provider"
+import type { Classroom } from "~/lib/schemas"
+import type { loader as rootLoader } from "~/root"
+
+function ClassroomRow({
+  classroom,
+  onRequestDelete,
+}: {
+  classroom: Classroom
+  onRequestDelete: () => void
+}) {
+  const [editOpen, setEditOpen] = useState(false)
+  const location = useLocation()
+
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        isActive={location.pathname === `/classrooms/${classroom.id}`}
+        render={<NavLink to={`/classrooms/${classroom.id}`} />}
+      >
+        <SheetIcon />
+        <span className="truncate">
+          Period {classroom.period} — {classroom.subject}
+        </span>
+      </SidebarMenuButton>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <SidebarMenuAction aria-label="Classroom actions">
+              <MoreHorizontal />
+            </SidebarMenuAction>
+          }
+        />
+        <DropdownMenuContent side="right" align="start">
+          <DropdownMenuItem
+            render={<Link to={`/classrooms/${classroom.id}`} />}
+          >
+            View
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setEditOpen(true)}>
+            Edit
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem disabled className="text-muted-foreground">
+            Move up
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled className="text-muted-foreground">
+            Move down
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem variant="destructive" onClick={onRequestDelete}>
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <ClassroomFormDialog
+        mode="edit"
+        classroom={classroom}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+      />
+    </SidebarMenuItem>
+  )
+}
+
+const themeIcons = {
+  light: Sun,
+  dark: Moon,
+  system: Monitor,
+} as const
+
+function AppearanceMenuItem() {
+  const { theme, setTheme } = useTheme()
+  const ThemeIcon = themeIcons[theme]
+
+  return (
+    <SidebarMenuItem>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <SidebarMenuButton tooltip="Appearance">
+              <ThemeIcon />
+              <span>Appearance</span>
+            </SidebarMenuButton>
+          }
+        />
+        <DropdownMenuContent side="right" align="start">
+          <DropdownMenuItem onClick={() => setTheme("light")}>
+            Light
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setTheme("dark")}>
+            Dark
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setTheme("system")}>
+            System
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </SidebarMenuItem>
+  )
+}
+
+export function AppSidebar() {
+  const rootData = useRouteLoaderData<typeof rootLoader>("root")
+  const classrooms = rootData?.classrooms ?? []
+  const [createOpen, setCreateOpen] = useState(false)
+  const [deletingClassroom, setDeletingClassroom] = useState<Classroom | null>(
+    null
+  )
+  const location = useLocation()
+
+  return (
+    <Sidebar className="top-(--header-height) h-[calc(100svh-var(--header-height))]!">
+      <SidebarHeader>
+        <Link
+          to="/"
+          className="flex items-center gap-2 px-3 pt-4 text-lg font-medium md:hidden"
+        >
+          <span>Seating Chart</span>
+        </Link>
+      </SidebarHeader>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Organization</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu className="gap-1">
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  tooltip="Home"
+                  isActive={location.pathname === "/"}
+                  render={<NavLink to="/" />}
+                >
+                  <Home />
+                  <span>Home</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  tooltip="Students"
+                  isActive={location.pathname.startsWith("/students")}
+                  render={<NavLink to="/students" />}
+                >
+                  <UsersRound />
+                  <span>Students</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  tooltip="Classrooms"
+                  isActive={location.pathname === "/classrooms"}
+                  render={<NavLink to="/classrooms" />}
+                >
+                  <ClipboardList />
+                  <span>Classrooms</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Seating Charts</SidebarGroupLabel>
+          <SidebarGroupAction
+            aria-label="New classroom"
+            onClick={() => setCreateOpen(true)}
+          >
+            <Plus />
+          </SidebarGroupAction>
+          <SidebarGroupContent>
+            <SidebarMenu className="gap-1">
+              {classrooms.map((classroom) => (
+                <ClassroomRow
+                  key={classroom.id}
+                  classroom={classroom}
+                  onRequestDelete={() => setDeletingClassroom(classroom)}
+                />
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Tools (Coming Soon)</SidebarGroupLabel>
+          <SidebarGroupContent></SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+      <SidebarFooter>
+        <SidebarMenu className="mb-3">
+          <AppearanceMenuItem />
+        </SidebarMenu>
+      </SidebarFooter>
+      <ClassroomFormDialog
+        mode="create"
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+      />
+      {deletingClassroom && (
+        <DeleteClassroomDialog
+          classroom={deletingClassroom}
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) setDeletingClassroom(null)
+          }}
+        />
+      )}
+    </Sidebar>
+  )
+}

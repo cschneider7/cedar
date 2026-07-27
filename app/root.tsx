@@ -9,7 +9,9 @@ import {
 } from "react-router"
 import { Spinner } from "~/components/ui/spinner"
 
-import { Navbar } from "~/components/navbar"
+import { AppSidebar } from "~/components/app-sidebar"
+import { AppTopbar } from "~/components/app-topbar"
+import { Button } from "~/components/ui/button"
 import {
   Card,
   CardContent,
@@ -18,12 +20,18 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card"
-import { ThemeProvider } from "~/components/ui/theme-provider"
+import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar"
 import { Toaster } from "~/components/ui/sonner"
+import { ThemeProvider } from "~/components/ui/theme-provider"
 import { TooltipProvider } from "~/components/ui/tooltip"
-import { Button } from "~/components/ui/button"
+import { getClassrooms } from "~/lib/api"
 import type { Route } from "./+types/root"
 import "./app.css"
+
+export async function loader() {
+  const classrooms = await getClassrooms()
+  return { classrooms }
+}
 
 export function HydrateFallback() {
   return (
@@ -75,13 +83,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <TooltipProvider delay={200}>
-      <div className="flex h-dvh flex-col overflow-hidden px-4 py-4 sm:px-8 sm:py-6 lg:px-16 lg:py-8">
-        <div className="shrink-0">
-          <Navbar />
-        </div>
-        <div className="min-h-0 flex-1">
-          <Outlet />
-        </div>
+      <div className="flex h-dvh flex-col overflow-hidden [--header-height:calc(--spacing(14))]">
+        <SidebarProvider className="min-h-0 flex-1 flex-col">
+          <AppTopbar />
+          <div className="flex min-h-0 flex-1">
+            <AppSidebar />
+            <SidebarInset className="min-h-0">
+              <Outlet />
+            </SidebarInset>
+          </div>
+        </SidebarProvider>
       </div>
     </TooltipProvider>
   )

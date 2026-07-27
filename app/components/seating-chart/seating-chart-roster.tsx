@@ -53,7 +53,7 @@ export function RosterPanel({
   return (
     <div className="h-40 shrink-0 rounded-lg border p-1 md:h-full">
       <ScrollArea className="h-full">
-        <div className="h-full min-h-0 w-full shrink-0 p-3 transition-shadow md:w-45">
+        <div className="h-full min-h-0 w-full shrink-0 p-3 transition-shadow md:w-35">
           <h4 className="mb-4 text-sm leading-none font-medium">
             Unassigned ({students.length})
           </h4>

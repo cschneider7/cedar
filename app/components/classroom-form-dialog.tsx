@@ -41,13 +41,20 @@ const periodOptions = Array.from({ length: 9 }, (_, i) => ({
   value: i,
 }))
 
-type ClassroomFormDialogProps =
-  | { mode: "create"; trigger: React.ReactElement }
-  | { mode: "edit"; classroom: Classroom; trigger: React.ReactElement }
+type ClassroomFormDialogProps = (
+  | { mode: "create" }
+  | { mode: "edit"; classroom: Classroom }
+) & {
+  trigger?: React.ReactElement
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+}
 
 export function ClassroomFormDialog(props: ClassroomFormDialogProps) {
   const { mode, trigger } = props
-  const [open, setOpen] = useState(false)
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const open = props.open ?? uncontrolledOpen
+  const setOpen = props.onOpenChange ?? setUncontrolledOpen
   const navigate = useNavigate()
   const fetcher = useFetcher<MutationResult>()
   const isSubmitting = fetcher.state !== "idle"
@@ -115,7 +122,7 @@ export function ClassroomFormDialog(props: ClassroomFormDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={trigger} />
+      {trigger && <DialogTrigger render={trigger} />}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>

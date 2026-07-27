@@ -170,7 +170,3 @@
     @apply font-sans;
   }
 }
-
-a.active {
-  @apply bg-accent text-accent-foreground;
-}
