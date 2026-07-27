@@ -28,9 +28,8 @@ import {
 } from "~/components/ui/tooltip"
 
 import { Trash2Icon } from "lucide-react"
-import { useEffect, useState } from "react"
-import { Link, useFetcher, useNavigate } from "react-router"
-import { toast } from "sonner"
+import { useState } from "react"
+import { Link, useFetcher } from "react-router"
 import { StudentFormDialog } from "~/components/student-form-dialog"
 import { Spinner } from "~/components/ui/spinner"
 import type { MutationResult } from "~/lib/action-results"
@@ -59,7 +58,6 @@ export async function loader({ params }: Route.ClientLoaderArgs) {
 
 export default function Component({ loaderData }: Route.ComponentProps) {
   const { student, classroom } = loaderData
-  const navigate = useNavigate()
   const [deleteOpen, setDeleteOpen] = useState(false)
 
   const deleteFetcher = useFetcher<MutationResult>()
@@ -68,14 +66,6 @@ export default function Component({ loaderData }: Route.ComponentProps) {
     deleteFetcher.data && !deleteFetcher.data.ok
       ? deleteFetcher.data.error
       : null
-
-  useEffect(() => {
-    if (deleteFetcher.state === "idle" && deleteFetcher.data?.ok) {
-      setDeleteOpen(false)
-      toast.success("Student deleted")
-      navigate("/students")
-    }
-  }, [deleteFetcher.state, deleteFetcher.data])
 
   function handleDelete() {
     deleteFetcher.submit(null, {
