@@ -1,10 +1,12 @@
 import type { MutationResult } from "~/lib/action-results"
 import { createStudent, getClassrooms } from "~/lib/api"
+import { cookieFromRequest, requireUser } from "~/lib/auth"
 import { CreateStudentSchema } from "~/lib/schemas"
 import type { Route } from "./+types/create-student"
 
-export async function loader() {
-  const classrooms = await getClassrooms()
+export async function loader({ request }: Route.LoaderArgs) {
+  await requireUser(request)
+  const classrooms = await getClassrooms(cookieFromRequest(request))
   return { classrooms: classrooms }
 }
 
@@ -19,7 +21,7 @@ export async function action({
   }
 
   try {
-    const student = await createStudent(result.data)
+    const student = await createStudent(result.data, cookieFromRequest(request))
     return { ok: true, id: student.id }
   } catch (error) {
     return { ok: false, error: (error as Error).message }

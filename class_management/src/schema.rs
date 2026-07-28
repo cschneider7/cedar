@@ -11,6 +11,45 @@ where
     Deserialize::deserialize(deserializer).map(Some)
 }
 
+/// Request body for signing up.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SignupSchema {
+    pub email: String,
+    pub password: String,
+}
+
+/// Request body for logging in.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct LoginSchema {
+    pub email: String,
+    pub password: String,
+}
+
+/// Request body for requesting a new verification email.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ResendVerificationSchema {
+    pub email: String,
+}
+
+/// Request body for verifying an email address.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct VerifyEmailSchema {
+    pub token: String,
+}
+
+/// Request body for requesting a password reset email.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ForgotPasswordSchema {
+    pub email: String,
+}
+
+/// Request body for resetting a password with a reset token.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ResetPasswordSchema {
+    pub token: String,
+    pub password: String,
+}
+
 /// Request body for creating a classroom; boundary dimensions are not
 /// accepted here and instead take their DB column defaults.
 #[derive(Serialize, Deserialize, Debug)]

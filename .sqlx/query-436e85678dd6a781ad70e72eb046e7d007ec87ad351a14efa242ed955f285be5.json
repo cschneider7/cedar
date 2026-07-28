@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO classrooms (\n            subject,\n            period\n        )\n        VALUES ($1, $2)\n        RETURNING *",
+  "query": "SELECT * FROM classrooms WHERE user_id = $1 ORDER by period",
   "describe": {
     "columns": [
       {
@@ -16,6 +16,17 @@
       },
       {
         "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
         "name": "subject",
         "type_info": "Text",
         "origin": {
@@ -26,7 +37,7 @@
         }
       },
       {
-        "ordinal": 2,
+        "ordinal": 3,
         "name": "period",
         "type_info": "Int2",
         "origin": {
@@ -37,7 +48,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "boundary_width",
         "type_info": "Int4",
         "origin": {
@@ -48,7 +59,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "boundary_height",
         "type_info": "Int4",
         "origin": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "created_time",
         "type_info": "Timestamptz",
         "origin": {
@@ -72,8 +83,7 @@
     ],
     "parameters": {
       "Left": [
-        "Text",
-        "Int2"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -82,8 +92,9 @@
       false,
       false,
       false,
+      false,
       true
     ]
   },
-  "hash": "b1e95099be090180e843063452a0e65878c75ef91734dbe44ac3795e1483892b"
+  "hash": "436e85678dd6a781ad70e72eb046e7d007ec87ad351a14efa242ed955f285be5"
 }

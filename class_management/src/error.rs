@@ -9,16 +9,23 @@ use axum::{
 };
 use serde::Serialize;
 
-/// Application-wide error type returned by handlers; its `IntoResponse` impl
-/// maps each variant to an HTTP status code and a `{"message": ...}` body.
+/// Application-wide error type
 #[derive(Debug)]
 pub enum AppError {
-    /// The requested resource does not exist.
     NotFound(String),
-    /// An unexpected, non-recoverable failure occurred.
     Internal(String),
-    /// The request was invalid; the message is shown directly to the caller.
     BadRequest(String),
+    Conflict(String),
+    Unauthorized(String),
+    Forbidden {
+        message: String,
+        code: String,
+    },
+    TooManyRequests {
+        message: String,
+        code: String,
+        retry_after_secs: i64,
+    },
 }
 
 impl IntoResponse for AppError {
@@ -26,25 +33,69 @@ impl IntoResponse for AppError {
         #[derive(Serialize)]
         struct ErrorResponse {
             message: String,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            code: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            retry_after_secs: Option<i64>,
         }
 
-        let (status, message, err) = match &self {
-            AppError::NotFound(_message) => (
+        // Only unexpected failures (NotFound/Internal) are logged — the rest
+        // are routine, caller-facing outcomes (bad input, auth failure, etc).
+        let (status, message, code, retry_after_secs, loggable) = match &self {
+            AppError::NotFound(_) => (
                 StatusCode::NOT_FOUND,
                 "Resource not found".to_string(),
-                Some(self),
+                None,
+                None,
+                true,
             ),
-            AppError::Internal(_message) => (
+            AppError::Internal(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Something went wrong".to_string(),
-                Some(self),
+                None,
+                None,
+                true,
             ),
-            AppError::BadRequest(message) => (StatusCode::BAD_REQUEST, message.clone(), Some(self)),
+            AppError::BadRequest(message) => {
+                (StatusCode::BAD_REQUEST, message.clone(), None, None, false)
+            }
+            AppError::Conflict(message) => {
+                (StatusCode::CONFLICT, message.clone(), None, None, false)
+            }
+            AppError::Unauthorized(message) => {
+                (StatusCode::UNAUTHORIZED, message.clone(), None, None, false)
+            }
+            AppError::Forbidden { message, code } => (
+                StatusCode::FORBIDDEN,
+                message.clone(),
+                Some(code.clone()),
+                None,
+                false,
+            ),
+            AppError::TooManyRequests {
+                message,
+                code,
+                retry_after_secs,
+            } => (
+                StatusCode::TOO_MANY_REQUESTS,
+                message.clone(),
+                Some(code.clone()),
+                Some(*retry_after_secs),
+                false,
+            ),
         };
 
-        let mut response = (status, Json(ErrorResponse { message })).into_response();
-        if let Some(err) = err {
-            response.extensions_mut().insert(Arc::new(err));
+        let mut response = (
+            status,
+            Json(ErrorResponse {
+                message,
+                code,
+                retry_after_secs,
+            }),
+        )
+            .into_response();
+        if loggable {
+            response.extensions_mut().insert(Arc::new(self));
         }
         response
     }
@@ -59,12 +110,28 @@ impl From<sqlx::Error> for AppError {
     }
 }
 
-/// Middleware that logs any `AppError` a handler attached to the response
-/// extensions, after the inner handler has already produced the response.
+impl AppError {
+    fn detail(&self) -> &str {
+        match self {
+            AppError::NotFound(detail)
+            | AppError::Internal(detail)
+            | AppError::BadRequest(detail)
+            | AppError::Conflict(detail)
+            | AppError::Unauthorized(detail) => detail,
+            AppError::Forbidden { message, .. } => message,
+            AppError::TooManyRequests { message, .. } => message,
+        }
+    }
+}
+
+/// Middleware that logs any `AppError`
 pub async fn log_app_errors(request: Request, next: Next) -> Response {
     let response = next.run(request).await;
     if let Some(err) = response.extensions().get::<Arc<AppError>>() {
-        tracing::error!(?err, "an unexpected error occurred inside a handler");
+        tracing::error!(
+            detail = err.detail(),
+            "an unexpected error occurred inside a handler"
+        );
     }
     response
 }

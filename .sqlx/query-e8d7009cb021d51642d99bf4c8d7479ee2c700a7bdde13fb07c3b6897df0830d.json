@@ -1,0 +1,102 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO classrooms (\n            user_id,\n            subject,\n            period\n        )\n        VALUES ($1, $2, $3)\n        RETURNING *",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "subject",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "subject"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "period",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "period"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "boundary_width",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "boundary_width"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "boundary_height",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "boundary_height"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "created_time",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "created_time"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int2"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "e8d7009cb021d51642d99bf4c8d7479ee2c700a7bdde13fb07c3b6897df0830d"
+}

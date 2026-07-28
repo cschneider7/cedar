@@ -1,6 +1,6 @@
 import { Plus, UserIcon } from "lucide-react"
 import { Fragment, useState } from "react"
-import { Link, useMatches } from "react-router"
+import { Link, useMatches, useRouteLoaderData, useSubmit } from "react-router"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
 import { StudentFormDialog } from "~/components/student-form-dialog"
 import { Avatar, AvatarFallback } from "~/components/ui/avatar"
@@ -24,6 +24,7 @@ import { Input } from "~/components/ui/input"
 import { Separator } from "~/components/ui/separator"
 import { SidebarTrigger } from "~/components/ui/sidebar"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
+import type { loader as rootLoader } from "~/root"
 
 function Breadcrumbs() {
   const matches = useMatches()
@@ -109,6 +110,8 @@ function CreateDropdown() {
 }
 
 function AvatarMenu() {
+  const submit = useSubmit()
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -125,7 +128,10 @@ function AvatarMenu() {
       <DropdownMenuContent align="end">
         <DropdownMenuItem disabled>Settings</DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled variant="destructive">
+        <DropdownMenuItem
+          variant="destructive"
+          onClick={() => submit(null, { method: "post", action: "/logout" })}
+        >
           Log Out
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -134,12 +140,11 @@ function AvatarMenu() {
 }
 
 function AuthControl() {
-  // Placeholder until auth-frontend-spec.md wires up a real session.
-  const isLoggedIn = false
+  const rootData = useRouteLoaderData<typeof rootLoader>("root")
 
-  if (!isLoggedIn) {
+  if (!rootData?.user) {
     return (
-      <Button variant="default" disabled>
+      <Button variant="default" render={<Link to="/login" />}>
         Sign in
       </Button>
     )

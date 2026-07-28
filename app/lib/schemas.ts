@@ -1,6 +1,43 @@
 import * as z from "zod"
 import { MAX_TABLE_DIMENSION } from "~/lib/seating-chart-utils"
 
+export const UserSchema = z.object({
+  id: z.string().min(1),
+  email: z.email(),
+})
+export type User = z.infer<typeof UserSchema>
+
+export const SignupSchema = z
+  .object({
+    email: z.email(),
+    password: z.string().min(8, "Password must be at least 8 characters."),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  })
+
+export const LoginSchema = z.object({
+  email: z.email(),
+  password: z.string().min(1, "Password is required."),
+})
+
+export const ForgotPasswordSchema = z.object({
+  email: z.email(),
+})
+
+export const ResetPasswordSchema = z
+  .object({
+    token: z.string().min(1),
+    password: z.string().min(8, "Password must be at least 8 characters."),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  })
+
 export const CreateStudentSchema = z.object({
   classroom_id: z.uuidv4().nullable(),
   student_id: z.coerce.number<number>().int().positive(),

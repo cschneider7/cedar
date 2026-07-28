@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "DELETE FROM classrooms WHERE id = $1 RETURNING *",
+  "query": "INSERT INTO classrooms (user_id, subject, period) VALUES ($1, $2, $3) RETURNING *",
   "describe": {
     "columns": [
       {
@@ -16,6 +16,17 @@
       },
       {
         "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
         "name": "subject",
         "type_info": "Text",
         "origin": {
@@ -26,7 +37,7 @@
         }
       },
       {
-        "ordinal": 2,
+        "ordinal": 3,
         "name": "period",
         "type_info": "Int2",
         "origin": {
@@ -37,7 +48,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "boundary_width",
         "type_info": "Int4",
         "origin": {
@@ -48,7 +59,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "boundary_height",
         "type_info": "Int4",
         "origin": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "created_time",
         "type_info": "Timestamptz",
         "origin": {
@@ -72,7 +83,9 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Uuid",
+        "Text",
+        "Int2"
       ]
     },
     "nullable": [
@@ -81,8 +94,9 @@
       false,
       false,
       false,
+      false,
       true
     ]
   },
-  "hash": "5d4506c1a078da29a4843d0af317110427eb257f4b4018ede3cb0b878b787f1f"
+  "hash": "ad4f2b131162f5c55161c2a44e0dccdd5948fd5c12417443a10f64077fc739f5"
 }

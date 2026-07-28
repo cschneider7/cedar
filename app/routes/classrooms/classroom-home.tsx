@@ -37,6 +37,7 @@ import {
 import { Spinner } from "~/components/ui/spinner"
 import type { MutationResult } from "~/lib/action-results"
 import { getClassrooms, getStudents } from "~/lib/api"
+import { cookieFromRequest, requireUser } from "~/lib/auth"
 import type { Classroom } from "~/lib/schemas"
 import type { Route } from "./+types/classroom-home"
 
@@ -47,10 +48,12 @@ export function meta({}: Route.MetaArgs) {
   ]
 }
 
-export async function loader() {
+export async function loader({ request }: Route.LoaderArgs) {
+  await requireUser(request)
+  const cookie = cookieFromRequest(request)
   const [classrooms, students] = await Promise.all([
-    getClassrooms(),
-    getStudents(),
+    getClassrooms(cookie),
+    getStudents(cookie),
   ])
   const studentCounts = new Map<string, number>()
   for (const student of students) {

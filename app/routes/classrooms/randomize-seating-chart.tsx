@@ -1,4 +1,5 @@
 import { generateRandomSeatingChart } from "~/lib/api"
+import { cookieFromRequest } from "~/lib/auth"
 import type { SeatingChart } from "~/lib/schemas"
 import type { Route } from "./+types/randomize-seating-chart"
 
@@ -14,7 +15,8 @@ export async function action({
   try {
     const seatingChart = await generateRandomSeatingChart(
       params.classroomId,
-      options
+      options,
+      cookieFromRequest(request)
     )
     return { ok: true, seatingChart }
   } catch (error) {
