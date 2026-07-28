@@ -4,7 +4,7 @@ import type { Route } from "./+types/auth"
 
 export default function Layout() {
   return (
-    <div className="flex h-full items-center justify-center p-6">
+    <div className="flex min-h-0 flex-1 items-center justify-center p-6">
       <Outlet />
     </div>
   )
