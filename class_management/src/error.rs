@@ -9,25 +9,18 @@ use axum::{
 };
 use serde::Serialize;
 
-/// Application-wide error type returned by handlers; its `IntoResponse` impl
-/// maps each variant to an HTTP status code and a `{"message", "code"?}` body.
+/// Application-wide error type
 #[derive(Debug)]
 pub enum AppError {
-    /// The requested resource does not exist.
     NotFound(String),
-    /// An unexpected, non-recoverable failure occurred.
     Internal(String),
-    /// The request was invalid; the message is shown directly to the caller.
     BadRequest(String),
-    /// The request conflicts with existing state (e.g. a duplicate email).
     Conflict(String),
-    /// Authentication was attempted but failed (e.g. bad credentials).
     Unauthorized(String),
-    /// The caller is authenticated but not allowed to perform this action,
-    /// with a machine-readable `code` the frontend can branch on.
-    Forbidden { message: String, code: String },
-    /// The caller has exceeded a rate limit, with a machine-readable `code`
-    /// and a hint for how long to wait before retrying.
+    Forbidden {
+        message: String,
+        code: String,
+    },
     TooManyRequests {
         message: String,
         code: String,
@@ -118,8 +111,6 @@ impl From<sqlx::Error> for AppError {
 }
 
 impl AppError {
-    /// The detailed, internal error message — distinct from the generic
-    /// caller-facing message some variants (`NotFound`/`Internal`) return.
     fn detail(&self) -> &str {
         match self {
             AppError::NotFound(detail)
@@ -133,8 +124,7 @@ impl AppError {
     }
 }
 
-/// Middleware that logs any `AppError` a handler attached to the response
-/// extensions, after the inner handler has already produced the response.
+/// Middleware that logs any `AppError`
 pub async fn log_app_errors(request: Request, next: Next) -> Response {
     let response = next.run(request).await;
     if let Some(err) = response.extensions().get::<Arc<AppError>>() {

@@ -25,8 +25,7 @@ fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// Generates a random 32-byte token, returning both the raw hex token (for
-/// the email link) and the SHA-256 hex digest stored as `token_hash`.
+/// Generates a random 32-byte token and its hash
 fn generate_token() -> (String, String) {
     let mut raw = [0u8; 32];
     rand::rng().fill_bytes(&mut raw);

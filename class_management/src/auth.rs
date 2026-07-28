@@ -7,10 +7,8 @@ use uuid::Uuid;
 
 use crate::model::UserModel;
 
-/// Number of failed login attempts before an account is locked.
 const MAX_FAILED_ATTEMPTS: i16 = 5;
-/// How long an account stays locked after hitting `MAX_FAILED_ATTEMPTS`.
-const LOCKOUT_MINUTES: i64 = 15;
+const LOCKOUT_MINUTES: i64 = 10;
 
 /// Credentials submitted to `/api/v1/auth/login`.
 #[derive(Debug, Clone)]
@@ -34,9 +32,7 @@ pub struct Backend {
     pub db: PgPool,
 }
 
-/// A real Argon2id hash of a fixed dummy password, computed once. Used in
-/// place of a real user's hash when the email isn't found, so `verify_password`
-/// still runs and login timing doesn't reveal whether an account exists.
+/// Dummy password used in place of a real user's hash when the email isn't found
 static DUMMY_PASSWORD_HASH: LazyLock<String> =
     LazyLock::new(|| password_auth::generate_hash("dummy-password-for-timing-safety"));
 

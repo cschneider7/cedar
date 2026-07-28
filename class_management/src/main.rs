@@ -64,15 +64,10 @@ async fn main() {
         }
     };
 
-    // tower-sessions-sqlx-store depends on sqlx 0.8's `PgPool`, a distinct type
-    // from our own sqlx 0.9 pool above, so the session store gets its own
-    // connection pool to the same database via that crate's re-exported sqlx.
     let session_pool = tower_sessions_sqlx_store::sqlx::PgPool::connect(&db_url)
         .await
         .expect("failed to connect session store pool");
     let session_store = PostgresStore::new(session_pool);
-    // The session store owns and versions its own table schema via this call,
-    // deliberately outside our `migrations/*.sql` — see CLAUDE.md/backend spec.
     session_store
         .migrate()
         .await

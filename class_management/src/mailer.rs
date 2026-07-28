@@ -3,8 +3,7 @@ use std::pin::Pin;
 
 /// Sends transactional email. The only implementation today is
 /// `LoggingMailer`, a dev-mode stub — a real provider can be swapped in later
-/// without handler code changes. Manually boxes its `Future` (rather than
-/// using `async fn`) so the trait stays object-safe for `Box<dyn Mailer>`.
+/// without handler code changes.
 pub trait Mailer: Send + Sync {
     fn send<'a>(
         &'a self,
