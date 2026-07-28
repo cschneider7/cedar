@@ -1,5 +1,6 @@
 import type { MutationResult } from "~/lib/action-results"
 import { updateClassroom } from "~/lib/api"
+import { cookieFromRequest } from "~/lib/auth"
 import { UpdateClassroomSchema } from "~/lib/schemas"
 import type { Route } from "./+types/edit-classroom"
 
@@ -15,7 +16,11 @@ export async function action({
   }
 
   try {
-    await updateClassroom(params.classroomId, result.data)
+    await updateClassroom(
+      params.classroomId,
+      result.data,
+      cookieFromRequest(request)
+    )
     return { ok: true, id: params.classroomId }
   } catch (error) {
     return { ok: false, error: (error as Error).message }

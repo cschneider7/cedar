@@ -24,13 +24,18 @@ import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar"
 import { Toaster } from "~/components/ui/sonner"
 import { ThemeProvider } from "~/components/ui/theme-provider"
 import { TooltipProvider } from "~/components/ui/tooltip"
-import { getClassrooms } from "~/lib/api"
+import { getClassrooms, getCurrentUser } from "~/lib/api"
+import { cookieFromRequest } from "~/lib/auth"
 import type { Route } from "./+types/root"
 import "./app.css"
 
-export async function loader() {
-  const classrooms = await getClassrooms()
-  return { classrooms }
+export async function loader({ request }: Route.LoaderArgs) {
+  const cookie = cookieFromRequest(request)
+  const user = await getCurrentUser(cookie)
+  // Anonymous visitors (public pages like `/`, `/login`) have no session to
+  // scope a classroom list to, and `/api/v1/classrooms` now 401s without one.
+  const classrooms = user ? await getClassrooms(cookie) : []
+  return { user, classrooms }
 }
 
 export function HydrateFallback() {

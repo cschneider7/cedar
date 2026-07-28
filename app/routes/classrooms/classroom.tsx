@@ -6,6 +6,7 @@ import {
   getStudents,
   updateClassroomSeatingChart,
 } from "~/lib/api"
+import { cookieFromRequest, requireUser } from "~/lib/auth"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 import type { SeatingChart } from "~/lib/schemas"
 import type { Route } from "./+types/classroom"
@@ -24,11 +25,13 @@ export function meta({}: Route.MetaArgs) {
   ]
 }
 
-export async function loader({ params }: Route.ClientLoaderArgs) {
+export async function loader({ params, request }: Route.ClientLoaderArgs) {
+  await requireUser(request)
+  const cookie = cookieFromRequest(request)
   const [classroom, seatingChart, allStudents] = await Promise.all([
-    getClassroom(params.classroomId),
-    getClassroomSeatingChart(params.classroomId),
-    getStudents(),
+    getClassroom(params.classroomId, cookie),
+    getClassroomSeatingChart(params.classroomId, cookie),
+    getStudents(cookie),
   ])
   const students = allStudents.filter((s) => s.classroom_id === classroom.id)
   return { classroom, students, seatingChart }
@@ -38,7 +41,11 @@ export async function action({ params, request }: Route.ActionArgs) {
   const chart: SeatingChart = await request.json()
 
   try {
-    await updateClassroomSeatingChart(params.classroomId, chart)
+    await updateClassroomSeatingChart(
+      params.classroomId,
+      chart,
+      cookieFromRequest(request)
+    )
   } catch (error) {
     return { ok: false, error: (error as Error).message }
   }

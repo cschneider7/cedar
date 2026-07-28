@@ -7,6 +7,7 @@ import {
   StudentSidebar,
 } from "~/components/students-sidebar"
 import { getStudents } from "~/lib/api"
+import { cookieFromRequest, requireUser } from "~/lib/auth"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 
 export const handle: BreadcrumbHandle = {
@@ -21,8 +22,9 @@ export function meta({}: Route.MetaArgs) {
   ]
 }
 
-export async function loader() {
-  const students = await getStudents()
+export async function loader({ request }: Route.LoaderArgs) {
+  await requireUser(request)
+  const students = await getStudents(cookieFromRequest(request))
   return { students }
 }
 
