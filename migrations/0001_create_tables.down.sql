@@ -2,3 +2,5 @@ DROP TABLE IF EXISTS seats;
 DROP TABLE IF EXISTS tables;
 DROP TABLE IF EXISTS students;
 DROP TABLE IF EXISTS classrooms;
+DROP TABLE IF EXISTS verification_tokens;
+DROP TABLE IF EXISTS users;

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE classrooms SET\n            subject = $1,\n            period = $2,\n            boundary_width = $3,\n            boundary_height = $4\n        WHERE id = $5\n        RETURNING *",
+  "query": "SELECT * FROM users WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -9,73 +9,84 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "classrooms",
+            "table": "users",
             "name": "id"
           }
         }
       },
       {
         "ordinal": 1,
-        "name": "user_id",
-        "type_info": "Uuid",
+        "name": "email",
+        "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "classrooms",
-            "name": "user_id"
+            "table": "users",
+            "name": "email"
           }
         }
       },
       {
         "ordinal": 2,
-        "name": "subject",
+        "name": "password_hash",
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "classrooms",
-            "name": "subject"
+            "table": "users",
+            "name": "password_hash"
           }
         }
       },
       {
         "ordinal": 3,
-        "name": "period",
-        "type_info": "Int2",
+        "name": "email_verified",
+        "type_info": "Bool",
         "origin": {
           "Table": {
-            "table": "classrooms",
-            "name": "period"
+            "table": "users",
+            "name": "email_verified"
           }
         }
       },
       {
         "ordinal": 4,
-        "name": "boundary_width",
-        "type_info": "Int4",
+        "name": "failed_login_attempts",
+        "type_info": "Int2",
         "origin": {
           "Table": {
-            "table": "classrooms",
-            "name": "boundary_width"
+            "table": "users",
+            "name": "failed_login_attempts"
           }
         }
       },
       {
         "ordinal": 5,
-        "name": "boundary_height",
-        "type_info": "Int4",
+        "name": "locked_until",
+        "type_info": "Timestamptz",
         "origin": {
           "Table": {
-            "table": "classrooms",
-            "name": "boundary_height"
+            "table": "users",
+            "name": "locked_until"
           }
         }
       },
       {
         "ordinal": 6,
+        "name": "last_verification_email_sent_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "last_verification_email_sent_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
         "name": "created_time",
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
-            "table": "classrooms",
+            "table": "users",
             "name": "created_time"
           }
         }
@@ -83,10 +94,6 @@
     ],
     "parameters": {
       "Left": [
-        "Text",
-        "Int2",
-        "Int4",
-        "Int4",
         "Uuid"
       ]
     },
@@ -96,9 +103,10 @@
       false,
       false,
       false,
-      false,
+      true,
+      true,
       true
     ]
   },
-  "hash": "daf8bd1d34eae6a5df294df8c54b404bf658e1ec2cf32fda0bf71f036259b400"
+  "hash": "843923b9a0257cf80f1dff554e7dc8fdfc05f489328e8376513124dfb42996e3"
 }

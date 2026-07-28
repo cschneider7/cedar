@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE students SET\n            classroom_id = $1,\n            student_id = $2,\n            name = $3\n        WHERE id = $4\n        RETURNING *",
+  "query": "DELETE FROM students WHERE id = $1 AND user_id = $2 RETURNING *",
   "describe": {
     "columns": [
       {
@@ -73,8 +73,6 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Int4",
-        "Text",
         "Uuid"
       ]
     },
@@ -87,5 +85,5 @@
       true
     ]
   },
-  "hash": "0f4d6413b287d4b9c0139df4c2a8f9ce62fe01c3f0028b53a5e04033effd722e"
+  "hash": "34a58c6a6ade42fb6e55ad1e7f9ddba11b2f467fbcdb8916d4e79af8d4496895"
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE students SET\n            classroom_id = $1,\n            student_id = $2,\n            name = $3\n        WHERE id = $4\n        RETURNING *",
+  "query": "INSERT INTO classrooms (\n            user_id,\n            subject,\n            period\n        )\n        VALUES ($1, $2, $3)\n        RETURNING *",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "students",
+            "table": "classrooms",
             "name": "id"
           }
         }
@@ -20,51 +20,62 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "students",
+            "table": "classrooms",
             "name": "user_id"
           }
         }
       },
       {
         "ordinal": 2,
-        "name": "classroom_id",
-        "type_info": "Uuid",
+        "name": "subject",
+        "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "students",
-            "name": "classroom_id"
+            "table": "classrooms",
+            "name": "subject"
           }
         }
       },
       {
         "ordinal": 3,
-        "name": "student_id",
-        "type_info": "Int4",
+        "name": "period",
+        "type_info": "Int2",
         "origin": {
           "Table": {
-            "table": "students",
-            "name": "student_id"
+            "table": "classrooms",
+            "name": "period"
           }
         }
       },
       {
         "ordinal": 4,
-        "name": "name",
-        "type_info": "Text",
+        "name": "boundary_width",
+        "type_info": "Int4",
         "origin": {
           "Table": {
-            "table": "students",
-            "name": "name"
+            "table": "classrooms",
+            "name": "boundary_width"
           }
         }
       },
       {
         "ordinal": 5,
+        "name": "boundary_height",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "boundary_height"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
         "name": "created_time",
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
-            "table": "students",
+            "table": "classrooms",
             "name": "created_time"
           }
         }
@@ -73,19 +84,19 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Int4",
         "Text",
-        "Uuid"
+        "Int2"
       ]
     },
     "nullable": [
       false,
       false,
-      true,
+      false,
+      false,
       false,
       false,
       true
     ]
   },
-  "hash": "0f4d6413b287d4b9c0139df4c2a8f9ce62fe01c3f0028b53a5e04033effd722e"
+  "hash": "e8d7009cb021d51642d99bf4c8d7479ee2c700a7bdde13fb07c3b6897df0830d"
 }
