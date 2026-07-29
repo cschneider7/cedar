@@ -13,11 +13,12 @@ use uuid::Uuid;
 use crate::{
     AppState,
     auth::Backend,
+    cold_call,
     error::AppError,
     model::ClassroomModel,
     schema::{
-        ClassroomSchema, RandomizeSeatingChartSchema, SeatingChartSchema, TableSchema,
-        UpdateClassroomSchema,
+        ClassroomSchema, ColdCallCandidateSchema, ColdCallSchema, RandomizeSeatingChartSchema,
+        SeatingChartSchema, TableSchema, UpdateClassroomSchema,
     },
     seating_chart::{self, MAX_TABLE_DIMENSION},
 };
@@ -353,6 +354,42 @@ pub async fn randomize_seating_chart_handler(
             "boundary_width": body.boundary_width,
             "boundary_height": body.boundary_height,
             "tables": tables
+        }})),
+    ))
+}
+
+/// Picks a random student for a cold call from the given weighted roster,
+/// then returns adjusted weights for the next pick. Stateless: nothing is
+/// read from or written to the database, so unlike every other handler in
+/// this file this one doesn't extract `AuthSession` or scope by user —
+/// there's no DB row to scope, since all data comes from the request body,
+/// which the caller already fetched for their own classroom. `classroom_id`
+/// is accepted for REST consistency with the other seating-chart endpoints
+/// (and to leave room for a future ownership check) but isn't otherwise used
+/// today.
+pub async fn cold_call_handler(
+    Path(_classroom_id): Path<Uuid>,
+    Json(body): Json<ColdCallSchema>,
+) -> Result<impl IntoResponse, AppError> {
+    let candidates: Vec<(Uuid, u32)> = body
+        .students
+        .iter()
+        .map(|c| (c.student_id, c.weight))
+        .collect();
+
+    let (picked_student_id, updated) = cold_call::pick_cold_call_student(candidates)
+        .map_err(|_| AppError::BadRequest("The student list must not be empty".to_string()))?;
+
+    let students: Vec<ColdCallCandidateSchema> = updated
+        .into_iter()
+        .map(|(student_id, weight)| ColdCallCandidateSchema { student_id, weight })
+        .collect();
+
+    Ok((
+        StatusCode::OK,
+        Json(json!({"data": {
+            "picked_student_id": picked_student_id,
+            "students": students
         }})),
     ))
 }
@@ -1297,6 +1334,78 @@ mod tests {
         Ok(())
     }
 
+    #[sqlx::test(migrations = "../migrations")]
+    async fn cold_call_success_returns_pick_and_adjusted_weights(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let (_user, cookie) =
+            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        let classroom_id = Uuid::new_v4();
+        let student_a = Uuid::new_v4();
+        let student_b = Uuid::new_v4();
+
+        let body = json!({
+            "students": [
+                { "student_id": student_a, "weight": 100 },
+                { "student_id": student_b, "weight": 0 }
+            ]
+        });
+        let response = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                &format!("/api/v1/classrooms/{classroom_id}/cold-call"),
+                body,
+                &cookie,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        let picked_student_id = json["data"]["picked_student_id"].as_str().unwrap();
+        assert_eq!(picked_student_id, student_a.to_string());
+
+        let students = json["data"]["students"].as_array().unwrap();
+        let weight_for = |id: Uuid| {
+            students
+                .iter()
+                .find(|s| s["student_id"] == id.to_string())
+                .unwrap()["weight"]
+                .as_u64()
+                .unwrap()
+        };
+        assert_eq!(weight_for(student_a), 0);
+        assert_eq!(weight_for(student_b), cold_call::WEIGHT_INCREMENT as u64);
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn cold_call_empty_students_returns_400(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let (_user, cookie) =
+            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        let classroom_id = Uuid::new_v4();
+
+        let body = json!({ "students": [] });
+        let response = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                &format!("/api/v1/classrooms/{classroom_id}/cold-call"),
+                body,
+                &cookie,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let json = body_json(response).await;
+        assert!(json["message"].is_string());
+
+        Ok(())
+    }
+
     // --- auth/scoping coverage ---
 
     #[sqlx::test(migrations = "../migrations")]
@@ -1321,6 +1430,10 @@ mod tests {
             (
                 "POST",
                 format!("/api/v1/classrooms/{classroom_id}/seating-chart/randomize"),
+            ),
+            (
+                "POST",
+                format!("/api/v1/classrooms/{classroom_id}/cold-call"),
             ),
         ] {
             let response = app

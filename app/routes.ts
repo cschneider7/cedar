@@ -31,6 +31,7 @@ export default [
           ":classroomId/randomize-seating-chart",
           "routes/classrooms/randomize-seating-chart.tsx"
         ),
+        route(":classroomId/cold-call", "routes/classrooms/cold-call.tsx"),
       ]),
     ]),
   ]),

@@ -16,6 +16,9 @@ export const SEAT_PADDING = 10
 export const SEAT_NODE_SIZE = 90
 export const STUDENT_NODE_SIZE = SEAT_NODE_SIZE
 
+// Starting weight for a student being cold called
+export const INITIAL_WEIGHT = 100
+
 export type Point = { x: number; y: number }
 
 export type TableNodeData = { table_number: number; rows: number; cols: number }
@@ -493,4 +496,29 @@ export function computeRandomizeTableCount(
         )
       : 0
   return { neededNewTables, totalTables: numExistingTables + neededNewTables }
+}
+
+export type ColdCallProbability = { student: Student; probability: number }
+
+/**
+ * Estimates each student's chance of being picked next from their current
+ * cold-call weights, sorted most to least likely.
+ * @param students - Students to include in the estimate
+ * @param weights - Current cold-call weight per student id
+ * @returns One entry per student, descending by probability
+ */
+export function computeColdCallProbabilities(
+  students: Student[],
+  weights: Record<string, number>
+): ColdCallProbability[] {
+  const totalWeight = students.reduce((sum, s) => sum + (weights[s.id] ?? 0), 0)
+  return students
+    .map((student) => ({
+      student,
+      probability:
+        totalWeight === 0
+          ? 1 / students.length
+          : (weights[student.id] ?? 0) / totalWeight,
+    }))
+    .sort((a, b) => b.probability - a.probability)
 }

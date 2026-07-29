@@ -10,6 +10,7 @@ import {
 import {
   Edit2Icon,
   Maximize2Icon,
+  MessageCircleQuestionMarkIcon,
   MoreHorizontalIcon,
   ShuffleIcon,
   TableIcon,
@@ -55,6 +56,7 @@ import {
   getTableGeometry,
   getUnassignedStudents,
   GRID_STEP,
+  INITIAL_WEIGHT,
   reorderNodes,
   STUDENT_NODE_SIZE,
   type Point,
@@ -66,6 +68,7 @@ import {
 import type { action as classroomAction } from "~/routes/classrooms/classroom"
 import {
   BoundarySizeDialog,
+  ColdCallDialog,
   RandomSeatingChartDialog,
   UnassignAllDialog,
 } from "./seating-chart-dialogs"
@@ -114,6 +117,10 @@ function SeatingChartEditor({
   const [randomChartOpen, setRandomChartOpen] = useState(false)
   const [unassignAllOpen, setUnassignAllOpen] = useState(false)
   const [boundarySizeOpen, setBoundarySizeOpen] = useState(false)
+  const [coldCallOpen, setColdCallOpen] = useState(false)
+  const [coldCallWeights, setColdCallWeights] = useState<
+    Record<string, number>
+  >(() => Object.fromEntries(students.map((s) => [s.id, INITIAL_WEIGHT])))
 
   const fetcher = useFetcher<typeof classroomAction>()
   const saveError = fetcher.data && !fetcher.data.ok ? fetcher.data.error : null
@@ -438,12 +445,23 @@ function SeatingChartEditor({
         )}
         <ButtonGroup>
           <ButtonGroup>
+            <Button
+              variant="secondary"
+              disabled={students.length === 0}
+              onClick={() => setColdCallOpen(true)}
+              aria-label="Cold Call"
+            >
+              <MessageCircleQuestionMarkIcon /> Cold Call
+            </Button>
+          </ButtonGroup>
+          <ButtonGroup>
             {locked ? (
               <Button
                 variant="secondary"
                 onClick={() => setLocked(false)}
                 aria-label="Edit seating chart"
               >
+                <Edit2Icon />
                 Edit Chart
               </Button>
             ) : (
@@ -481,18 +499,8 @@ function SeatingChartEditor({
                 }
               />
               <DropdownMenuContent align="end" className="w-full">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>Classroom</DropdownMenuLabel>
-                  <DropdownMenuItem aria-label="Edit Classroom">
-                    <Edit2Icon /> Edit
-                  </DropdownMenuItem>
-                  <DropdownMenuItem aria-label="Manage Students">
-                    <UsersIcon /> Manage Students
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel>Seating Chart</DropdownMenuLabel>
                   <DropdownMenuItem
                     disabled={locked}
                     onClick={handleAddTable}
@@ -517,6 +525,9 @@ function SeatingChartEditor({
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
+                  <DropdownMenuItem disabled aria-label="Manage Students">
+                    <UsersIcon /> Manage Students
+                  </DropdownMenuItem>
                   <DropdownMenuItem
                     disabled={locked}
                     variant="destructive"
@@ -524,12 +535,6 @@ function SeatingChartEditor({
                     onClick={() => setUnassignAllOpen(true)}
                   >
                     <UserXIcon /> Unassign All
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    variant="destructive"
-                    aria-label="Delete Classroom"
-                  >
-                    <Trash2Icon /> Delete Classroom
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>
@@ -558,6 +563,14 @@ function SeatingChartEditor({
           open={unassignAllOpen}
           onOpenChange={setUnassignAllOpen}
           onUnassignAll={handleUnassignAll}
+        />
+        <ColdCallDialog
+          open={coldCallOpen}
+          onOpenChange={setColdCallOpen}
+          classroomId={classroomId}
+          students={students}
+          weights={coldCallWeights}
+          onWeightsChange={setColdCallWeights}
         />
       </div>
       <div className="flex min-h-0 w-full flex-1 flex-col gap-2 md:flex-row">

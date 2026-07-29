@@ -118,3 +118,18 @@ pub struct RandomizeSeatingChartSchema {
     pub boundary_width: i32,
     pub boundary_height: i32,
 }
+
+/// A single student's current cold-call pick weight.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ColdCallCandidateSchema {
+    pub student_id: Uuid,
+    pub weight: u32,
+}
+
+/// Request body for picking a cold-call student. Carries the frontend's
+/// current per-student weights rather than relying on persisted state, since
+/// weights are never themselves persisted.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ColdCallSchema {
+    pub students: Vec<ColdCallCandidateSchema>,
+}

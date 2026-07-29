@@ -1,6 +1,8 @@
 import * as z from "zod"
 import {
   ClassroomSchema,
+  ColdCallPickSchema,
+  ColdCallSchema,
   CreateClassroomSchema,
   CreateStudentSchema,
   ForgotPasswordSchema,
@@ -14,6 +16,8 @@ import {
   UpdateStudentSchema,
   UserSchema,
   type Classroom,
+  type ColdCall,
+  type ColdCallPick,
   type RandomizeSeatingChartOptions,
   type SeatingChart,
   type Student,
@@ -69,10 +73,13 @@ export async function getStudent(
   studentId: string,
   cookie?: string
 ): Promise<Student> {
-  const res = await fetch(`http://localhost:3000/api/v1/students/${studentId}`, {
-    credentials: "include",
-    headers: withCookie(cookie),
-  })
+  const res = await fetch(
+    `http://localhost:3000/api/v1/students/${studentId}`,
+    {
+      credentials: "include",
+      headers: withCookie(cookie),
+    }
+  )
   if (!res.ok) {
     throw new Response("Student not found", { status: 404 })
   }
@@ -314,6 +321,32 @@ export async function generateRandomSeatingChart(
 
   const json = await response.json()
   return z.parse(SeatingChartSchema, json.data)
+}
+
+export async function pickColdCallStudent(
+  classroomId: string,
+  payload: ColdCall,
+  cookie?: string
+): Promise<ColdCallPick> {
+  const response = await fetch(
+    `http://localhost:3000/api/v1/classrooms/${classroomId}/cold-call`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...withCookie(cookie),
+      },
+      body: JSON.stringify(z.parse(ColdCallSchema, payload)),
+    }
+  )
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, "Error picking a student"))
+  }
+
+  const json = await response.json()
+  return z.parse(ColdCallPickSchema, json.data)
 }
 
 // --- Auth ---
