@@ -134,3 +134,19 @@ export const RandomizeSeatingChartOptionsSchema = z.object({
 export type RandomizeSeatingChartOptions = z.infer<
   typeof RandomizeSeatingChartOptionsSchema
 >
+
+export const ColdCallCandidateSchema = z.object({
+  student_id: z.string().min(1), // the student's `id` (UUID), not the numeric roster student_id
+  weight: z.int(),
+})
+
+export const ColdCallSchema = z.object({
+  students: z.array(ColdCallCandidateSchema),
+})
+export type ColdCall = z.infer<typeof ColdCallSchema>
+
+export const ColdCallPickSchema = z.object({
+  picked_student_id: z.string().min(1),
+  students: z.array(ColdCallCandidateSchema),
+})
+export type ColdCallPick = z.infer<typeof ColdCallPickSchema>

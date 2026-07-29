@@ -147,6 +147,10 @@ where
             "/api/v1/classrooms/{classroom_id}/seating-chart/randomize",
             post(handlers::classroom::randomize_seating_chart_handler),
         )
+        .route(
+            "/api/v1/classrooms/{classroom_id}/cold-call",
+            post(handlers::classroom::cold_call_handler),
+        )
         .route_layer(predicate_required!(
             is_authenticated,
             (

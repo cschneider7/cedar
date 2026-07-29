@@ -13,6 +13,7 @@ use crate::mailer::{LoggingMailer, Mailer};
 use crate::routes::create_router;
 
 mod auth;
+mod cold_call;
 mod error;
 mod handlers;
 mod mailer;

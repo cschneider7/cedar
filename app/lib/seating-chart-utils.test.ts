@@ -6,6 +6,7 @@ import {
   buildBoundaryNode,
   buildInitialNodes,
   buildSeatingChartPayload,
+  computeColdCallProbabilities,
   computeRandomizeTableCount,
   createCanvasTable,
   DEFAULT_TABLE_COLS,
@@ -646,5 +647,48 @@ describe("computeRandomizeTableCount", () => {
       neededNewTables: 2,
       totalTables: 3,
     })
+  })
+})
+
+describe("computeColdCallProbabilities", () => {
+  it("weights probability proportionally and sums to 1", () => {
+    const students = [makeStudent("s1"), makeStudent("s2"), makeStudent("s3")]
+    const result = computeColdCallProbabilities(students, {
+      s1: 50,
+      s2: 30,
+      s3: 20,
+    })
+
+    expect(result.map((r) => r.probability)).toEqual([0.5, 0.3, 0.2])
+    expect(result.reduce((sum, r) => sum + r.probability, 0)).toBeCloseTo(1)
+  })
+
+  it("sorts descending by probability", () => {
+    const students = [makeStudent("s1"), makeStudent("s2"), makeStudent("s3")]
+    const result = computeColdCallProbabilities(students, {
+      s1: 10,
+      s2: 70,
+      s3: 20,
+    })
+
+    expect(result.map((r) => r.student.id)).toEqual(["s2", "s3", "s1"])
+  })
+
+  it("falls back to a uniform split when every weight is 0", () => {
+    const students = [makeStudent("s1"), makeStudent("s2"), makeStudent("s3")]
+    const result = computeColdCallProbabilities(students, {
+      s1: 0,
+      s2: 0,
+      s3: 0,
+    })
+
+    expect(result.map((r) => r.probability)).toEqual([1 / 3, 1 / 3, 1 / 3])
+  })
+
+  it("gives a single student a probability of 1", () => {
+    const students = [makeStudent("s1")]
+    const result = computeColdCallProbabilities(students, { s1: 42 })
+
+    expect(result).toEqual([{ student: students[0], probability: 1 }])
   })
 })
