@@ -13,7 +13,7 @@ const args = () =>
 stubFetch()
 
 describe("delete-student action", () => {
-  it("issues a DELETE request and redirects to the student list", async () => {
+  it("issues a DELETE request and returns ok", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 200 }))
 
     const result = await action(args())
@@ -23,9 +23,7 @@ describe("delete-student action", () => {
     expect(url).toBe(`http://localhost:3000/api/v1/students/${studentId}`)
     expect(init?.method).toBe("DELETE")
 
-    expect(result).toBeInstanceOf(Response)
-    expect((result as Response).status).toBe(302)
-    expect((result as Response).headers.get("Location")).toBe("/students")
+    expect(result).toEqual({ ok: true, id: studentId })
   })
 
   it("returns an error result when the delete request fails", async () => {

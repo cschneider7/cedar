@@ -1,5 +1,6 @@
 import * as z from "zod"
 import {
+  BulkDeleteResultSchema,
   ClassroomSchema,
   ColdCallPickSchema,
   ColdCallSchema,
@@ -12,15 +13,18 @@ import {
   SeatingChartSchema,
   SignupSchema,
   StudentSchema,
+  StudentsPageSchema,
   UpdateClassroomSchema,
   UpdateStudentSchema,
   UserSchema,
+  type BulkDeleteResult,
   type Classroom,
   type ColdCall,
   type ColdCallPick,
   type RandomizeSeatingChartOptions,
   type SeatingChart,
   type Student,
+  type StudentsPage,
   type User,
 } from "~/lib/schemas"
 
@@ -101,6 +105,43 @@ export async function getStudents(cookie?: string): Promise<Student[]> {
   return z.parse(z.array(StudentSchema), json.data)
 }
 
+export async function getStudentsPage(
+  params: {
+    page: number
+    pageSize: number
+    q?: string
+    sortBy?: "name" | "student_id" | "classroom"
+    sortDir?: "asc" | "desc"
+  },
+  cookie?: string
+): Promise<StudentsPage> {
+  const url = new URL("http://localhost:3000/api/v1/students")
+  url.searchParams.set("page", String(params.page))
+  url.searchParams.set("page_size", String(params.pageSize))
+  if (params.q) {
+    url.searchParams.set("q", params.q)
+  }
+  if (params.sortBy) {
+    url.searchParams.set("sort_by", params.sortBy)
+  }
+  if (params.sortDir) {
+    url.searchParams.set("sort_dir", params.sortDir)
+  }
+
+  const res = await fetch(url, {
+    credentials: "include",
+    headers: withCookie(cookie),
+  })
+  if (!res.ok) {
+    throw new Error(
+      `Error getting paginated list of students: ", ${res.status}`
+    )
+  }
+
+  const json = await res.json()
+  return z.parse(StudentsPageSchema, json.data)
+}
+
 export async function createStudent(
   studentInfo: z.infer<typeof CreateStudentSchema>,
   cookie?: string
@@ -159,6 +200,28 @@ export async function deleteStudent(studentId: string, cookie?: string) {
   if (!response.ok) {
     throw new Error(await getErrorMessage(response, "Error deleting student"))
   }
+}
+
+export async function bulkDeleteStudents(
+  ids: string[],
+  cookie?: string
+): Promise<BulkDeleteResult> {
+  const response = await fetch("http://localhost:3000/api/v1/students", {
+    method: "DELETE",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...withCookie(cookie),
+    },
+    body: JSON.stringify({ ids }),
+  })
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, "Error deleting students"))
+  }
+
+  const json = await response.json()
+  return z.parse(BulkDeleteResultSchema, json.data)
 }
 
 export async function getClassroom(

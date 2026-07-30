@@ -27,9 +27,9 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip"
 
-import { Trash2Icon } from "lucide-react"
-import { useState } from "react"
-import { Link, useFetcher } from "react-router"
+import { ArrowLeft, Trash2Icon } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Link, useFetcher, useNavigate } from "react-router"
 import { StudentFormDialog } from "~/components/student-form-dialog"
 import { Spinner } from "~/components/ui/spinner"
 import type { MutationResult } from "~/lib/action-results"
@@ -61,6 +61,7 @@ export async function loader({ params, request }: Route.ClientLoaderArgs) {
 
 export default function Component({ loaderData }: Route.ComponentProps) {
   const { student, classroom } = loaderData
+  const navigate = useNavigate()
   const [deleteOpen, setDeleteOpen] = useState(false)
 
   const deleteFetcher = useFetcher<MutationResult>()
@@ -69,6 +70,12 @@ export default function Component({ loaderData }: Route.ComponentProps) {
     deleteFetcher.data && !deleteFetcher.data.ok
       ? deleteFetcher.data.error
       : null
+
+  useEffect(() => {
+    if (deleteFetcher.state === "idle" && deleteFetcher.data?.ok) {
+      navigate("/students")
+    }
+  }, [deleteFetcher.state, deleteFetcher.data])
 
   function handleDelete() {
     deleteFetcher.submit(null, {
@@ -79,6 +86,12 @@ export default function Component({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="justify-center">
+      <div className="mx-auto mb-4 w-full max-w-sm">
+        <Button variant="link" size="sm" render={<Link to="/students" />}>
+          <ArrowLeft />
+          Back to Students
+        </Button>
+      </div>
       <Card className="relative mx-auto w-full max-w-sm pt-0">
         <div className="absolute inset-0 z-30 aspect-video bg-black/35" />
         <img

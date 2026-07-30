@@ -54,6 +54,20 @@ export const StudentSchema = CreateStudentSchema.extend({
 })
 export type Student = z.infer<typeof StudentSchema>
 
+export const StudentsPageSchema = z.object({
+  students: z.array(StudentSchema),
+  page: z.int().positive(),
+  page_size: z.int().positive(),
+  total_count: z.int().nonnegative(),
+  total_pages: z.int().positive(),
+})
+export type StudentsPage = z.infer<typeof StudentsPageSchema>
+
+export const BulkDeleteResultSchema = z.object({
+  deleted_count: z.int().nonnegative(),
+})
+export type BulkDeleteResult = z.infer<typeof BulkDeleteResultSchema>
+
 export const UpdateStudentSchema = z.object({
   classroom_id: z.uuidv4().nullish(),
   student_id: z.optional(
