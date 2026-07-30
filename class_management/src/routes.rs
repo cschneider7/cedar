@@ -104,6 +104,10 @@ where
             post(handlers::student::create_student_handler),
         )
         .route(
+            "/api/v1/students",
+            delete(handlers::student::bulk_delete_students_handler),
+        )
+        .route(
             "/api/v1/students/{student_id}",
             get(handlers::student::get_student_handler),
         )

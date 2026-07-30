@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -15,7 +15,10 @@ use crate::{
     auth::Backend,
     error::AppError,
     model::StudentModel,
-    schema::{StudentSchema, UpdateStudentSchema},
+    schema::{
+        BulkDeleteStudentsSchema, SortDir, StudentListParams, StudentSchema, StudentSortBy,
+        UpdateStudentSchema,
+    },
 };
 
 fn current_user_id(auth_session: &AuthSession<Backend>) -> Uuid {
@@ -49,21 +52,166 @@ async fn check_classroom_ownership(
     Ok(())
 }
 
-/// Lists every student owned by the current user, ordered by name.
+/// Lists students owned by the current user, ordered by name. With no query
+/// params, returns the full unpaginated roster (today's exact behavior,
+/// still consumed unchanged by classroom pages). With any of
+/// `page`/`page_size`/`q`/`sort_by`/`sort_dir` present, returns a paginated
+/// `{students, page, page_size, total_count, total_pages}` envelope instead,
+/// filtering `name` via case-insensitive `ILIKE` when `q` is set and
+/// ordering by `sort_by`/`sort_dir` (default: name ascending). Sorting by
+/// `classroom` orders by period, with unassigned students always last
+/// regardless of direction. Out-of-range `page` is clamped server-side to
+/// `[1, total_pages]`.
 pub async fn student_list_handler(
     auth_session: AuthSession<Backend>,
     State(data): State<Arc<AppState>>,
+    Query(params): Query<StudentListParams>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id = current_user_id(&auth_session);
-    let students = sqlx::query_as!(
-        StudentModel,
-        r#"SELECT * FROM students WHERE user_id = $1 ORDER by name"#,
-        user_id
+
+    if params.page.is_none()
+        && params.page_size.is_none()
+        && params.q.is_none()
+        && params.sort_by.is_none()
+        && params.sort_dir.is_none()
+    {
+        let students = sqlx::query_as!(
+            StudentModel,
+            r#"SELECT * FROM students WHERE user_id = $1 ORDER by name"#,
+            user_id
+        )
+        .fetch_all(&data.db)
+        .await?;
+        return Ok((StatusCode::OK, Json(json!({"data": students}))));
+    }
+
+    let page_size = params.page_size.unwrap_or(20).clamp(1, 100);
+    let requested_page = params.page.unwrap_or(1).max(1);
+    let q = params.q.filter(|q| !q.is_empty());
+    let like_pattern = q.as_ref().map(|q| format!("%{q}%"));
+    let sort_by = params.sort_by.unwrap_or(StudentSortBy::Name);
+    let sort_dir = params.sort_dir.unwrap_or(SortDir::Asc);
+
+    let total_count = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) as "count!" FROM students
+           WHERE user_id = $1 AND ($2::text IS NULL OR name ILIKE $2)"#,
+        user_id,
+        like_pattern
     )
-    .fetch_all(&data.db)
+    .fetch_one(&data.db)
     .await?;
 
-    Ok((StatusCode::OK, Json(json!({"data": students}))))
+    let total_pages = ((total_count as f64) / (page_size as f64)).ceil().max(1.0) as i64;
+    let page = requested_page.min(total_pages);
+    let offset = (page - 1) * page_size;
+
+    let students = match (sort_by, sort_dir) {
+        (StudentSortBy::Name, SortDir::Asc) => {
+            sqlx::query_as!(
+                StudentModel,
+                r#"SELECT * FROM students
+                   WHERE user_id = $1 AND ($2::text IS NULL OR name ILIKE $2)
+                   ORDER BY name ASC
+                   LIMIT $3 OFFSET $4"#,
+                user_id,
+                like_pattern,
+                page_size,
+                offset
+            )
+            .fetch_all(&data.db)
+            .await?
+        }
+        (StudentSortBy::Name, SortDir::Desc) => {
+            sqlx::query_as!(
+                StudentModel,
+                r#"SELECT * FROM students
+                   WHERE user_id = $1 AND ($2::text IS NULL OR name ILIKE $2)
+                   ORDER BY name DESC
+                   LIMIT $3 OFFSET $4"#,
+                user_id,
+                like_pattern,
+                page_size,
+                offset
+            )
+            .fetch_all(&data.db)
+            .await?
+        }
+        (StudentSortBy::StudentId, SortDir::Asc) => {
+            sqlx::query_as!(
+                StudentModel,
+                r#"SELECT * FROM students
+                   WHERE user_id = $1 AND ($2::text IS NULL OR name ILIKE $2)
+                   ORDER BY student_id ASC, name ASC
+                   LIMIT $3 OFFSET $4"#,
+                user_id,
+                like_pattern,
+                page_size,
+                offset
+            )
+            .fetch_all(&data.db)
+            .await?
+        }
+        (StudentSortBy::StudentId, SortDir::Desc) => {
+            sqlx::query_as!(
+                StudentModel,
+                r#"SELECT * FROM students
+                   WHERE user_id = $1 AND ($2::text IS NULL OR name ILIKE $2)
+                   ORDER BY student_id DESC, name ASC
+                   LIMIT $3 OFFSET $4"#,
+                user_id,
+                like_pattern,
+                page_size,
+                offset
+            )
+            .fetch_all(&data.db)
+            .await?
+        }
+        (StudentSortBy::Classroom, SortDir::Asc) => {
+            sqlx::query_as!(
+                StudentModel,
+                r#"SELECT students.* FROM students
+                   LEFT JOIN classrooms ON classrooms.id = students.classroom_id
+                   WHERE students.user_id = $1 AND ($2::text IS NULL OR students.name ILIKE $2)
+                   ORDER BY (students.classroom_id IS NULL) ASC, classrooms.period ASC, students.name ASC
+                   LIMIT $3 OFFSET $4"#,
+                user_id,
+                like_pattern,
+                page_size,
+                offset
+            )
+            .fetch_all(&data.db)
+            .await?
+        }
+        (StudentSortBy::Classroom, SortDir::Desc) => {
+            sqlx::query_as!(
+                StudentModel,
+                r#"SELECT students.* FROM students
+                   LEFT JOIN classrooms ON classrooms.id = students.classroom_id
+                   WHERE students.user_id = $1 AND ($2::text IS NULL OR students.name ILIKE $2)
+                   ORDER BY (students.classroom_id IS NULL) ASC, classrooms.period DESC, students.name ASC
+                   LIMIT $3 OFFSET $4"#,
+                user_id,
+                like_pattern,
+                page_size,
+                offset
+            )
+            .fetch_all(&data.db)
+            .await?
+        }
+    };
+
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "data": {
+                "students": students,
+                "page": page,
+                "page_size": page_size,
+                "total_count": total_count,
+                "total_pages": total_pages,
+            }
+        })),
+    ))
 }
 
 /// Fetches a single student by its uuid, scoped to the current user.
@@ -176,6 +324,30 @@ pub async fn delete_student_handler(
     .await?;
 
     Ok((StatusCode::OK, Json(json!({"data": student}))))
+}
+
+/// Deletes multiple students by uuid in one statement, scoped to the
+/// current user. IDs that don't exist or aren't owned by the caller are
+/// silently skipped (not an error) — `deleted_count` reflects how many
+/// rows actually matched.
+pub async fn bulk_delete_students_handler(
+    auth_session: AuthSession<Backend>,
+    State(data): State<Arc<AppState>>,
+    Json(body): Json<BulkDeleteStudentsSchema>,
+) -> Result<impl IntoResponse, AppError> {
+    let user_id = current_user_id(&auth_session);
+    let result = sqlx::query!(
+        r#"DELETE FROM students WHERE user_id = $1 AND id = ANY($2)"#,
+        user_id,
+        &body.ids
+    )
+    .execute(&data.db)
+    .await?;
+
+    Ok((
+        StatusCode::OK,
+        Json(json!({"data": {"deleted_count": result.rows_affected()}})),
+    ))
 }
 
 #[cfg(test)]
@@ -668,6 +840,519 @@ mod tests {
         let students = json["data"].as_array().unwrap();
         assert_eq!(students.len(), 1);
         assert_eq!(students[0]["id"], student_a.id.to_string());
+
+        Ok(())
+    }
+
+    // --- pagination/search coverage ---
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn list_students_unpaginated_when_no_params_matches_current_behavior(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let (user, cookie) =
+            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        for (i, name) in ["Alice", "Bob", "Carl"].iter().enumerate() {
+            insert_student(&pool, user.id, None, i as i32, name).await;
+        }
+
+        let response = app
+            .oneshot(authenticated_request("GET", "/api/v1/students", &cookie))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        let students = json["data"].as_array().unwrap();
+        assert_eq!(students.len(), 3);
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn list_students_paginated_returns_correct_slice_and_count(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let (user, cookie) =
+            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        for (i, name) in ["Alice", "Bob", "Carl", "Dana", "Eve"].iter().enumerate() {
+            insert_student(&pool, user.id, None, i as i32, name).await;
+        }
+
+        let response = app
+            .oneshot(authenticated_request(
+                "GET",
+                "/api/v1/students?page=1&page_size=2",
+                &cookie,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        let students = json["data"]["students"].as_array().unwrap();
+        assert_eq!(students.len(), 2);
+        assert_eq!(students[0]["name"], "Alice");
+        assert_eq!(students[1]["name"], "Bob");
+        assert_eq!(json["data"]["total_count"], 5);
+        assert_eq!(json["data"]["total_pages"], 3);
+        assert_eq!(json["data"]["page"], 1);
+        assert_eq!(json["data"]["page_size"], 2);
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn list_students_paginated_second_page_returns_remaining_slice(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let (user, cookie) =
+            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        for (i, name) in ["Alice", "Bob", "Carl", "Dana", "Eve"].iter().enumerate() {
+            insert_student(&pool, user.id, None, i as i32, name).await;
+        }
+
+        let response = app
+            .oneshot(authenticated_request(
+                "GET",
+                "/api/v1/students?page=2&page_size=2",
+                &cookie,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        let students = json["data"]["students"].as_array().unwrap();
+        assert_eq!(students.len(), 2);
+        assert_eq!(students[0]["name"], "Carl");
+        assert_eq!(students[1]["name"], "Dana");
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn list_students_search_filters_by_name_case_insensitively(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let (user, cookie) =
+            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        insert_student(&pool, user.id, None, 1, "Alice").await;
+        insert_student(&pool, user.id, None, 2, "alicia").await;
+        insert_student(&pool, user.id, None, 3, "Bob").await;
+
+        let response = app
+            .oneshot(authenticated_request(
+                "GET",
+                "/api/v1/students?q=ali",
+                &cookie,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        let students = json["data"]["students"].as_array().unwrap();
+        assert_eq!(students.len(), 2);
+        assert_eq!(json["data"]["total_count"], 2);
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn list_students_search_no_matches_returns_empty_with_zero_count(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let (user, cookie) =
+            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        insert_student(&pool, user.id, None, 1, "Alice").await;
+
+        let response = app
+            .oneshot(authenticated_request(
+                "GET",
+                "/api/v1/students?q=zzz",
+                &cookie,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        assert_eq!(json["data"]["students"].as_array().unwrap().len(), 0);
+        assert_eq!(json["data"]["total_count"], 0);
+        assert_eq!(json["data"]["total_pages"], 1);
+        assert_eq!(json["data"]["page"], 1);
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn list_students_out_of_range_page_clamps_to_last_page(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let (user, cookie) =
+            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        for (i, name) in ["Alice", "Bob", "Carl"].iter().enumerate() {
+            insert_student(&pool, user.id, None, i as i32, name).await;
+        }
+
+        let response = app
+            .oneshot(authenticated_request(
+                "GET",
+                "/api/v1/students?page=99&page_size=2",
+                &cookie,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        assert_eq!(json["data"]["page"], 2);
+        let students = json["data"]["students"].as_array().unwrap();
+        assert_eq!(students.len(), 1);
+        assert_eq!(students[0]["name"], "Carl");
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn list_students_respects_page_size(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let (user, cookie) =
+            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        for i in 0..10 {
+            insert_student(&pool, user.id, None, i, &format!("Student{i:02}")).await;
+        }
+
+        let response = app
+            .oneshot(authenticated_request(
+                "GET",
+                "/api/v1/students?page=1&page_size=3",
+                &cookie,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        assert_eq!(json["data"]["students"].as_array().unwrap().len(), 3);
+        assert_eq!(json["data"]["total_pages"], 4);
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn list_students_page_size_is_capped_at_100(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let (_user, cookie) =
+            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+
+        let response = app
+            .oneshot(authenticated_request(
+                "GET",
+                "/api/v1/students?page_size=9999",
+                &cookie,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        assert_eq!(json["data"]["page_size"], 100);
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn list_students_pagination_excludes_other_users_students(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let (user_a, cookie_a) =
+            insert_authenticated_user(app.clone(), &pool, "usera@example.com").await;
+        let (user_b, _cookie_b) =
+            insert_authenticated_user(app.clone(), &pool, "userb@example.com").await;
+        insert_student(&pool, user_a.id, None, 1, "Alice").await;
+        insert_student(&pool, user_b.id, None, 2, "Bob").await;
+
+        let response = app
+            .oneshot(authenticated_request(
+                "GET",
+                "/api/v1/students?page=1",
+                &cookie_a,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        assert_eq!(json["data"]["total_count"], 1);
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn list_students_q_alone_without_page_triggers_paginated_branch(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let (user, cookie) =
+            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        insert_student(&pool, user.id, None, 1, "Alice").await;
+
+        let response = app
+            .oneshot(authenticated_request(
+                "GET",
+                "/api/v1/students?q=ali",
+                &cookie,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        assert!(json["data"]["students"].is_array());
+        assert_eq!(json["data"]["page"], 1);
+        assert_eq!(json["data"]["page_size"], 20);
+
+        Ok(())
+    }
+
+    // --- sorting coverage ---
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn list_students_sorts_by_name_desc(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let (user, cookie) =
+            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        for (i, name) in ["Alice", "Bob", "Carl"].iter().enumerate() {
+            insert_student(&pool, user.id, None, i as i32, name).await;
+        }
+
+        let response = app
+            .oneshot(authenticated_request(
+                "GET",
+                "/api/v1/students?sort_by=name&sort_dir=desc",
+                &cookie,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        let students = json["data"]["students"].as_array().unwrap();
+        assert_eq!(students[0]["name"], "Carl");
+        assert_eq!(students[1]["name"], "Bob");
+        assert_eq!(students[2]["name"], "Alice");
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn list_students_sorts_by_student_id_asc(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let (user, cookie) =
+            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        insert_student(&pool, user.id, None, 30, "Zed").await;
+        insert_student(&pool, user.id, None, 10, "Amy").await;
+        insert_student(&pool, user.id, None, 20, "Mel").await;
+
+        let response = app
+            .oneshot(authenticated_request(
+                "GET",
+                "/api/v1/students?sort_by=student_id&sort_dir=asc",
+                &cookie,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        let students = json["data"]["students"].as_array().unwrap();
+        assert_eq!(students[0]["student_id"], 10);
+        assert_eq!(students[1]["student_id"], 20);
+        assert_eq!(students[2]["student_id"], 30);
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn list_students_sorts_by_student_id_desc(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let (user, cookie) =
+            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        insert_student(&pool, user.id, None, 30, "Zed").await;
+        insert_student(&pool, user.id, None, 10, "Amy").await;
+        insert_student(&pool, user.id, None, 20, "Mel").await;
+
+        let response = app
+            .oneshot(authenticated_request(
+                "GET",
+                "/api/v1/students?sort_by=student_id&sort_dir=desc",
+                &cookie,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        let students = json["data"]["students"].as_array().unwrap();
+        assert_eq!(students[0]["student_id"], 30);
+        assert_eq!(students[1]["student_id"], 20);
+        assert_eq!(students[2]["student_id"], 10);
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn list_students_sorts_by_classroom_period_asc(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let (user, cookie) =
+            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        let period5 = insert_classroom(&pool, user.id, "History", 5).await;
+        let period2 = insert_classroom(&pool, user.id, "Math", 2).await;
+        insert_student(&pool, user.id, Some(period5.id), 1, "InPeriod5").await;
+        insert_student(&pool, user.id, Some(period2.id), 2, "InPeriod2").await;
+
+        let response = app
+            .oneshot(authenticated_request(
+                "GET",
+                "/api/v1/students?sort_by=classroom&sort_dir=asc",
+                &cookie,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        let students = json["data"]["students"].as_array().unwrap();
+        assert_eq!(students[0]["name"], "InPeriod2");
+        assert_eq!(students[1]["name"], "InPeriod5");
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn list_students_sorts_by_classroom_puts_unassigned_last_regardless_of_direction(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let (user, cookie) =
+            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        let classroom = insert_classroom(&pool, user.id, "Math", 2).await;
+        insert_student(&pool, user.id, None, 1, "NoClassroom").await;
+        insert_student(&pool, user.id, Some(classroom.id), 2, "HasClassroom").await;
+
+        for dir in ["asc", "desc"] {
+            let response = app
+                .clone()
+                .oneshot(authenticated_request(
+                    "GET",
+                    &format!("/api/v1/students?sort_by=classroom&sort_dir={dir}"),
+                    &cookie,
+                ))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let json = body_json(response).await;
+            let students = json["data"]["students"].as_array().unwrap();
+            assert_eq!(students[0]["name"], "HasClassroom", "dir={dir}");
+            assert_eq!(students[1]["name"], "NoClassroom", "dir={dir}");
+        }
+
+        Ok(())
+    }
+
+    // --- bulk delete coverage ---
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn bulk_delete_students_removes_only_callers_own_students(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let (user_a, cookie_a) =
+            insert_authenticated_user(app.clone(), &pool, "usera@example.com").await;
+        let (user_b, _cookie_b) =
+            insert_authenticated_user(app.clone(), &pool, "userb@example.com").await;
+        let a1 = insert_student(&pool, user_a.id, None, 1, "A1").await;
+        let a2 = insert_student(&pool, user_a.id, None, 2, "A2").await;
+        let b1 = insert_student(&pool, user_b.id, None, 3, "B1").await;
+
+        let response = app
+            .oneshot(authenticated_json_request(
+                "DELETE",
+                "/api/v1/students",
+                json!({"ids": [a1.id, a2.id, b1.id]}),
+                &cookie_a,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        assert_eq!(json["data"]["deleted_count"], 2);
+
+        assert!(fetch_student(&pool, a1.id).await.is_none());
+        assert!(fetch_student(&pool, a2.id).await.is_none());
+        assert!(fetch_student(&pool, b1.id).await.is_some());
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn bulk_delete_students_ignores_nonexistent_ids(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let (user, cookie) =
+            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        let existing = insert_student(&pool, user.id, None, 1, "Bob").await;
+        let fake_id = Uuid::new_v4();
+
+        let response = app
+            .oneshot(authenticated_json_request(
+                "DELETE",
+                "/api/v1/students",
+                json!({"ids": [existing.id, fake_id]}),
+                &cookie,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        assert_eq!(json["data"]["deleted_count"], 1);
+        assert!(fetch_student(&pool, existing.id).await.is_none());
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn bulk_delete_students_empty_ids_is_a_noop(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let (user, cookie) =
+            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        let existing = insert_student(&pool, user.id, None, 1, "Bob").await;
+
+        let response = app
+            .oneshot(authenticated_json_request(
+                "DELETE",
+                "/api/v1/students",
+                json!({"ids": []}),
+                &cookie,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        assert_eq!(json["data"]["deleted_count"], 0);
+        assert!(fetch_student(&pool, existing.id).await.is_some());
 
         Ok(())
     }
