@@ -2,12 +2,7 @@ import type { Route } from "./+types/students"
 
 import { Outlet } from "react-router"
 import { RouteErrorCard } from "~/components/route-error-card"
-import {
-  MobileStudentDrawer,
-  StudentSidebar,
-} from "~/components/students-sidebar"
-import { getStudents } from "~/lib/api"
-import { cookieFromRequest, requireUser } from "~/lib/auth"
+import { requireUser } from "~/lib/auth"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 
 export const handle: BreadcrumbHandle = {
@@ -24,19 +19,12 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader({ request }: Route.LoaderArgs) {
   await requireUser(request)
-  const students = await getStudents(cookieFromRequest(request))
-  return { students }
 }
 
-export default function Layout({ loaderData }: Route.ComponentProps) {
-  const { students } = loaderData
+export default function Layout() {
   return (
-    <div className="flex h-full px-4 py-6">
-      <StudentSidebar students={students} />
-      <main className="w-full pl-0 md:pl-4">
-        <MobileStudentDrawer students={students} />
-        <Outlet />
-      </main>
+    <div className="h-full min-h-0 overflow-y-auto px-10 py-8">
+      <Outlet />
     </div>
   )
 }

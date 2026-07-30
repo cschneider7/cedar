@@ -86,6 +86,40 @@ pub struct UpdateStudentSchema {
     pub name: Option<String>,
 }
 
+/// A column `GET /api/v1/students` can sort by.
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum StudentSortBy {
+    Name,
+    StudentId,
+    Classroom,
+}
+
+/// Sort direction for `GET /api/v1/students`.
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum SortDir {
+    Asc,
+    Desc,
+}
+
+/// Optional query params for `GET /api/v1/students`. Omitting all five
+/// preserves the endpoint's original unpaginated, full-roster behavior.
+#[derive(Deserialize, Debug)]
+pub struct StudentListParams {
+    pub page: Option<i64>,
+    pub page_size: Option<i64>,
+    pub q: Option<String>,
+    pub sort_by: Option<StudentSortBy>,
+    pub sort_dir: Option<SortDir>,
+}
+
+/// Request body for bulk-deleting students by uuid.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct BulkDeleteStudentsSchema {
+    pub ids: Vec<Uuid>,
+}
+
 /// A classroom's entire seating chart
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SeatingChartSchema {

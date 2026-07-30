@@ -17,6 +17,7 @@ export default [
         route(":studentId", "routes/students/student.tsx"),
         route(":studentId/edit", "routes/students/edit-student.tsx"),
         route(":studentId/delete", "routes/students/delete-student.tsx"),
+        route("bulk-delete", "routes/students/bulk-delete-students.tsx"),
       ]),
     ]),
 
