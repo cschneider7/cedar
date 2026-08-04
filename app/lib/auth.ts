@@ -1,21 +1,26 @@
+import { getAuth } from "@clerk/react-router/server"
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router"
 import { redirect } from "react-router"
-import { getCurrentUser } from "~/lib/api"
-import type { User } from "~/lib/schemas"
 
-/** Returns the incoming request's `Cookie` header, for forwarding to the
- * backend from a server-side (loader/action) `fetch` call. */
-export function cookieFromRequest(request: Request): string | undefined {
-  return request.headers.get("cookie") ?? undefined
+/** Loader guard: redirects to `/` with a `redirectTo` back to the page that
+ * was requested if unauthenticated, otherwise returns a bearer token for
+ * forwarding to the backend. */
+export async function requireToken(args: LoaderFunctionArgs): Promise<string> {
+  const { isAuthenticated, getToken } = await getAuth(args)
+  if (!isAuthenticated) {
+    const url = new URL(args.request.url)
+    const path = url.pathname + url.search
+    throw redirect(`/?redirectTo=${encodeURIComponent(path)}`)
+  }
+  return (await getToken())!
 }
 
-/** Loader guard: returns the current user or throws a redirect to `/login`
- * with a `redirectTo` back to the page that was requested. */
-export async function requireUser(request: Request): Promise<User> {
-  const cookie = cookieFromRequest(request)
-  const user = await getCurrentUser(cookie)
-  if (!user) {
-    const path = new URL(request.url).pathname + new URL(request.url).search
-    throw redirect(`/login?redirectTo=${encodeURIComponent(path)}`)
-  }
-  return user
+/** Action-only helper: no redirect, just best-effort token forwarding —
+ * matches the backend's own 401 as the source of truth for these
+ * mutation-only routes. */
+export async function tokenFromRequest(
+  args: LoaderFunctionArgs | ActionFunctionArgs
+): Promise<string | undefined> {
+  const { getToken } = await getAuth(args)
+  return (await getToken()) ?? undefined
 }

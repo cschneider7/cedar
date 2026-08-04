@@ -1,52 +1,47 @@
+import { getAuth } from "@clerk/react-router/server"
 import { describe, expect, it, vi } from "vitest"
-import { cookieFromRequest, requireUser } from "~/lib/auth"
-import { stubFetch } from "~/lib/test-utils"
+import { requireToken, tokenFromRequest } from "~/lib/auth"
+import { makeArgs } from "~/lib/test-utils"
 
-stubFetch()
-
-describe("cookieFromRequest", () => {
-  it("returns the request's Cookie header", () => {
-    const request = new Request("http://test/", {
-      headers: { cookie: "id=abc" },
-    })
-    expect(cookieFromRequest(request)).toBe("id=abc")
+describe("requireToken", () => {
+  it("returns the token when the session is valid", async () => {
+    const token = await requireToken(makeArgs("http://test/classrooms"))
+    expect(token).toBe("test-token")
   })
 
-  it("returns undefined when there's no Cookie header", () => {
-    const request = new Request("http://test/")
-    expect(cookieFromRequest(request)).toBeUndefined()
-  })
-})
-
-describe("requireUser", () => {
-  it("returns the user when the session is valid", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ data: { user: { id: "u1", email: "a@b.com" } } }),
-        { status: 200 }
-      )
-    )
-
-    const user = await requireUser(
-      new Request("http://test/classrooms", { headers: { cookie: "id=abc" } })
-    )
-
-    expect(user).toEqual({ id: "u1", email: "a@b.com" })
-  })
-
-  it("throws a redirect to /login with redirectTo when unauthenticated", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 401 }))
+  it("throws a redirect to / with redirectTo when unauthenticated", async () => {
+    vi.mocked(getAuth).mockResolvedValueOnce({
+      isAuthenticated: false,
+      getToken: async () => null,
+    } as Awaited<ReturnType<typeof getAuth>>)
 
     try {
-      await requireUser(new Request("http://test/classrooms/abc123"))
+      await requireToken(makeArgs("http://test/classrooms/abc123"))
       expect.fail("expected a redirect to be thrown")
     } catch (response) {
       expect(response).toBeInstanceOf(Response)
       const res = response as Response
       expect(res.status).toBe(302)
       expect(res.headers.get("Location")).toBe(
-        "/login?redirectTo=%2Fclassrooms%2Fabc123"
+        "/?redirectTo=%2Fclassrooms%2Fabc123"
       )
     }
+  })
+})
+
+describe("tokenFromRequest", () => {
+  it("returns the token when the session is valid", async () => {
+    const token = await tokenFromRequest(makeArgs("http://test/classrooms"))
+    expect(token).toBe("test-token")
+  })
+
+  it("returns undefined instead of throwing when unauthenticated", async () => {
+    vi.mocked(getAuth).mockResolvedValueOnce({
+      isAuthenticated: false,
+      getToken: async () => null,
+    } as Awaited<ReturnType<typeof getAuth>>)
+
+    const token = await tokenFromRequest(makeArgs("http://test/classrooms"))
+    expect(token).toBeUndefined()
   })
 })

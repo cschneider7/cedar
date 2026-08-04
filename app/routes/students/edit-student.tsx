@@ -1,19 +1,17 @@
 import type { MutationResult } from "~/lib/action-results"
 import { getClassrooms, updateStudent } from "~/lib/api"
-import { cookieFromRequest, requireUser } from "~/lib/auth"
+import { requireToken, tokenFromRequest } from "~/lib/auth"
 import { UpdateStudentSchema } from "~/lib/schemas"
 import type { Route } from "./+types/edit-student"
 
-export async function loader({ request }: Route.LoaderArgs) {
-  await requireUser(request)
-  const classrooms = await getClassrooms(cookieFromRequest(request))
+export async function loader(args: Route.LoaderArgs) {
+  const token = await requireToken(args)
+  const classrooms = await getClassrooms(token)
   return { classrooms: classrooms }
 }
 
-export async function action({
-  params,
-  request,
-}: Route.ActionArgs): Promise<MutationResult> {
+export async function action(args: Route.ActionArgs): Promise<MutationResult> {
+  const { params, request } = args
   const rawData = await request.json()
   const result = UpdateStudentSchema.safeParse(rawData)
 
@@ -25,7 +23,7 @@ export async function action({
     await updateStudent(
       params.studentId,
       result.data,
-      cookieFromRequest(request)
+      await tokenFromRequest(args)
     )
     return { ok: true, id: params.studentId }
   } catch (error) {

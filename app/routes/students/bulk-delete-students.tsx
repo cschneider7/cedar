@@ -1,12 +1,12 @@
 import { bulkDeleteStudents } from "~/lib/api"
-import { cookieFromRequest } from "~/lib/auth"
+import { tokenFromRequest } from "~/lib/auth"
 import type { Route } from "./+types/bulk-delete-students"
 
-export async function action({ request }: Route.ActionArgs) {
-  const { ids }: { ids: string[] } = await request.json()
+export async function action(args: Route.ActionArgs) {
+  const { ids }: { ids: string[] } = await args.request.json()
 
   try {
-    await bulkDeleteStudents(ids, cookieFromRequest(request))
+    await bulkDeleteStudents(ids, await tokenFromRequest(args))
     return { ok: true }
   } catch (error) {
     return { ok: false, error: (error as Error).message }

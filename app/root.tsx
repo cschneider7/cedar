@@ -1,3 +1,5 @@
+import { ClerkProvider } from "@clerk/react-router"
+import { clerkMiddleware, rootAuthLoader } from "@clerk/react-router/server"
 import {
   Link,
   Links,
@@ -21,18 +23,22 @@ import {
 import { Toaster } from "~/components/ui/sonner"
 import { ThemeProvider } from "~/components/ui/theme-provider"
 import { TooltipProvider } from "~/components/ui/tooltip"
-import { getClassrooms, getCurrentUser } from "~/lib/api"
-import { cookieFromRequest } from "~/lib/auth"
+import { getClassrooms } from "~/lib/api"
 import type { Route } from "./+types/root"
 import "./app.css"
 
-export async function loader({ request }: Route.LoaderArgs) {
-  const cookie = cookieFromRequest(request)
-  const user = await getCurrentUser(cookie)
-  // Anonymous visitors (public pages like `/`, `/login`) have no session to
-  // scope a classroom list to, and `/api/v1/classrooms` now 401s without one.
-  const classrooms = user ? await getClassrooms(cookie) : []
-  return { user, classrooms }
+export const middleware: Route.MiddlewareFunction[] = [clerkMiddleware()]
+
+export async function loader(args: Route.LoaderArgs) {
+  return rootAuthLoader(args, async ({ request }) => {
+    const { isAuthenticated, getToken } = request.auth
+    // Anonymous visitors (public pages like `/`) have no session to scope a
+    // classroom list to, and `/api/v1/classrooms` now 401s without one.
+    const classrooms = isAuthenticated
+      ? await getClassrooms(await getToken())
+      : []
+    return { classrooms }
+  })
 }
 
 export function HydrateFallback() {
@@ -82,13 +88,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
   )
 }
 
-export default function App() {
+export default function App({ loaderData }: Route.ComponentProps) {
   return (
-    <TooltipProvider delay={200}>
-      <div className="flex h-dvh flex-col overflow-hidden [--header-height:calc(--spacing(14))]">
-        <Outlet />
-      </div>
-    </TooltipProvider>
+    <ClerkProvider loaderData={loaderData}>
+      <TooltipProvider delay={200}>
+        <div className="flex h-dvh flex-col overflow-hidden [--header-height:calc(--spacing(14))]">
+          <Outlet />
+        </div>
+      </TooltipProvider>
+    </ClerkProvider>
   )
 }
 
