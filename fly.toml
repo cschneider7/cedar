@@ -1,0 +1,21 @@
+app = "seating-chart-app"
+primary_region = "sjc"
+
+[build]
+  dockerfile = "class_management/Dockerfile"
+
+[env]
+  RUST_LOG = "class_management=info,tower_http=info"
+
+[http_service]
+  auto_start_machines = true
+  auto_stop_machines = true
+  internal_port = 3000
+  min_machines_running = 0
+  force_https = true
+  processes = [ "app" ]
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256

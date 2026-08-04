@@ -10,3 +10,7 @@
 
 # Rust
 target
+.vercel
+.neon
+.env*
+!.env.example
