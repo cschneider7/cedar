@@ -6,13 +6,12 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use axum_login::AuthSession;
 use serde_json::json;
 use uuid::Uuid;
 
 use crate::{
     AppState,
-    auth::Backend,
+    auth::CurrentUserId,
     cold_call,
     error::AppError,
     model::ClassroomModel,
@@ -23,20 +22,11 @@ use crate::{
     seating_chart::{self, MAX_TABLE_DIMENSION},
 };
 
-fn current_user_id(auth_session: &AuthSession<Backend>) -> Uuid {
-    auth_session
-        .user
-        .as_ref()
-        .expect("route is behind login_required")
-        .id
-}
-
 /// Lists every classroom owned by the current user, ordered by period.
 pub async fn classroom_list_handler(
-    auth_session: AuthSession<Backend>,
+    CurrentUserId(user_id): CurrentUserId,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let user_id = current_user_id(&auth_session);
     let classrooms = sqlx::query_as!(
         ClassroomModel,
         r#"SELECT * FROM classrooms WHERE user_id = $1 ORDER by period"#,
@@ -50,11 +40,10 @@ pub async fn classroom_list_handler(
 
 /// Fetches a single classroom by its uuid, scoped to the current user.
 pub async fn get_classroom_handler(
-    auth_session: AuthSession<Backend>,
+    CurrentUserId(user_id): CurrentUserId,
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let user_id = current_user_id(&auth_session);
     let classroom = sqlx::query_as!(
         ClassroomModel,
         r#"SELECT * FROM classrooms WHERE id = $1 AND user_id = $2"#,
@@ -70,11 +59,10 @@ pub async fn get_classroom_handler(
 /// Creates a new classroom owned by the current user; boundary dimensions
 /// take their DB defaults.
 pub async fn create_classroom_handler(
-    auth_session: AuthSession<Backend>,
+    CurrentUserId(user_id): CurrentUserId,
     State(data): State<Arc<AppState>>,
     Json(body): Json<ClassroomSchema>,
 ) -> Result<impl IntoResponse, AppError> {
-    let user_id = current_user_id(&auth_session);
     let classroom = sqlx::query_as!(
         ClassroomModel,
         r#"INSERT INTO classrooms (
@@ -97,12 +85,11 @@ pub async fn create_classroom_handler(
 /// Partially updates a classroom, merging provided fields over its existing
 /// values before writing them back. Scoped to the current user.
 pub async fn update_classroom_handler(
-    auth_session: AuthSession<Backend>,
+    CurrentUserId(user_id): CurrentUserId,
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
     Json(body): Json<UpdateClassroomSchema>,
 ) -> Result<impl IntoResponse, AppError> {
-    let user_id = current_user_id(&auth_session);
     let classroom = sqlx::query_as!(
         ClassroomModel,
         r#"SELECT * FROM classrooms WHERE id = $1 AND user_id = $2"#,
@@ -140,11 +127,10 @@ pub async fn update_classroom_handler(
 
 /// Deletes a classroom by its uuid, scoped to the current user.
 pub async fn delete_classroom_handler(
-    auth_session: AuthSession<Backend>,
+    CurrentUserId(user_id): CurrentUserId,
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let user_id = current_user_id(&auth_session);
     let classroom = sqlx::query_as!(
         ClassroomModel,
         r#"DELETE FROM classrooms WHERE id = $1 AND user_id = $2 RETURNING *"#,
@@ -161,11 +147,10 @@ pub async fn delete_classroom_handler(
 /// document, with unoccupied seats included as `null` entries. Scoped to the
 /// current user.
 pub async fn get_seating_chart_handler(
-    auth_session: AuthSession<Backend>,
+    CurrentUserId(user_id): CurrentUserId,
     Path(classroom_id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let user_id = current_user_id(&auth_session);
     let classroom = sqlx::query!(
         r#"SELECT boundary_width, boundary_height FROM classrooms WHERE id = $1 AND user_id = $2"#,
         &classroom_id,
@@ -208,12 +193,11 @@ pub async fn get_seating_chart_handler(
 /// existing table/seat is deleted, then re-inserted from the request body.
 /// Scoped to the current user.
 pub async fn update_seating_chart_handler(
-    auth_session: AuthSession<Backend>,
+    CurrentUserId(user_id): CurrentUserId,
     Path(classroom_id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
     Json(body): Json<SeatingChartSchema>,
 ) -> Result<impl IntoResponse, AppError> {
-    let user_id = current_user_id(&auth_session);
     let mut tx = data.db.begin().await?;
 
     let result = sqlx::query!(
@@ -295,12 +279,11 @@ pub async fn update_seating_chart_handler(
 /// Proposes a randomized seating chart for a classroom's current roster and
 /// canvas geometry, without persisting anything. Scoped to the current user.
 pub async fn randomize_seating_chart_handler(
-    auth_session: AuthSession<Backend>,
+    CurrentUserId(user_id): CurrentUserId,
     Path(classroom_id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
     Json(body): Json<RandomizeSeatingChartSchema>,
 ) -> Result<impl IntoResponse, AppError> {
-    let user_id = current_user_id(&auth_session);
     let dimensions_in_range = |rows: i16, cols: i16| {
         (1..=MAX_TABLE_DIMENSION).contains(&rows) && (1..=MAX_TABLE_DIMENSION).contains(&cols)
     };
@@ -361,13 +344,19 @@ pub async fn randomize_seating_chart_handler(
 /// Picks a random student for a cold call from the given weighted roster,
 /// then returns adjusted weights for the next pick. Stateless: nothing is
 /// read from or written to the database, so unlike every other handler in
-/// this file this one doesn't extract `AuthSession` or scope by user —
-/// there's no DB row to scope, since all data comes from the request body,
-/// which the caller already fetched for their own classroom. `classroom_id`
-/// is accepted for REST consistency with the other seating-chart endpoints
-/// (and to leave room for a future ownership check) but isn't otherwise used
-/// today.
+/// this file this one doesn't scope anything by user id — there's no DB row
+/// to scope, since all data comes from the request body, which the caller
+/// already fetched for their own classroom. It still extracts
+/// `CurrentUserId` (ignoring the value) purely to require authentication,
+/// since every route is otherwise protected by the outer Clerk layer in
+/// production but that layer is bypassed in tests (see `test_support.rs`) —
+/// without an extractor of its own, this handler would be reachable
+/// unauthenticated in tests even though production requests still 401.
+/// `classroom_id` is accepted for REST consistency with the other
+/// seating-chart endpoints (and to leave room for a future ownership check)
+/// but isn't otherwise used today.
 pub async fn cold_call_handler(
+    CurrentUserId(_user_id): CurrentUserId,
     Path(_classroom_id): Path<Uuid>,
     Json(body): Json<ColdCallSchema>,
 ) -> Result<impl IntoResponse, AppError> {
@@ -405,8 +394,8 @@ mod tests {
     use crate::{
         model::{SeatModel, TableModel},
         test_support::{
-            app, authenticated_json_request, authenticated_request, body_json,
-            insert_authenticated_user, insert_classroom,
+            app, authenticated_json_request, authenticated_request, body_json, insert_classroom,
+            test_user_id,
         },
     };
 
@@ -469,7 +458,7 @@ mod tests {
 
     async fn insert_student_in_classroom(
         pool: &sqlx::PgPool,
-        user_id: Uuid,
+        user_id: &str,
         classroom_id: Uuid,
         student_id: i32,
         name: &str,
@@ -490,7 +479,7 @@ mod tests {
 
     async fn insert_student(
         pool: &sqlx::PgPool,
-        user_id: Uuid,
+        user_id: &str,
         student_id: i32,
         name: &str,
     ) -> Uuid {
@@ -524,8 +513,7 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn create_classroom_success(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (_user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        let user_id = test_user_id();
         let body = json!({"subject": "Math 2", "period": 3});
 
         let response = app
@@ -533,7 +521,7 @@ mod tests {
                 "POST",
                 "/api/v1/classrooms",
                 body,
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -549,8 +537,7 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn create_classroom_defaults_boundary_dimensions(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (_user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        let user_id = test_user_id();
         let body = json!({"subject": "Math 2", "period": 3});
 
         let response = app
@@ -558,7 +545,7 @@ mod tests {
                 "POST",
                 "/api/v1/classrooms",
                 body,
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -577,8 +564,7 @@ mod tests {
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (_user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        let user_id = test_user_id();
         let body = json!({"subject": "Math 2", "period": 3});
         let first = app
             .clone()
@@ -586,7 +572,7 @@ mod tests {
                 "POST",
                 "/api/v1/classrooms",
                 body,
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -598,7 +584,7 @@ mod tests {
                 "POST",
                 "/api/v1/classrooms",
                 body,
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -612,9 +598,8 @@ mod tests {
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
-        let existing = insert_classroom(&pool, user.id, "Math 2", 3).await;
+        let user_id = test_user_id();
+        let existing = insert_classroom(&pool, &user_id, "Math 2", 3).await;
 
         let body = json!({"subject": "Algebra"});
         let response = app
@@ -622,7 +607,7 @@ mod tests {
                 "PATCH",
                 &format!("/api/v1/classrooms/{}", existing.id),
                 body,
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -640,9 +625,8 @@ mod tests {
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
-        let existing = insert_classroom(&pool, user.id, "Math 2", 3).await;
+        let user_id = test_user_id();
+        let existing = insert_classroom(&pool, &user_id, "Math 2", 3).await;
 
         let body = json!({"boundary_width": 2000});
         let response = app
@@ -650,7 +634,7 @@ mod tests {
                 "PATCH",
                 &format!("/api/v1/classrooms/{}", existing.id),
                 body,
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -668,9 +652,8 @@ mod tests {
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
-        let existing = insert_classroom(&pool, user.id, "Math 2", 3).await;
+        let user_id = test_user_id();
+        let existing = insert_classroom(&pool, &user_id, "Math 2", 3).await;
 
         let body = json!({
             "subject": "Algebra",
@@ -683,7 +666,7 @@ mod tests {
                 "PATCH",
                 &format!("/api/v1/classrooms/{}", existing.id),
                 body,
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -701,8 +684,7 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn update_classroom_nonexistent_id_returns_404(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (_user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        let user_id = test_user_id();
         let body = json!({"subject": "Doesn't Matter"});
 
         let response = app
@@ -710,7 +692,7 @@ mod tests {
                 "PATCH",
                 &format!("/api/v1/classrooms/{}", Uuid::new_v4()),
                 body,
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -725,15 +707,14 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_classroom_success(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
-        let existing = insert_classroom(&pool, user.id, "Math 2", 3).await;
+        let user_id = test_user_id();
+        let existing = insert_classroom(&pool, &user_id, "Math 2", 3).await;
 
         let response = app
             .oneshot(authenticated_request(
                 "DELETE",
                 &format!("/api/v1/classrooms/{}", existing.id),
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -750,14 +731,13 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn delete_classroom_nonexistent_id_returns_404(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (_user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        let user_id = test_user_id();
 
         let response = app
             .oneshot(authenticated_request(
                 "DELETE",
                 &format!("/api/v1/classrooms/{}", Uuid::new_v4()),
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -774,13 +754,12 @@ mod tests {
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
-        let classroom = insert_classroom(&pool, user.id, "Math 2", 3).await;
+        let user_id = test_user_id();
+        let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
         let old_table = insert_table(&pool, classroom.id, 0, 2, 2, 0, 0).await;
         insert_seat(&pool, old_table.id, None, 0).await;
 
-        let student_id = insert_student(&pool, user.id, 1, "Bob").await;
+        let student_id = insert_student(&pool, &user_id, 1, "Bob").await;
         let body = json!({
             "boundary_width": 1500,
             "boundary_height": 1200,
@@ -793,7 +772,7 @@ mod tests {
                 "PUT",
                 &format!("/api/v1/classrooms/{}/seating-chart", classroom.id),
                 body,
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -833,8 +812,7 @@ mod tests {
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (_user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        let user_id = test_user_id();
 
         let body = json!({
             "boundary_width": 1080,
@@ -846,7 +824,7 @@ mod tests {
                 "PUT",
                 &format!("/api/v1/classrooms/{}/seating-chart", Uuid::new_v4()),
                 body,
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -860,9 +838,8 @@ mod tests {
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
-        let classroom = insert_classroom(&pool, user.id, "Math 2", 3).await;
+        let user_id = test_user_id();
+        let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
 
         // x_pos deliberately doesn't match the intended table_number order,
         // so the assertion below only passes if table_number is driven by
@@ -881,7 +858,7 @@ mod tests {
                 "PUT",
                 &format!("/api/v1/classrooms/{}/seating-chart", classroom.id),
                 body,
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -904,9 +881,8 @@ mod tests {
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
-        let classroom = insert_classroom(&pool, user.id, "Math 2", 3).await;
+        let user_id = test_user_id();
+        let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
         insert_table(&pool, classroom.id, 0, 2, 2, 0, 0).await;
 
         let body = json!({
@@ -919,7 +895,7 @@ mod tests {
                 "PUT",
                 &format!("/api/v1/classrooms/{}/seating-chart", classroom.id),
                 body,
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -937,11 +913,10 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn get_seating_chart_returns_only_assigned_seats(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
-        let classroom = insert_classroom(&pool, user.id, "Math 2", 3).await;
+        let user_id = test_user_id();
+        let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
         let table = insert_table(&pool, classroom.id, 0, 2, 2, 0, 0).await;
-        let student_id = insert_student(&pool, user.id, 1, "Bob").await;
+        let student_id = insert_student(&pool, &user_id, 1, "Bob").await;
         insert_seat(&pool, table.id, Some(student_id), 0).await;
         insert_seat(&pool, table.id, None, 1).await;
 
@@ -949,7 +924,7 @@ mod tests {
             .oneshot(authenticated_request(
                 "GET",
                 &format!("/api/v1/classrooms/{}/seating-chart", classroom.id),
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -973,16 +948,15 @@ mod tests {
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
-        let classroom = insert_classroom(&pool, user.id, "Math 2", 3).await;
+        let user_id = test_user_id();
+        let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
         // x_pos/y_pos deliberately sort the opposite of insertion order, so
         // the response order can only be right if it's driven by
         // table_number and not accidentally by position or id.
         let first_table = insert_table(&pool, classroom.id, 0, 2, 2, 100, 100).await;
         let second_table = insert_table(&pool, classroom.id, 1, 2, 2, 0, 0).await;
-        let student_a = insert_student(&pool, user.id, 1, "Alice").await;
-        let student_b = insert_student(&pool, user.id, 2, "Bob").await;
+        let student_a = insert_student(&pool, &user_id, 1, "Alice").await;
+        let student_b = insert_student(&pool, &user_id, 2, "Bob").await;
         insert_seat(&pool, second_table.id, Some(student_b), 0).await;
         insert_seat(&pool, first_table.id, Some(student_a), 0).await;
 
@@ -990,7 +964,7 @@ mod tests {
             .oneshot(authenticated_request(
                 "GET",
                 &format!("/api/v1/classrooms/{}/seating-chart", classroom.id),
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -1011,15 +985,14 @@ mod tests {
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
-        let classroom = insert_classroom(&pool, user.id, "Math 2", 3).await;
+        let user_id = test_user_id();
+        let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
 
         let response = app
             .oneshot(authenticated_request(
                 "GET",
                 &format!("/api/v1/classrooms/{}/seating-chart", classroom.id),
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -1038,14 +1011,13 @@ mod tests {
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (_user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        let user_id = test_user_id();
 
         let response = app
             .oneshot(authenticated_request(
                 "GET",
                 &format!("/api/v1/classrooms/{}/seating-chart", Uuid::new_v4()),
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -1059,9 +1031,8 @@ mod tests {
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
-        let classroom = insert_classroom(&pool, user.id, "Math 2", 3).await;
+        let user_id = test_user_id();
+        let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
 
         let body = json!({
             "keep_existing_tables": false,
@@ -1079,7 +1050,7 @@ mod tests {
                     classroom.id
                 ),
                 body,
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -1096,8 +1067,7 @@ mod tests {
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (_user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        let user_id = test_user_id();
 
         let body = json!({
             "keep_existing_tables": false,
@@ -1115,7 +1085,7 @@ mod tests {
                     Uuid::new_v4()
                 ),
                 body,
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -1129,14 +1099,13 @@ mod tests {
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
-        let classroom = insert_classroom(&pool, user.id, "Math 2", 3).await;
-        let other_classroom = insert_classroom(&pool, user.id, "Science 1", 4).await;
+        let user_id = test_user_id();
+        let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
+        let other_classroom = insert_classroom(&pool, &user_id, "Science 1", 4).await;
         let in_classroom =
-            insert_student_in_classroom(&pool, user.id, classroom.id, 1, "Alice").await;
-        insert_student_in_classroom(&pool, user.id, other_classroom.id, 2, "Bob").await;
-        insert_student(&pool, user.id, 3, "Unassigned").await;
+            insert_student_in_classroom(&pool, &user_id, classroom.id, 1, "Alice").await;
+        insert_student_in_classroom(&pool, &user_id, other_classroom.id, 2, "Bob").await;
+        insert_student(&pool, &user_id, 3, "Unassigned").await;
 
         let body = json!({
             "keep_existing_tables": false,
@@ -1154,7 +1123,7 @@ mod tests {
                     classroom.id
                 ),
                 body,
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -1178,12 +1147,11 @@ mod tests {
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
-        let classroom = insert_classroom(&pool, user.id, "Math 2", 3).await;
+        let user_id = test_user_id();
+        let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
         let table = insert_table(&pool, classroom.id, 0, 2, 2, 40, 40).await;
         let student_id =
-            insert_student_in_classroom(&pool, user.id, classroom.id, 1, "Alice").await;
+            insert_student_in_classroom(&pool, &user_id, classroom.id, 1, "Alice").await;
         insert_seat(&pool, table.id, Some(student_id), 0).await;
 
         let body = json!({
@@ -1204,7 +1172,7 @@ mod tests {
                     classroom.id
                 ),
                 body,
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -1233,11 +1201,10 @@ mod tests {
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
-        let classroom = insert_classroom(&pool, user.id, "Math 2", 3).await;
+        let user_id = test_user_id();
+        let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
         for i in 0..8 {
-            insert_student_in_classroom(&pool, user.id, classroom.id, i, "Student").await;
+            insert_student_in_classroom(&pool, &user_id, classroom.id, i, "Student").await;
         }
 
         // A boundary that only fits one 2x2 table, but 8 students need two.
@@ -1257,7 +1224,7 @@ mod tests {
                     classroom.id
                 ),
                 body,
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -1274,11 +1241,10 @@ mod tests {
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
-        let classroom = insert_classroom(&pool, user.id, "Math 2", 3).await;
+        let user_id = test_user_id();
+        let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
         for i in 0..16 {
-            insert_student_in_classroom(&pool, user.id, classroom.id, i, "Student").await;
+            insert_student_in_classroom(&pool, &user_id, classroom.id, i, "Student").await;
         }
 
         // Boundary just big enough for a 2x2 grid of 2x2 tables (4 tables).
@@ -1298,7 +1264,7 @@ mod tests {
                     classroom.id
                 ),
                 body,
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -1339,8 +1305,7 @@ mod tests {
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (_user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        let user_id = test_user_id();
         let classroom_id = Uuid::new_v4();
         let student_a = Uuid::new_v4();
         let student_b = Uuid::new_v4();
@@ -1356,7 +1321,7 @@ mod tests {
                 "POST",
                 &format!("/api/v1/classrooms/{classroom_id}/cold-call"),
                 body,
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -1384,8 +1349,7 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn cold_call_empty_students_returns_400(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (_user, cookie) =
-            insert_authenticated_user(app.clone(), &pool, "test@example.com").await;
+        let user_id = test_user_id();
         let classroom_id = Uuid::new_v4();
 
         let body = json!({ "students": [] });
@@ -1394,7 +1358,7 @@ mod tests {
                 "POST",
                 &format!("/api/v1/classrooms/{classroom_id}/cold-call"),
                 body,
-                &cookie,
+                &user_id,
             ))
             .await
             .unwrap();
@@ -1463,18 +1427,16 @@ mod tests {
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (owner, _owner_cookie) =
-            insert_authenticated_user(app.clone(), &pool, "owner@example.com").await;
-        let (_other, other_cookie) =
-            insert_authenticated_user(app.clone(), &pool, "other@example.com").await;
-        let classroom = insert_classroom(&pool, owner.id, "Math 2", 3).await;
+        let owner_id = test_user_id();
+        let other_id = test_user_id();
+        let classroom = insert_classroom(&pool, &owner_id, "Math 2", 3).await;
 
         let get_response = app
             .clone()
             .oneshot(authenticated_request(
                 "GET",
                 &format!("/api/v1/classrooms/{}", classroom.id),
-                &other_cookie,
+                &other_id,
             ))
             .await
             .unwrap();
@@ -1486,7 +1448,7 @@ mod tests {
                 "PATCH",
                 &format!("/api/v1/classrooms/{}", classroom.id),
                 json!({"subject": "Hijacked"}),
-                &other_cookie,
+                &other_id,
             ))
             .await
             .unwrap();
@@ -1496,7 +1458,7 @@ mod tests {
             .oneshot(authenticated_request(
                 "DELETE",
                 &format!("/api/v1/classrooms/{}", classroom.id),
-                &other_cookie,
+                &other_id,
             ))
             .await
             .unwrap();
@@ -1512,18 +1474,16 @@ mod tests {
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (user_a, cookie_a) =
-            insert_authenticated_user(app.clone(), &pool, "usera@example.com").await;
-        let (user_b, _cookie_b) =
-            insert_authenticated_user(app.clone(), &pool, "userb@example.com").await;
-        let classroom_a = insert_classroom(&pool, user_a.id, "Math 2", 3).await;
-        insert_classroom(&pool, user_b.id, "Science 1", 4).await;
+        let user_a_id = test_user_id();
+        let user_b_id = test_user_id();
+        let classroom_a = insert_classroom(&pool, &user_a_id, "Math 2", 3).await;
+        insert_classroom(&pool, &user_b_id, "Science 1", 4).await;
 
         let response = app
             .oneshot(authenticated_request(
                 "GET",
                 "/api/v1/classrooms",
-                &cookie_a,
+                &user_a_id,
             ))
             .await
             .unwrap();
@@ -1540,18 +1500,16 @@ mod tests {
     #[sqlx::test(migrations = "../migrations")]
     async fn cross_user_seating_chart_returns_404(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
-        let (owner, _owner_cookie) =
-            insert_authenticated_user(app.clone(), &pool, "owner@example.com").await;
-        let (_other, other_cookie) =
-            insert_authenticated_user(app.clone(), &pool, "other@example.com").await;
-        let classroom = insert_classroom(&pool, owner.id, "Math 2", 3).await;
+        let owner_id = test_user_id();
+        let other_id = test_user_id();
+        let classroom = insert_classroom(&pool, &owner_id, "Math 2", 3).await;
 
         let get_response = app
             .clone()
             .oneshot(authenticated_request(
                 "GET",
                 &format!("/api/v1/classrooms/{}/seating-chart", classroom.id),
-                &other_cookie,
+                &other_id,
             ))
             .await
             .unwrap();
@@ -1563,7 +1521,7 @@ mod tests {
                 "PUT",
                 &format!("/api/v1/classrooms/{}/seating-chart", classroom.id),
                 json!({"boundary_width": 1080, "boundary_height": 820, "tables": []}),
-                &other_cookie,
+                &other_id,
             ))
             .await
             .unwrap();
@@ -1584,7 +1542,7 @@ mod tests {
                     "boundary_width": 1080,
                     "boundary_height": 820
                 }),
-                &other_cookie,
+                &other_id,
             ))
             .await
             .unwrap();

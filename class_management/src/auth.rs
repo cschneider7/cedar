@@ -1,107 +1,40 @@
-use std::sync::LazyLock;
+use axum::{
+    extract::{Extension, FromRequestParts},
+    http::{StatusCode, request::Parts},
+};
+use clerk_rs::{
+    ClerkConfiguration,
+    clerk::Clerk,
+    validators::{authorizer::ClerkJwt, axum::ClerkLayer, jwks::MemoryCacheJwksProvider},
+};
 
-use axum_login::AuthnBackend;
-use chrono::Utc;
-use sqlx::PgPool;
-use uuid::Uuid;
-
-use crate::model::UserModel;
-
-const MAX_FAILED_ATTEMPTS: i16 = 5;
-const LOCKOUT_MINUTES: i64 = 10;
-
-/// Credentials submitted to `/api/v1/auth/login`.
-#[derive(Debug, Clone)]
-pub struct Credentials {
-    pub email: String,
-    pub password: String,
+/// Builds the tower `Layer` that verifies every request's `Authorization:
+/// Bearer <token>` against Clerk's JWKS and inserts a `ClerkJwt` extension on
+/// success. `routes: None` protects every route the layer is applied to —
+/// there are no public backend-owned routes left now that auth lives in
+/// Clerk. `validate_session_cookie: false` keeps this strictly Bearer-token
+/// based (no `__session` cookie fallback), since the frontend and backend
+/// live on different origins.
+pub fn clerk_layer(secret_key: &str) -> ClerkLayer<MemoryCacheJwksProvider> {
+    let config = ClerkConfiguration::new(None, None, Some(secret_key.to_string()), None);
+    let jwks_provider = MemoryCacheJwksProvider::new(Clerk::new(config));
+    ClerkLayer::new(jwks_provider, None, false)
 }
 
-/// `AuthnBackend::Error` — kept small since `authenticate`'s `Result` is the
-/// only place lockout is distinguishable from "wrong password" (`Ok(None)`).
-#[derive(Debug, thiserror::Error)]
-pub enum AuthError {
-    #[error("account is locked for {retry_after_secs}s")]
-    LockedOut { retry_after_secs: i64 },
-    #[error(transparent)]
-    Sqlx(#[from] sqlx::Error),
-}
+/// Extracts the Clerk user id (`sub` claim) that `ClerkLayer` verified and
+/// attached to the request as a `ClerkJwt` extension.
+pub struct CurrentUserId(pub String);
 
-#[derive(Clone)]
-pub struct Backend {
-    pub db: PgPool,
-}
+impl<S> FromRequestParts<S> for CurrentUserId
+where
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, &'static str);
 
-/// Dummy password used in place of a real user's hash when the email isn't found
-static DUMMY_PASSWORD_HASH: LazyLock<String> =
-    LazyLock::new(|| password_auth::generate_hash("dummy-password-for-timing-safety"));
-
-impl AuthnBackend for Backend {
-    type User = UserModel;
-    type Credentials = Credentials;
-    type Error = AuthError;
-
-    async fn authenticate(&self, creds: Credentials) -> Result<Option<UserModel>, AuthError> {
-        let email = creds.email.to_lowercase();
-        let user = sqlx::query_as!(UserModel, r#"SELECT * FROM users WHERE email = $1"#, email)
-            .fetch_optional(&self.db)
-            .await?;
-
-        if let Some(ref user) = user
-            && let Some(locked_until) = user.locked_until
-            && locked_until > Utc::now()
-        {
-            let retry_after_secs = (locked_until - Utc::now()).num_seconds().max(0);
-            return Err(AuthError::LockedOut { retry_after_secs });
-        }
-
-        let password_hash = user
-            .as_ref()
-            .map(|u| u.password_hash.as_str())
-            .unwrap_or(DUMMY_PASSWORD_HASH.as_str());
-        let verified = password_auth::verify_password(&creds.password, password_hash).is_ok();
-
-        let Some(user) = user else {
-            return Ok(None);
-        };
-
-        if !verified {
-            let attempts = user.failed_login_attempts + 1;
-            let locked_until = if attempts >= MAX_FAILED_ATTEMPTS {
-                Some(Utc::now() + chrono::Duration::minutes(LOCKOUT_MINUTES))
-            } else {
-                None
-            };
-            sqlx::query!(
-                r#"UPDATE users SET failed_login_attempts = $1, locked_until = $2 WHERE id = $3"#,
-                attempts,
-                locked_until,
-                user.id
-            )
-            .execute(&self.db)
-            .await?;
-
-            if let Some(locked_until) = locked_until {
-                let retry_after_secs = (locked_until - Utc::now()).num_seconds().max(0);
-                return Err(AuthError::LockedOut { retry_after_secs });
-            }
-            return Ok(None);
-        }
-
-        sqlx::query!(
-            r#"UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = $1"#,
-            user.id
-        )
-        .execute(&self.db)
-        .await?;
-
-        Ok(Some(user))
-    }
-
-    async fn get_user(&self, user_id: &Uuid) -> Result<Option<UserModel>, AuthError> {
-        let user = sqlx::query_as!(UserModel, r#"SELECT * FROM users WHERE id = $1"#, user_id)
-            .fetch_optional(&self.db)
-            .await?;
-        Ok(user)
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let Extension(jwt) = Extension::<ClerkJwt>::from_request_parts(parts, state)
+            .await
+            .map_err(|_| (StatusCode::UNAUTHORIZED, "Not authenticated"))?;
+        Ok(CurrentUserId(jwt.sub))
     }
 }
