@@ -17,7 +17,7 @@
       {
         "ordinal": 1,
         "name": "user_id",
-        "type_info": "Uuid",
+        "type_info": "Text",
         "origin": {
           "Table": {
             "table": "students",
@@ -73,7 +73,7 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Uuid"
+        "Text"
       ]
     },
     "nullable": [

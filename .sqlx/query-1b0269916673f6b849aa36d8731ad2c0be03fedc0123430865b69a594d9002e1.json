@@ -17,7 +17,7 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid",
+        "Text",
         "Uuid",
         "Int4",
         "Text"
