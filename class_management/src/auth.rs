@@ -1,12 +1,11 @@
-use axum::{
-    extract::{Extension, FromRequestParts},
-    http::{StatusCode, request::Parts},
-};
+use axum::extract::{Extension, FromRequestParts};
 use clerk_rs::{
     ClerkConfiguration,
     clerk::Clerk,
     validators::{authorizer::ClerkJwt, axum::ClerkLayer, jwks::MemoryCacheJwksProvider},
 };
+
+use crate::error::AppError;
 
 /// Builds the tower `Layer` that verifies every request's `Authorization:
 /// Bearer <token>` against Clerk's JWKS and inserts a `ClerkJwt` extension on
@@ -29,12 +28,15 @@ impl<S> FromRequestParts<S> for CurrentUserId
 where
     S: Send + Sync,
 {
-    type Rejection = (StatusCode, &'static str);
+    type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        state: &S,
+    ) -> Result<Self, Self::Rejection> {
         let Extension(jwt) = Extension::<ClerkJwt>::from_request_parts(parts, state)
             .await
-            .map_err(|_| (StatusCode::UNAUTHORIZED, "Not authenticated"))?;
+            .map_err(|_| AppError::Unauthorized("Not authenticated".to_string()))?;
         Ok(CurrentUserId(jwt.sub))
     }
 }

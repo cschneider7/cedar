@@ -7,12 +7,13 @@ import { redirect } from "react-router"
  * forwarding to the backend. */
 export async function requireToken(args: LoaderFunctionArgs): Promise<string> {
   const { isAuthenticated, getToken } = await getAuth(args)
-  if (!isAuthenticated) {
+  const token = isAuthenticated ? await getToken() : null
+  if (!token) {
     const url = new URL(args.request.url)
     const path = url.pathname + url.search
     throw redirect(`/?redirectTo=${encodeURIComponent(path)}`)
   }
-  return (await getToken())!
+  return token
 }
 
 /** Action-only helper: no redirect, just best-effort token forwarding —

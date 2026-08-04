@@ -15,6 +15,7 @@ pub enum AppError {
     NotFound(String),
     Internal(String),
     BadRequest(String),
+    Unauthorized(String),
 }
 
 impl IntoResponse for AppError {
@@ -48,6 +49,9 @@ impl IntoResponse for AppError {
             AppError::BadRequest(message) => {
                 (StatusCode::BAD_REQUEST, message.clone(), None, None, false)
             }
+            AppError::Unauthorized(message) => {
+                (StatusCode::UNAUTHORIZED, message.clone(), None, None, false)
+            }
         };
 
         let mut response = (
@@ -80,7 +84,8 @@ impl AppError {
         match self {
             AppError::NotFound(detail)
             | AppError::Internal(detail)
-            | AppError::BadRequest(detail) => detail,
+            | AppError::BadRequest(detail)
+            | AppError::Unauthorized(detail) => detail,
         }
     }
 }
