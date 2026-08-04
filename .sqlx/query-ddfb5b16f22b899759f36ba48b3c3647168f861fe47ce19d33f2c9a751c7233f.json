@@ -1,0 +1,100 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT * FROM tables WHERE classroom_id = $1 ORDER BY table_number",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tables",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "classroom_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tables",
+            "name": "classroom_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "table_number",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "tables",
+            "name": "table_number"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "rows",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "tables",
+            "name": "rows"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "cols",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "tables",
+            "name": "cols"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "x_pos",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "tables",
+            "name": "x_pos"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "y_pos",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "tables",
+            "name": "y_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ddfb5b16f22b899759f36ba48b3c3647168f861fe47ce19d33f2c9a751c7233f"
+}

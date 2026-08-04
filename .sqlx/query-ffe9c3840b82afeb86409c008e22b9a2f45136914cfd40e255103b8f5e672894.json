@@ -1,0 +1,66 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO seats (table_id, student_id, seat_number)\n            VALUES ($1, $2, $3)\n            RETURNING *",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "seats",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "table_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "seats",
+            "name": "table_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "student_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "seats",
+            "name": "student_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "seat_number",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "seats",
+            "name": "seat_number"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int2"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "ffe9c3840b82afeb86409c008e22b9a2f45136914cfd40e255103b8f5e672894"
+}

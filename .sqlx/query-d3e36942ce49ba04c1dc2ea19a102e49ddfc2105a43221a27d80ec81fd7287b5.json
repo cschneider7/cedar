@@ -1,0 +1,101 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM classrooms WHERE id = $1 AND user_id = $2 RETURNING *",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "subject",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "subject"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "period",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "period"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "boundary_width",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "boundary_width"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "boundary_height",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "boundary_height"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "created_time",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "created_time"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "d3e36942ce49ba04c1dc2ea19a102e49ddfc2105a43221a27d80ec81fd7287b5"
+}
