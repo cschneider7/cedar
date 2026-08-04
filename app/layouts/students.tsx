@@ -2,7 +2,7 @@ import type { Route } from "./+types/students"
 
 import { Outlet } from "react-router"
 import { RouteErrorCard } from "~/components/route-error-card"
-import { requireUser } from "~/lib/auth"
+import { requireToken } from "~/lib/auth"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 
 export const handle: BreadcrumbHandle = {
@@ -17,8 +17,8 @@ export function meta({}: Route.MetaArgs) {
   ]
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
-  await requireUser(request)
+export async function loader(args: Route.LoaderArgs) {
+  await requireToken(args)
 }
 
 export default function Layout() {

@@ -15,17 +15,7 @@ pub enum AppError {
     NotFound(String),
     Internal(String),
     BadRequest(String),
-    Conflict(String),
     Unauthorized(String),
-    Forbidden {
-        message: String,
-        code: String,
-    },
-    TooManyRequests {
-        message: String,
-        code: String,
-        retry_after_secs: i64,
-    },
 }
 
 impl IntoResponse for AppError {
@@ -59,30 +49,9 @@ impl IntoResponse for AppError {
             AppError::BadRequest(message) => {
                 (StatusCode::BAD_REQUEST, message.clone(), None, None, false)
             }
-            AppError::Conflict(message) => {
-                (StatusCode::CONFLICT, message.clone(), None, None, false)
-            }
             AppError::Unauthorized(message) => {
                 (StatusCode::UNAUTHORIZED, message.clone(), None, None, false)
             }
-            AppError::Forbidden { message, code } => (
-                StatusCode::FORBIDDEN,
-                message.clone(),
-                Some(code.clone()),
-                None,
-                false,
-            ),
-            AppError::TooManyRequests {
-                message,
-                code,
-                retry_after_secs,
-            } => (
-                StatusCode::TOO_MANY_REQUESTS,
-                message.clone(),
-                Some(code.clone()),
-                Some(*retry_after_secs),
-                false,
-            ),
         };
 
         let mut response = (
@@ -116,10 +85,7 @@ impl AppError {
             AppError::NotFound(detail)
             | AppError::Internal(detail)
             | AppError::BadRequest(detail)
-            | AppError::Conflict(detail)
             | AppError::Unauthorized(detail) => detail,
-            AppError::Forbidden { message, .. } => message,
-            AppError::TooManyRequests { message, .. } => message,
         }
     }
 }

@@ -82,7 +82,7 @@ import {
   type StudentViewMode,
 } from "~/hooks/use-student-view-mode"
 import { getClassrooms, getStudentsPage } from "~/lib/api"
-import { cookieFromRequest, requireUser } from "~/lib/auth"
+import { requireToken } from "~/lib/auth"
 import type { Classroom, Student } from "~/lib/schemas"
 import {
   getStudentColumns,
@@ -91,9 +91,9 @@ import {
 } from "./student-columns"
 import type { Route } from "./+types/student-home"
 
-export async function loader({ request }: Route.LoaderArgs) {
-  await requireUser(request)
-  const cookie = cookieFromRequest(request)
+export async function loader(args: Route.LoaderArgs) {
+  const token = await requireToken(args)
+  const { request } = args
   const url = new URL(request.url)
   const page = Math.max(1, Number(url.searchParams.get("page")) || 1)
   const q = url.searchParams.get("q") ?? ""
@@ -111,9 +111,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   const [studentsPage, classrooms] = await Promise.all([
     getStudentsPage(
       { page, pageSize, q: q || undefined, sortBy, sortDir },
-      cookie
+      token
     ),
-    getClassrooms(cookie),
+    getClassrooms(token),
   ])
   return { studentsPage, page, q, viewMode, classrooms, sortBy, sortDir }
 }

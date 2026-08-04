@@ -6,7 +6,7 @@ import {
   getStudents,
   updateClassroomSeatingChart,
 } from "~/lib/api"
-import { cookieFromRequest, requireUser } from "~/lib/auth"
+import { requireToken, tokenFromRequest } from "~/lib/auth"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 import type { SeatingChart } from "~/lib/schemas"
 import type { Route } from "./+types/classroom"
@@ -25,26 +25,26 @@ export function meta({}: Route.MetaArgs) {
   ]
 }
 
-export async function loader({ params, request }: Route.ClientLoaderArgs) {
-  await requireUser(request)
-  const cookie = cookieFromRequest(request)
+export async function loader(args: Route.LoaderArgs) {
+  const token = await requireToken(args)
+  const { params } = args
   const [classroom, seatingChart, allStudents] = await Promise.all([
-    getClassroom(params.classroomId, cookie),
-    getClassroomSeatingChart(params.classroomId, cookie),
-    getStudents(cookie),
+    getClassroom(params.classroomId, token),
+    getClassroomSeatingChart(params.classroomId, token),
+    getStudents(token),
   ])
   const students = allStudents.filter((s) => s.classroom_id === classroom.id)
   return { classroom, students, seatingChart }
 }
 
-export async function action({ params, request }: Route.ActionArgs) {
-  const chart: SeatingChart = await request.json()
+export async function action(args: Route.ActionArgs) {
+  const chart: SeatingChart = await args.request.json()
 
   try {
     await updateClassroomSeatingChart(
-      params.classroomId,
+      args.params.classroomId,
       chart,
-      cookieFromRequest(request)
+      await tokenFromRequest(args)
     )
   } catch (error) {
     return { ok: false, error: (error as Error).message }

@@ -36,14 +36,4 @@ export default [
       ]),
     ]),
   ]),
-
-  // Auth routes render as standalone pages, without the app-shell's topbar/sidebar.
-  layout("layouts/auth.tsx", [
-    route("login", "routes/auth/login.tsx"),
-    route("signup", "routes/auth/signup.tsx"),
-    route("verify-email", "routes/auth/verify-email.tsx"),
-    route("forgot-password", "routes/auth/forgot-password.tsx"),
-    route("reset-password", "routes/auth/reset-password.tsx"),
-  ]),
-  route("logout", "routes/auth/logout.tsx"),
 ] satisfies RouteConfig

@@ -68,19 +68,16 @@ describe("classroom loader", () => {
     ]
 
     vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        jsonResponse({ user: { id: "u1", email: "a@b.com" } })
-      )
       .mockResolvedValueOnce(jsonResponse(classroom))
       .mockResolvedValueOnce(jsonResponse(seatingChart))
       .mockResolvedValueOnce(jsonResponse(students))
 
     const result = await loader(loaderArgs())
 
-    expect(fetch).toHaveBeenCalledTimes(4)
-    const [classroomUrl] = vi.mocked(fetch).mock.calls[1]
-    const [seatingChartUrl] = vi.mocked(fetch).mock.calls[2]
-    const [studentsUrl] = vi.mocked(fetch).mock.calls[3]
+    expect(fetch).toHaveBeenCalledTimes(3)
+    const [classroomUrl] = vi.mocked(fetch).mock.calls[0]
+    const [seatingChartUrl] = vi.mocked(fetch).mock.calls[1]
+    const [studentsUrl] = vi.mocked(fetch).mock.calls[2]
     expect(classroomUrl).toBe(
       `http://localhost:3000/api/v1/classrooms/${classroomId}`
     )

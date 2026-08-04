@@ -1,9 +1,9 @@
-import { Plus, UserIcon } from "lucide-react"
+import { Show, SignInButton, UserButton } from "@clerk/react-router"
+import { Plus } from "lucide-react"
 import { Fragment, useState } from "react"
-import { Link, useMatches, useRouteLoaderData, useSubmit } from "react-router"
+import { Link, useMatches } from "react-router"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
 import { StudentFormDialog } from "~/components/student-form-dialog"
-import { Avatar, AvatarFallback } from "~/components/ui/avatar"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -17,14 +17,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"
 import { Input } from "~/components/ui/input"
 import { Separator } from "~/components/ui/separator"
 import { SidebarTrigger } from "~/components/ui/sidebar"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
-import type { loader as rootLoader } from "~/root"
 
 function Breadcrumbs() {
   const matches = useMatches()
@@ -109,48 +107,19 @@ function CreateDropdown() {
   )
 }
 
-function AvatarMenu() {
-  const submit = useSubmit()
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button variant="ghost" size="icon" className="rounded-full">
-            <Avatar>
-              <AvatarFallback>
-                <UserIcon className="size-4" />
-              </AvatarFallback>
-            </Avatar>
-          </Button>
-        }
-      />
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem disabled>Settings</DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          variant="destructive"
-          onClick={() => submit(null, { method: "post", action: "/logout" })}
-        >
-          Log Out
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
 function AuthControl() {
-  const rootData = useRouteLoaderData<typeof rootLoader>("root")
-
-  if (!rootData?.user) {
-    return (
-      <Button variant="default" render={<Link to="/login" />}>
-        Sign in
-      </Button>
-    )
-  }
-
-  return <AvatarMenu />
+  return (
+    <>
+      <Show when="signed-out">
+        <SignInButton mode="modal">
+          <Button variant="default">Sign in</Button>
+        </SignInButton>
+      </Show>
+      <Show when="signed-in">
+        <UserButton />
+      </Show>
+    </>
+  )
 }
 
 export function AppTopbar() {

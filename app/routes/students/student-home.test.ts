@@ -21,15 +21,12 @@ const noClassrooms: Classroom[] = []
 describe("student-home loader", () => {
   it("defaults to page 1, no q, grid page_size (24) with no search params", async () => {
     vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        jsonResponse({ user: { id: "u1", email: "a@b.com" } })
-      )
       .mockResolvedValueOnce(jsonResponse(emptyPage))
       .mockResolvedValueOnce(jsonResponse(noClassrooms))
 
     await loader(makeArgs("http://test/students"))
 
-    const [url] = vi.mocked(fetch).mock.calls[1]
+    const [url] = vi.mocked(fetch).mock.calls[0]
     const params = new URL(String(url)).searchParams
     expect(params.get("page")).toBe("1")
     expect(params.get("page_size")).toBe("24")
@@ -38,15 +35,12 @@ describe("student-home loader", () => {
 
   it("passes page and q through from URL search params", async () => {
     vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        jsonResponse({ user: { id: "u1", email: "a@b.com" } })
-      )
       .mockResolvedValueOnce(jsonResponse(emptyPage))
       .mockResolvedValueOnce(jsonResponse(noClassrooms))
 
     await loader(makeArgs("http://test/students?page=2&q=ana"))
 
-    const [url] = vi.mocked(fetch).mock.calls[1]
+    const [url] = vi.mocked(fetch).mock.calls[0]
     const params = new URL(String(url)).searchParams
     expect(params.get("page")).toBe("2")
     expect(params.get("q")).toBe("ana")
@@ -54,43 +48,34 @@ describe("student-home loader", () => {
 
   it("uses list page_size (20) when view=list", async () => {
     vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        jsonResponse({ user: { id: "u1", email: "a@b.com" } })
-      )
       .mockResolvedValueOnce(jsonResponse({ ...emptyPage, page_size: 20 }))
       .mockResolvedValueOnce(jsonResponse(noClassrooms))
 
     await loader(makeArgs("http://test/students?view=list"))
 
-    const [url] = vi.mocked(fetch).mock.calls[1]
+    const [url] = vi.mocked(fetch).mock.calls[0]
     expect(new URL(String(url)).searchParams.get("page_size")).toBe("20")
   })
 
   it("clamps a non-numeric or negative page to 1", async () => {
     vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        jsonResponse({ user: { id: "u1", email: "a@b.com" } })
-      )
       .mockResolvedValueOnce(jsonResponse(emptyPage))
       .mockResolvedValueOnce(jsonResponse(noClassrooms))
 
     await loader(makeArgs("http://test/students?page=-5"))
 
-    const [url] = vi.mocked(fetch).mock.calls[1]
+    const [url] = vi.mocked(fetch).mock.calls[0]
     expect(new URL(String(url)).searchParams.get("page")).toBe("1")
   })
 
   it("defaults sort_by to name and sort_dir to asc with no sort params", async () => {
     vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        jsonResponse({ user: { id: "u1", email: "a@b.com" } })
-      )
       .mockResolvedValueOnce(jsonResponse(emptyPage))
       .mockResolvedValueOnce(jsonResponse(noClassrooms))
 
     await loader(makeArgs("http://test/students"))
 
-    const [url] = vi.mocked(fetch).mock.calls[1]
+    const [url] = vi.mocked(fetch).mock.calls[0]
     const params = new URL(String(url)).searchParams
     expect(params.get("sort_by")).toBe("name")
     expect(params.get("sort_dir")).toBe("asc")
@@ -98,9 +83,6 @@ describe("student-home loader", () => {
 
   it("passes sort_by/sort_dir through from URL search params", async () => {
     vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        jsonResponse({ user: { id: "u1", email: "a@b.com" } })
-      )
       .mockResolvedValueOnce(jsonResponse(emptyPage))
       .mockResolvedValueOnce(jsonResponse(noClassrooms))
 
@@ -108,7 +90,7 @@ describe("student-home loader", () => {
       makeArgs("http://test/students?sort_by=classroom&sort_dir=desc")
     )
 
-    const [url] = vi.mocked(fetch).mock.calls[1]
+    const [url] = vi.mocked(fetch).mock.calls[0]
     const params = new URL(String(url)).searchParams
     expect(params.get("sort_by")).toBe("classroom")
     expect(params.get("sort_dir")).toBe("desc")
@@ -116,15 +98,12 @@ describe("student-home loader", () => {
 
   it("falls back to name for an unrecognized sort_by value", async () => {
     vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        jsonResponse({ user: { id: "u1", email: "a@b.com" } })
-      )
       .mockResolvedValueOnce(jsonResponse(emptyPage))
       .mockResolvedValueOnce(jsonResponse(noClassrooms))
 
     await loader(makeArgs("http://test/students?sort_by=bogus"))
 
-    const [url] = vi.mocked(fetch).mock.calls[1]
+    const [url] = vi.mocked(fetch).mock.calls[0]
     expect(new URL(String(url)).searchParams.get("sort_by")).toBe("name")
   })
 
@@ -148,9 +127,6 @@ describe("student-home loader", () => {
       },
     ]
     vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        jsonResponse({ user: { id: "u1", email: "a@b.com" } })
-      )
       .mockResolvedValueOnce(jsonResponse(page))
       .mockResolvedValueOnce(jsonResponse(classrooms))
 

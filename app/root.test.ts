@@ -1,5 +1,6 @@
+import { getAuth } from "@clerk/react-router/server"
 import { describe, expect, it, vi } from "vitest"
-import type { Classroom, User } from "~/lib/schemas"
+import type { Classroom } from "~/lib/schemas"
 import { makeArgs, stubFetch } from "~/lib/test-utils"
 import { loader } from "./root"
 
@@ -10,8 +11,7 @@ function jsonResponse(data: unknown) {
 stubFetch()
 
 describe("root loader", () => {
-  it("returns the user and their classrooms when authenticated", async () => {
-    const user: User = { id: "user-1", email: "test@example.com" }
+  it("returns the user's classrooms when authenticated", async () => {
     const classrooms: Classroom[] = [
       {
         id: "classroom-1",
@@ -21,27 +21,25 @@ describe("root loader", () => {
         boundary_height: 820,
       },
     ]
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ user }))
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(classrooms))
 
     const result = await loader(makeArgs("http://localhost/"))
 
-    expect(fetch).toHaveBeenCalledTimes(2)
-    const [meUrl] = vi.mocked(fetch).mock.calls[0]
-    expect(meUrl).toBe("http://localhost:3000/api/v1/auth/me")
-    const [classroomsUrl] = vi.mocked(fetch).mock.calls[1]
+    expect(fetch).toHaveBeenCalledTimes(1)
+    const [classroomsUrl] = vi.mocked(fetch).mock.calls[0]
     expect(classroomsUrl).toBe("http://localhost:3000/api/v1/classrooms")
-    expect(result).toEqual({ user, classrooms })
+    expect(result).toEqual({ classrooms })
   })
 
   it("returns no classrooms when unauthenticated", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(
-      new Response("Not authenticated", { status: 401 })
-    )
+    vi.mocked(getAuth).mockResolvedValueOnce({
+      isAuthenticated: false,
+      getToken: async () => null,
+    } as Awaited<ReturnType<typeof getAuth>>)
 
     const result = await loader(makeArgs("http://localhost/"))
 
-    expect(fetch).toHaveBeenCalledTimes(1)
-    expect(result).toEqual({ user: null, classrooms: [] })
+    expect(fetch).not.toHaveBeenCalled()
+    expect(result).toEqual({ classrooms: [] })
   })
 })

@@ -34,7 +34,7 @@ import { StudentFormDialog } from "~/components/student-form-dialog"
 import { Spinner } from "~/components/ui/spinner"
 import type { MutationResult } from "~/lib/action-results"
 import { getClassroom, getStudent } from "~/lib/api"
-import { cookieFromRequest, requireUser } from "~/lib/auth"
+import { requireToken } from "~/lib/auth"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 import type { Route } from "./+types/student"
 
@@ -45,12 +45,12 @@ export const handle: BreadcrumbHandle = {
     data ? `/students/${data.student.id}` : "/students",
 }
 
-export async function loader({ params, request }: Route.ClientLoaderArgs) {
-  await requireUser(request)
-  const cookie = cookieFromRequest(request)
-  const student = await getStudent(params.studentId, cookie)
+export async function loader(args: Route.LoaderArgs) {
+  const token = await requireToken(args)
+  const { params } = args
+  const student = await getStudent(params.studentId, token)
   const classroom = student.classroom_id
-    ? await getClassroom(student.classroom_id, cookie)
+    ? await getClassroom(student.classroom_id, token)
     : null
 
   return {

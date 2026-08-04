@@ -1,30 +1,7 @@
--- Users
-CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    email_verified BOOLEAN NOT NULL DEFAULT false,
-    failed_login_attempts SMALLINT NOT NULL DEFAULT 0,
-    locked_until TIMESTAMPTZ,
-    last_verification_email_sent_at TIMESTAMPTZ,
-    created_time TIMESTAMPTZ DEFAULT now()
-);
-
--- Verification tokens (email verification + password reset)
-CREATE TABLE IF NOT EXISTS verification_tokens (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users ON DELETE CASCADE,
-    token_hash TEXT NOT NULL UNIQUE,
-    purpose TEXT NOT NULL CHECK (purpose IN ('email_verification', 'password_reset')),
-    expires_at TIMESTAMPTZ NOT NULL,
-    used_at TIMESTAMPTZ,
-    created_time TIMESTAMPTZ DEFAULT now()
-);
-
 -- Classrooms
 CREATE TABLE IF NOT EXISTS classrooms (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
     subject TEXT NOT NULL,
     period SMALLINT NOT NULL,
     boundary_width INTEGER NOT NULL DEFAULT 1080,
@@ -35,7 +12,7 @@ CREATE TABLE IF NOT EXISTS classrooms (
 -- Students
 CREATE TABLE IF NOT EXISTS students (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
     classroom_id UUID REFERENCES classrooms ON DELETE SET NULL,
     student_id INTEGER NOT NULL,
     name TEXT NOT NULL,

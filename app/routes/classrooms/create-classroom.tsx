@@ -1,13 +1,13 @@
 import type { MutationResult } from "~/lib/action-results"
 import { createClassroom } from "~/lib/api"
-import { cookieFromRequest } from "~/lib/auth"
+import { tokenFromRequest } from "~/lib/auth"
 import { CreateClassroomSchema } from "~/lib/schemas"
 import type { Route } from "./+types/create-classroom"
 
-export async function action({
-  request,
-}: Route.ActionArgs): Promise<MutationResult> {
-  const rawData = await request.json()
+export async function action(
+  args: Route.ActionArgs
+): Promise<MutationResult> {
+  const rawData = await args.request.json()
   const result = CreateClassroomSchema.safeParse(rawData)
 
   if (!result.success) {
@@ -17,7 +17,7 @@ export async function action({
   try {
     const classroom = await createClassroom(
       result.data,
-      cookieFromRequest(request)
+      await tokenFromRequest(args)
     )
     return { ok: true, id: classroom.id }
   } catch (error) {

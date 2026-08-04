@@ -1,22 +1,21 @@
 import { pickColdCallStudent } from "~/lib/api"
-import { cookieFromRequest } from "~/lib/auth"
+import { tokenFromRequest } from "~/lib/auth"
 import type { ColdCallPick } from "~/lib/schemas"
 import type { Route } from "./+types/cold-call"
 
 export type ColdCallActionResult =
   { ok: true; pick: ColdCallPick } | { ok: false; error: string }
 
-export async function action({
-  params,
-  request,
-}: Route.ActionArgs): Promise<ColdCallActionResult> {
-  const payload = await request.json()
+export async function action(
+  args: Route.ActionArgs
+): Promise<ColdCallActionResult> {
+  const payload = await args.request.json()
 
   try {
     const pick = await pickColdCallStudent(
-      params.classroomId,
+      args.params.classroomId,
       payload,
-      cookieFromRequest(request)
+      await tokenFromRequest(args)
     )
     return { ok: true, pick }
   } catch (error) {

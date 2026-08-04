@@ -6,17 +6,12 @@ import {
   ColdCallSchema,
   CreateClassroomSchema,
   CreateStudentSchema,
-  ForgotPasswordSchema,
-  LoginSchema,
   RandomizeSeatingChartOptionsSchema,
-  ResetPasswordSchema,
   SeatingChartSchema,
-  SignupSchema,
   StudentSchema,
   StudentsPageSchema,
   UpdateClassroomSchema,
   UpdateStudentSchema,
-  UserSchema,
   type BulkDeleteResult,
   type Classroom,
   type ColdCall,
@@ -25,8 +20,9 @@ import {
   type SeatingChart,
   type Student,
   type StudentsPage,
-  type User,
 } from "~/lib/schemas"
+
+const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api/v1"
 
 async function getErrorMessage(
   res: Response,
@@ -44,46 +40,21 @@ async function getErrorMessage(
   return text || fallback
 }
 
-/** Same as `getErrorMessage`, but also surfaces the backend's machine-readable
- * `code` (e.g. "unverified", "locked_out") when present, for callers that
- * need to branch on it rather than just display the message. */
-async function getErrorDetails(
-  res: Response,
-  fallback: string
-): Promise<{ message: string; code?: string }> {
-  const text = await res.text()
-  try {
-    const json = JSON.parse(text)
-    if (typeof json?.message === "string") {
-      return {
-        message: json.message,
-        code: typeof json?.code === "string" ? json.code : undefined,
-      }
-    }
-  } catch {
-    // Not JSON - fall through to using the raw text below.
-  }
-  return { message: text || fallback }
-}
-
-/** Server-side (loader/action) callers must forward the incoming request's
- * `Cookie` header explicitly — there's no ambient browser cookie jar during
- * SSR, so `credentials: "include"` alone only covers browser-originated calls. */
-function withCookie(cookie?: string): HeadersInit | undefined {
-  return cookie ? { Cookie: cookie } : undefined
+/** Attaches the Clerk session token as a bearer `Authorization` header.
+ * Both SSR (loader/action) and browser-originated calls go through this —
+ * there's no ambient credential (unlike a cookie jar), so every caller must
+ * pass its own token explicitly. */
+function withAuth(token?: string | null): HeadersInit | undefined {
+  return token ? { Authorization: `Bearer ${token}` } : undefined
 }
 
 export async function getStudent(
   studentId: string,
-  cookie?: string
+  token?: string | null
 ): Promise<Student> {
-  const res = await fetch(
-    `http://localhost:3000/api/v1/students/${studentId}`,
-    {
-      credentials: "include",
-      headers: withCookie(cookie),
-    }
-  )
+  const res = await fetch(`${API_URL}/students/${studentId}`, {
+    headers: withAuth(token),
+  })
   if (!res.ok) {
     throw new Response("Student not found", { status: 404 })
   }
@@ -92,10 +63,9 @@ export async function getStudent(
   return z.parse(StudentSchema, json.data)
 }
 
-export async function getStudents(cookie?: string): Promise<Student[]> {
-  const res = await fetch("http://localhost:3000/api/v1/students", {
-    credentials: "include",
-    headers: withCookie(cookie),
+export async function getStudents(token?: string | null): Promise<Student[]> {
+  const res = await fetch(`${API_URL}/students`, {
+    headers: withAuth(token),
   })
   if (!res.ok) {
     throw new Error(`Error getting list of students: ", ${res.status}`)
@@ -113,9 +83,9 @@ export async function getStudentsPage(
     sortBy?: "name" | "student_id" | "classroom"
     sortDir?: "asc" | "desc"
   },
-  cookie?: string
+  token?: string | null
 ): Promise<StudentsPage> {
-  const url = new URL("http://localhost:3000/api/v1/students")
+  const url = new URL(`${API_URL}/students`)
   url.searchParams.set("page", String(params.page))
   url.searchParams.set("page_size", String(params.pageSize))
   if (params.q) {
@@ -129,8 +99,7 @@ export async function getStudentsPage(
   }
 
   const res = await fetch(url, {
-    credentials: "include",
-    headers: withCookie(cookie),
+    headers: withAuth(token),
   })
   if (!res.ok) {
     throw new Error(
@@ -144,14 +113,13 @@ export async function getStudentsPage(
 
 export async function createStudent(
   studentInfo: z.infer<typeof CreateStudentSchema>,
-  cookie?: string
+  token?: string | null
 ): Promise<Student> {
-  const response = await fetch("http://localhost:3000/api/v1/students", {
+  const response = await fetch(`${API_URL}/students`, {
     method: "POST",
-    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...withCookie(cookie),
+      ...withAuth(token),
     },
     body: JSON.stringify(z.parse(CreateStudentSchema, studentInfo)),
   })
@@ -167,35 +135,30 @@ export async function createStudent(
 export async function updateStudent(
   studentId: string,
   updates: z.infer<typeof UpdateStudentSchema>,
-  cookie?: string
+  token?: string | null
 ) {
-  const response = await fetch(
-    `http://localhost:3000/api/v1/students/${studentId}`,
-    {
-      method: "PATCH",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        ...withCookie(cookie),
-      },
-      body: JSON.stringify(z.parse(UpdateStudentSchema, updates)),
-    }
-  )
+  const response = await fetch(`${API_URL}/students/${studentId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...withAuth(token),
+    },
+    body: JSON.stringify(z.parse(UpdateStudentSchema, updates)),
+  })
 
   if (!response.ok) {
     throw new Error(await getErrorMessage(response, "Error updating student"))
   }
 }
 
-export async function deleteStudent(studentId: string, cookie?: string) {
-  const response = await fetch(
-    `http://localhost:3000/api/v1/students/${studentId}`,
-    {
-      method: "DELETE",
-      credentials: "include",
-      headers: withCookie(cookie),
-    }
-  )
+export async function deleteStudent(
+  studentId: string,
+  token?: string | null
+) {
+  const response = await fetch(`${API_URL}/students/${studentId}`, {
+    method: "DELETE",
+    headers: withAuth(token),
+  })
 
   if (!response.ok) {
     throw new Error(await getErrorMessage(response, "Error deleting student"))
@@ -204,14 +167,13 @@ export async function deleteStudent(studentId: string, cookie?: string) {
 
 export async function bulkDeleteStudents(
   ids: string[],
-  cookie?: string
+  token?: string | null
 ): Promise<BulkDeleteResult> {
-  const response = await fetch("http://localhost:3000/api/v1/students", {
+  const response = await fetch(`${API_URL}/students`, {
     method: "DELETE",
-    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...withCookie(cookie),
+      ...withAuth(token),
     },
     body: JSON.stringify({ ids }),
   })
@@ -226,12 +188,11 @@ export async function bulkDeleteStudents(
 
 export async function getClassroom(
   classroomId: string,
-  cookie?: string
+  token?: string | null
 ): Promise<Classroom> {
-  const res = await fetch(
-    `http://localhost:3000/api/v1/classrooms/${classroomId}`,
-    { credentials: "include", headers: withCookie(cookie) }
-  )
+  const res = await fetch(`${API_URL}/classrooms/${classroomId}`, {
+    headers: withAuth(token),
+  })
   if (!res.ok) {
     throw new Response("Classroom not found", { status: 404 })
   }
@@ -240,10 +201,11 @@ export async function getClassroom(
   return z.parse(ClassroomSchema, json.data)
 }
 
-export async function getClassrooms(cookie?: string): Promise<Classroom[]> {
-  const res = await fetch("http://localhost:3000/api/v1/classrooms", {
-    credentials: "include",
-    headers: withCookie(cookie),
+export async function getClassrooms(
+  token?: string | null
+): Promise<Classroom[]> {
+  const res = await fetch(`${API_URL}/classrooms`, {
+    headers: withAuth(token),
   })
   if (!res.ok) {
     throw new Error(`Error getting list of classrooms: ", ${res.status}`)
@@ -255,14 +217,13 @@ export async function getClassrooms(cookie?: string): Promise<Classroom[]> {
 
 export async function createClassroom(
   classroomInfo: z.infer<typeof CreateClassroomSchema>,
-  cookie?: string
+  token?: string | null
 ): Promise<Classroom> {
-  const response = await fetch("http://localhost:3000/api/v1/classrooms", {
+  const response = await fetch(`${API_URL}/classrooms`, {
     method: "POST",
-    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...withCookie(cookie),
+      ...withAuth(token),
     },
     body: JSON.stringify(z.parse(CreateClassroomSchema, classroomInfo)),
   })
@@ -278,35 +239,30 @@ export async function createClassroom(
 export async function updateClassroom(
   classroomId: string,
   updates: z.infer<typeof UpdateClassroomSchema>,
-  cookie?: string
+  token?: string | null
 ) {
-  const response = await fetch(
-    `http://localhost:3000/api/v1/classrooms/${classroomId}`,
-    {
-      method: "PATCH",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        ...withCookie(cookie),
-      },
-      body: JSON.stringify(z.parse(UpdateClassroomSchema, updates)),
-    }
-  )
+  const response = await fetch(`${API_URL}/classrooms/${classroomId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...withAuth(token),
+    },
+    body: JSON.stringify(z.parse(UpdateClassroomSchema, updates)),
+  })
 
   if (!response.ok) {
     throw new Error(await getErrorMessage(response, "Error updating classroom"))
   }
 }
 
-export async function deleteClassroom(classroomId: string, cookie?: string) {
-  const response = await fetch(
-    `http://localhost:3000/api/v1/classrooms/${classroomId}`,
-    {
-      method: "DELETE",
-      credentials: "include",
-      headers: withCookie(cookie),
-    }
-  )
+export async function deleteClassroom(
+  classroomId: string,
+  token?: string | null
+) {
+  const response = await fetch(`${API_URL}/classrooms/${classroomId}`, {
+    method: "DELETE",
+    headers: withAuth(token),
+  })
 
   if (!response.ok) {
     throw new Error(await getErrorMessage(response, "Error deleting classroom"))
@@ -315,11 +271,11 @@ export async function deleteClassroom(classroomId: string, cookie?: string) {
 
 export async function getClassroomSeatingChart(
   classroomId: string,
-  cookie?: string
+  token?: string | null
 ): Promise<SeatingChart> {
   const res = await fetch(
-    `http://localhost:3000/api/v1/classrooms/${classroomId}/seating-chart`,
-    { credentials: "include", headers: withCookie(cookie) }
+    `${API_URL}/classrooms/${classroomId}/seating-chart`,
+    { headers: withAuth(token) }
   )
   if (!res.ok) {
     throw new Error(`Error getting seating chart assignments: ", ${res.status}`)
@@ -334,16 +290,15 @@ export async function getClassroomSeatingChart(
 export async function updateClassroomSeatingChart(
   classroomId: string,
   seatingChart: SeatingChart,
-  cookie?: string
+  token?: string | null
 ) {
   const response = await fetch(
-    `http://localhost:3000/api/v1/classrooms/${classroomId}/seating-chart`,
+    `${API_URL}/classrooms/${classroomId}/seating-chart`,
     {
       method: "PUT",
-      credentials: "include",
       headers: {
         "Content-Type": "application/json",
-        ...withCookie(cookie),
+        ...withAuth(token),
       },
       body: JSON.stringify(z.parse(SeatingChartSchema, seatingChart)),
     }
@@ -359,16 +314,15 @@ export async function updateClassroomSeatingChart(
 export async function generateRandomSeatingChart(
   classroomId: string,
   options: RandomizeSeatingChartOptions,
-  cookie?: string
+  token?: string | null
 ): Promise<SeatingChart> {
   const response = await fetch(
-    `http://localhost:3000/api/v1/classrooms/${classroomId}/seating-chart/randomize`,
+    `${API_URL}/classrooms/${classroomId}/seating-chart/randomize`,
     {
       method: "POST",
-      credentials: "include",
       headers: {
         "Content-Type": "application/json",
-        ...withCookie(cookie),
+        ...withAuth(token),
       },
       body: JSON.stringify(
         z.parse(RandomizeSeatingChartOptionsSchema, options)
@@ -389,16 +343,15 @@ export async function generateRandomSeatingChart(
 export async function pickColdCallStudent(
   classroomId: string,
   payload: ColdCall,
-  cookie?: string
+  token?: string | null
 ): Promise<ColdCallPick> {
   const response = await fetch(
-    `http://localhost:3000/api/v1/classrooms/${classroomId}/cold-call`,
+    `${API_URL}/classrooms/${classroomId}/cold-call`,
     {
       method: "POST",
-      credentials: "include",
       headers: {
         "Content-Type": "application/json",
-        ...withCookie(cookie),
+        ...withAuth(token),
       },
       body: JSON.stringify(z.parse(ColdCallSchema, payload)),
     }
@@ -410,179 +363,4 @@ export async function pickColdCallStudent(
 
   const json = await response.json()
   return z.parse(ColdCallPickSchema, json.data)
-}
-
-// --- Auth ---
-
-/** Login/signup error shape: a display message plus an optional
- * machine-readable `code` ("unverified", "locked_out") for UI branching. */
-export class AuthApiError extends Error {
-  code?: string
-  constructor(message: string, code?: string) {
-    super(message)
-    this.code = code
-  }
-}
-
-export async function login(
-  credentials: z.infer<typeof LoginSchema>,
-  cookie?: string
-): Promise<{ user: User; setCookie: string | null }> {
-  const response = await fetch("http://localhost:3000/api/v1/auth/login", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...withCookie(cookie) },
-    body: JSON.stringify(z.parse(LoginSchema, credentials)),
-  })
-
-  if (!response.ok) {
-    const { message, code } = await getErrorDetails(
-      response,
-      "Error logging in"
-    )
-    throw new AuthApiError(message, code)
-  }
-
-  const json = await response.json()
-  return {
-    user: z.parse(UserSchema, json.data.user),
-    setCookie: response.headers.get("set-cookie"),
-  }
-}
-
-export async function signup(
-  credentials: z.infer<typeof SignupSchema>,
-  cookie?: string
-): Promise<User> {
-  const response = await fetch("http://localhost:3000/api/v1/auth/signup", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...withCookie(cookie) },
-    // confirmPassword is client-only validation, never sent to the backend.
-    body: JSON.stringify({
-      email: z.parse(SignupSchema, credentials).email,
-      password: credentials.password,
-    }),
-  })
-
-  if (!response.ok) {
-    const { message, code } = await getErrorDetails(
-      response,
-      "Error signing up"
-    )
-    throw new AuthApiError(message, code)
-  }
-
-  const json = await response.json()
-  return z.parse(UserSchema, json.data.user)
-}
-
-export async function resendVerificationEmail(
-  email: string,
-  cookie?: string
-): Promise<void> {
-  const response = await fetch(
-    "http://localhost:3000/api/v1/auth/resend-verification",
-    {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json", ...withCookie(cookie) },
-      body: JSON.stringify({ email }),
-    }
-  )
-  if (!response.ok) {
-    throw new Error(
-      await getErrorMessage(response, "Error resending verification email")
-    )
-  }
-}
-
-export async function verifyEmail(
-  token: string,
-  cookie?: string
-): Promise<void> {
-  const response = await fetch(
-    "http://localhost:3000/api/v1/auth/verify-email",
-    {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json", ...withCookie(cookie) },
-      body: JSON.stringify({ token }),
-    }
-  )
-  if (!response.ok) {
-    const { message, code } = await getErrorDetails(
-      response,
-      "This verification link is invalid or has expired"
-    )
-    throw new AuthApiError(message, code)
-  }
-}
-
-export async function forgotPassword(
-  email: string,
-  cookie?: string
-): Promise<void> {
-  const response = await fetch(
-    "http://localhost:3000/api/v1/auth/forgot-password",
-    {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json", ...withCookie(cookie) },
-      body: JSON.stringify({ email }),
-    }
-  )
-  if (!response.ok) {
-    throw new Error(
-      await getErrorMessage(response, "Error requesting a password reset")
-    )
-  }
-}
-
-export async function resetPassword(
-  input: { token: string; password: string },
-  cookie?: string
-): Promise<void> {
-  const response = await fetch(
-    "http://localhost:3000/api/v1/auth/reset-password",
-    {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json", ...withCookie(cookie) },
-      body: JSON.stringify(input),
-    }
-  )
-  if (!response.ok) {
-    const { message, code } = await getErrorDetails(
-      response,
-      "This reset link is invalid or has expired"
-    )
-    throw new AuthApiError(message, code)
-  }
-}
-
-export async function logout(
-  cookie?: string
-): Promise<{ setCookie: string | null }> {
-  const response = await fetch("http://localhost:3000/api/v1/auth/logout", {
-    method: "POST",
-    credentials: "include",
-    headers: withCookie(cookie),
-  })
-  if (!response.ok) {
-    throw new Error(await getErrorMessage(response, "Error logging out"))
-  }
-  return { setCookie: response.headers.get("set-cookie") }
-}
-
-export async function getCurrentUser(cookie?: string): Promise<User | null> {
-  const response = await fetch("http://localhost:3000/api/v1/auth/me", {
-    credentials: "include",
-    headers: withCookie(cookie),
-  })
-  if (!response.ok) {
-    return null
-  }
-  const json = await response.json()
-  return z.parse(UserSchema, json.data.user)
 }
