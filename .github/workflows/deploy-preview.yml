@@ -14,6 +14,7 @@ concurrency:
 permissions:
   contents: read
   pull-requests: write
+  deployments: write
 
 jobs:
   create_neon_branch:
@@ -67,17 +68,18 @@ jobs:
       || github.event.action == 'opened'
       || github.event.action == 'reopened')
     runs-on: ubuntu-latest
+    environment:
+      name: pr-${{ github.event.number }}
+      url: ${{ steps.deploy.outputs.url }}
     env:
-      FLY_APP: pr-${{ github.event.number }}-seating-chart-app
-      # Org-scoped token: flyctl apps create needs org permissions, unlike the
-      # app-scoped FLY_API_TOKEN used for prod deploys in rust.yml.
+      # Org-scoped token: creating a new review app needs org permissions,
+      # unlike the app-scoped FLY_API_TOKEN used for prod deploys in rust.yml.
       FLY_API_TOKEN: ${{ secrets.FLY_ORG_API_TOKEN }}
+      FLY_REGION: sjc
+      FLY_ORG: personal
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-      - uses: superfly/flyctl-actions/setup-flyctl@v1
-      - name: Create Fly app if it doesn't already exist
-        run: flyctl apps create "$FLY_APP" --org personal || true
       - name: Get Neon branch connection string
         id: neon_conn
         # Job-level outputs get silently dropped when they contain a value
@@ -91,17 +93,18 @@ jobs:
             --pooled false)
           echo "::add-mask::$conn"
           echo "db_url=$conn" >> "$GITHUB_OUTPUT"
-      - name: Stage Fly secrets
-        run: |
-          flyctl secrets set \
-            DATABASE_URL="${{ steps.neon_conn.outputs.db_url }}" \
-            CLERK_SECRET_KEY="${{ secrets.CLERK_SECRET_KEY }}" \
-            --app "$FLY_APP" --stage
-      - name: Deploy
-        run: flyctl deploy --config fly.toml --app "$FLY_APP" --remote-only --ha=false
+      - name: Deploy review app
+        id: deploy
+        uses: superfly/fly-pr-review-apps@1.5.0
+        with:
+          name: pr-${{ github.event.number }}-seating-chart-app
+          config: fly.toml
+          secrets: >-
+            DATABASE_URL=${{ steps.neon_conn.outputs.db_url }}
+            CLERK_SECRET_KEY=${{ secrets.CLERK_SECRET_KEY }}
       - name: Smoke test preview app
         run: |
-          url="https://${FLY_APP}.fly.dev/health"
+          url="${{ steps.deploy.outputs.url }}/health"
           for i in $(seq 1 10); do
             status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url")
             echo "Attempt $i: HTTP $status"
@@ -113,11 +116,6 @@ jobs:
           done
           echo "Preview app did not become healthy after retries (last status: $status)."
           exit 1
-      - name: Comment preview URL on PR
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh pr comment ${{ github.event.number }} --body "🚀 Fly preview deployed: https://${FLY_APP}.fly.dev"
 
   delete_neon_branch:
     name: Delete Neon Branch
@@ -137,7 +135,14 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_ORG_API_TOKEN }}
+      FLY_REGION: sjc
+      FLY_ORG: personal
     steps:
-      - uses: superfly/flyctl-actions/setup-flyctl@v1
-      - name: Destroy Fly app
-        run: flyctl apps destroy "pr-${{ github.event.number }}-seating-chart-app" --yes || true
+      - name: Checkout
+        uses: actions/checkout@v6
+      # Same action as the deploy job - it destroys the app itself when it
+      # sees a 'closed' PR action, instead of a separate manual flyctl call.
+      - uses: superfly/fly-pr-review-apps@1.5.0
+        with:
+          name: pr-${{ github.event.number }}-seating-chart-app
+          config: fly.toml
