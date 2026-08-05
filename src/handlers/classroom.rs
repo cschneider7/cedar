@@ -510,7 +510,7 @@ mod tests {
         .unwrap()
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn create_classroom_success(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
@@ -534,7 +534,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn create_classroom_defaults_boundary_dimensions(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
@@ -559,7 +559,7 @@ mod tests {
     }
 
     // No uniqueness constraint on (subject, period), so duplicates are accepted.
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn create_classroom_allows_duplicate_subject_and_period(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -593,7 +593,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn update_classroom_partial_leaves_other_fields_unchanged(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -620,7 +620,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn update_classroom_partial_boundary_patch_leaves_other_boundary_field_unchanged(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -647,7 +647,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn update_classroom_full_boundary_patch_with_subject_and_period(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -681,7 +681,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn update_classroom_nonexistent_id_returns_404(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
@@ -704,7 +704,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn delete_classroom_success(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
@@ -728,7 +728,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn delete_classroom_nonexistent_id_returns_404(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
@@ -749,7 +749,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn update_seating_chart_replaces_existing_tables_and_seats(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -807,7 +807,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn update_seating_chart_nonexistent_classroom_returns_404(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -833,7 +833,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn update_seating_chart_assigns_table_number_from_request_index(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -876,7 +876,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn update_seating_chart_with_no_tables_clears_everything(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -910,7 +910,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn get_seating_chart_returns_only_assigned_seats(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
@@ -943,7 +943,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn get_seating_chart_groups_assignments_in_table_insertion_order(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -980,7 +980,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn get_seating_chart_with_no_tables_returns_empty_list(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -1006,7 +1006,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn get_seating_chart_nonexistent_classroom_returns_404(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -1026,7 +1026,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn randomize_seating_chart_rejects_out_of_range_new_table_dimensions(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -1062,7 +1062,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn randomize_seating_chart_nonexistent_classroom_returns_404(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -1094,7 +1094,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn randomize_seating_chart_only_seats_students_in_this_classroom(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -1142,7 +1142,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn randomize_seating_chart_never_persists_anything(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -1196,7 +1196,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn randomize_seating_chart_errors_when_boundary_too_small(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -1236,7 +1236,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn randomize_seating_chart_packs_within_constrained_boundary(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -1300,7 +1300,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn cold_call_success_returns_pick_and_adjusted_weights(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -1346,7 +1346,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn cold_call_empty_students_returns_400(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
@@ -1372,7 +1372,7 @@ mod tests {
 
     // --- auth/scoping coverage ---
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn unauthenticated_requests_return_401(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let classroom_id = Uuid::new_v4();
@@ -1422,7 +1422,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn cross_user_get_update_delete_classroom_returns_404(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -1469,7 +1469,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn list_classrooms_excludes_other_users_classrooms(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -1497,7 +1497,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn cross_user_seating_chart_returns_404(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let owner_id = test_user_id();

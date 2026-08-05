@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A seating chart / classroom management app with two independent halves that run as separate processes:
 
 - **Frontend** (repo root): React Router 8 (framework mode, SSR) + Tailwind CSS v4 + shadcn (`base-rhea` style, via `@base-ui/react`), served from `app/`.
-- **Backend** (`class_management/`): Rust Axum API backed by Postgres via `sqlx`, serving JSON at `/api/v1/*` on port 3000. The Cargo workspace root is defined in the top-level `Cargo.toml` with `class_management` as its only member.
+- **Backend** (`src/`, repo root): Rust Axum API backed by Postgres via `sqlx`, serving JSON at `/api/v1/*` on port 3000. There is no Cargo workspace — the crate lives directly at the repo root, alongside the frontend's `app/`.
 
 The frontend calls the backend directly over HTTP at hardcoded `http://localhost:3000` URLs, all funneled through `app/lib/api.ts` — there is no shared client/server code or generated API types between the two halves, so `app/lib/types.ts`/`app/lib/schemas.ts` (frontend) and `model.rs`/`schema.rs` (backend) must be kept in sync manually when the API shape changes.
 
@@ -33,7 +33,7 @@ npm test            # run vitest (route loader/action + pure state-module unit t
 
 There is no lint script. Prettier is configured (`.prettierrc`: no semicolons, double quotes off/`singleQuote: false`, `prettier-plugin-tailwindcss` for class sorting) but not wired to an npm script — run `npx prettier --write .` directly if needed.
 
-### Backend (run from `class_management/`, or use `cargo <cmd> -p class_management` from repo root)
+### Backend (run from repo root)
 
 ```bash
 cargo run                                  # start the API server on 0.0.0.0:3000
@@ -45,17 +45,17 @@ cargo fmt --check                          # format check (matches CI)
 
 The backend requires a running Postgres instance and a `DATABASE_URL` env var (loaded via `dotenv` from `.env`). `docker-compose.yaml` runs Postgres 18 using the same `.env` file. Migrations live in `migrations/*.sql` (plain `.up.sql`/`.down.sql` pairs, applied with the `sqlx` CLI, e.g. `sqlx migrate run`).
 
-`sqlx::query_as!` macros are compile-time checked against the database (or against `.sqlx/` cached query metadata when `SQLX_OFFLINE=true`, which is how CI runs). **After changing any SQL in a handler, regenerate the cache** with `cargo sqlx prepare --workspace` (requires a live DB matching the migrations) so `.sqlx/*.json` stays in sync — otherwise `SQLX_OFFLINE` builds (CI) will fail even though local builds against a live DB succeed.
+`sqlx::query_as!` macros are compile-time checked against the database (or against `.sqlx/` cached query metadata when `SQLX_OFFLINE=true`, which is how CI runs). **After changing any SQL in a handler, regenerate the cache** with `cargo sqlx prepare` (requires a live DB matching the migrations) so `.sqlx/*.json` stays in sync — otherwise `SQLX_OFFLINE` builds (CI) will fail even though local builds against a live DB succeed.
 
 ### Running a single Rust test
 
 ```bash
-cargo test -p class_management <test_name>
+cargo test <test_name>
 ```
 
 ## Architecture
 
-### Backend (`class_management/src/`)
+### Backend (`src/`)
 
 - `main.rs` — entry point; loads `.env`, builds a `PgPool` (max 10 connections), constructs `AppState { db }` wrapped in `Arc`, builds the router, and serves on `0.0.0.0:3000`.
 - `routes.rs` — single `create_router` function wiring every `/api/v1/*` route to a handler. All routes take `Arc<AppState>` as shared state.
@@ -99,13 +99,13 @@ Four tables: `classrooms`, `students`, `tables`, `seats`. Students optionally re
 
 ## Testing
 
-### Backend (`class_management/src/handlers/*.rs`)
+### Backend (`src/handlers/*.rs`)
 
-- Tests are colocated `#[cfg(test)] mod tests` blocks at the bottom of each handler file. There is no `lib.rs` (binary-only crate), so tests live inside the crate rather than in a separate `class_management/tests/` integration-test target — that's what lets them see private items like `AppState.db`.
-- Each test uses `#[sqlx::test(migrations = "../migrations")]` for an isolated, freshly-migrated database, and drives the real `Router` (from `routes::create_router`) via `tower::ServiceExt::oneshot`. Dev-dependencies: `tower` (`util` feature) and `http-body-util`; `sqlx::test` needs no extra sqlx feature beyond the already-default `macros` feature.
-- Migrations live at the repo root, not `class_management/migrations/` — every `#[sqlx::test]` must pass `migrations = "../migrations"` explicitly or it silently can't find the tables.
+- Tests are colocated `#[cfg(test)] mod tests` blocks at the bottom of each handler file. There is no `lib.rs` (binary-only crate), so tests live inside the crate rather than in a separate `tests/` integration-test target — that's what lets them see private items like `AppState.db`.
+- Each test uses `#[sqlx::test]` for an isolated, freshly-migrated database, and drives the real `Router` (from `routes::create_router`) via `tower::ServiceExt::oneshot`. Dev-dependencies: `tower` (`util` feature) and `http-body-util`; `sqlx::test` needs no extra sqlx feature beyond the already-default `macros` feature.
+- Migrations live at the repo root (`migrations/`), alongside `src/` and `Cargo.toml` — `#[sqlx::test]` auto-discovers this directory via its `CARGO_MANIFEST_DIR`-relative default, so no explicit `migrations = "..."` argument is needed.
 - Running tests needs a live Postgres reachable via `DATABASE_URL` (the local `docker-compose.yaml` instance works); `SQLX_OFFLINE` only affects compile-time macro checking, not what `#[sqlx::test]` needs at runtime.
-- If you add a new `sqlx::query!`/`query_as!` call inside a test, regenerate the cache with `cargo sqlx prepare --workspace -- --tests` — the trailing `-- --tests` is required, or test-only queries are silently dropped from `.sqlx/` and `SQLX_OFFLINE` CI builds break. The local `.git/hooks/pre-commit` (not tracked in the repo) runs this same command before every commit.
+- If you add a new `sqlx::query!`/`query_as!` call inside a test, regenerate the cache with `cargo sqlx prepare -- --tests` — the trailing `-- --tests` is required, or test-only queries are silently dropped from `.sqlx/` and `SQLX_OFFLINE` CI builds break. The local `.git/hooks/pre-commit` (not tracked in the repo) runs this same command before every commit.
 
 ### Frontend (`app/routes/**/*.test.ts`)
 

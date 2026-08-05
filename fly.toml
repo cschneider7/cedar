@@ -2,7 +2,8 @@ app = "seating-chart-app"
 primary_region = "sjc"
 
 [build]
-  dockerfile = "class_management/Dockerfile"
+  dockerfile = "Dockerfile"
+  build-target = "backend"
 
 [env]
   RUST_LOG = "class_management=info,tower_http=info"
