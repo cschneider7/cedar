@@ -1,0 +1,123 @@
+name: Deploy Preview Environment
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: read
+  pull-requests: write
+  deployments: write
+
+jobs:
+  deploy_preview:
+    name: Deploy Preview
+    runs-on: ubuntu-latest
+    environment:
+      name: pr-${{ github.event.number }}
+      url: ${{ steps.vercel_deploy.outputs.preview_url }}
+    env:
+      FLY_APP: pr-${{ github.event.number }}-seating-chart-app
+      FLY_API_TOKEN: ${{ secrets.FLY_ORG_API_TOKEN }}
+      FLY_REGION: sjc
+      FLY_ORG: personal
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - uses: superfly/flyctl-actions/setup-flyctl@v1
+
+      - name: Get branch expiration date as an env variable (2 weeks from now)
+        run: echo "EXPIRES_AT=$(date -u --date '+14 days' +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
+
+      - name: Create Neon Branch
+        id: create-branch
+        uses: neondatabase/create-branch-action@v6
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          branch_name: preview/pr-${{ github.event.number }}-${{ github.head_ref }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+          expires_at: ${{ env.EXPIRES_AT }}
+
+      - name: Cache sqlx-cli
+        id: cache-sqlx-cli
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/sqlx
+          key: sqlx-cli-${{ runner.os }}-0.9.0
+      - name: Install sqlx-cli
+        if: steps.cache-sqlx-cli.outputs.cache-hit != 'true'
+        run: cargo install sqlx-cli --version 0.9.0 --no-default-features --features postgres,rustls --locked
+      - name: Run Migrations
+        run: sqlx migrate run
+        env:
+          DATABASE_URL: "${{ steps.create-branch.outputs.db_url }}"
+
+      - name: Post Schema Diff Comment to PR
+        uses: neondatabase/schema-diff-action@v1
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          compare_branch: preview/pr-${{ github.event.number }}-${{ github.head_ref }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+
+      - name: Deploy Fly preview app
+        id: deploy_fly
+        uses: superfly/fly-pr-review-apps@1.5.0
+        with:
+          name: ${{ env.FLY_APP }}
+          config: fly.toml
+          secrets: >-
+            DATABASE_URL=${{ steps.create-branch.outputs.db_url }}
+            CLERK_SECRET_KEY=${{ secrets.CLERK_SECRET_KEY }}
+
+      - name: Smoke test Fly preview app
+        run: |
+          url="${{ steps.deploy_fly.outputs.url }}/health"
+          for i in $(seq 1 10); do
+            status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url")
+            echo "Attempt $i: HTTP $status"
+            if [ "$status" = "200" ]; then
+              echo "Fly preview app is healthy."
+              exit 0
+            fi
+            sleep 6
+          done
+          echo "Fly preview app did not become healthy after retries (last status: $status)."
+          exit 1
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+      - name: Write preview API URL for Vercel build
+        run: echo "VITE_API_URL=${{ steps.deploy_fly.outputs.url }}/api/v1" >> .env.local
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
+      - name: Build Vercel project
+        run: vercel build --token="$VERCEL_TOKEN"
+      - name: Deploy preview to Vercel
+        id: vercel_deploy
+        run: |
+          preview_url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
+          echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
+
+      - name: Update Fly CORS origin
+        run: flyctl secrets set FRONTEND_ORIGIN="${{ steps.vercel_deploy.outputs.preview_url }}" --app "$FLY_APP"
+
+      - name: Comment preview URLs on PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment ${{ github.event.number }} --body "$(cat <<EOF
+          🚀 Preview environment deployed:
+          - Frontend (Vercel): ${{ steps.vercel_deploy.outputs.preview_url }}
+          - Backend (Fly): ${{ steps.deploy_fly.outputs.url }}
+          - Neon branch: https://console.neon.tech/app/projects/${{ vars.NEON_PROJECT_ID }}/branches/${{ steps.create-branch.outputs.branch_id }}
+          EOF
+          )"

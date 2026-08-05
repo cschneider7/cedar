@@ -15,6 +15,13 @@ primary_region = "sjc"
   force_https = true
   processes = [ "app" ]
 
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "5s"
+    method = "GET"
+    path = "/health"
+
 [[vm]]
   cpu_kind = "shared"
   cpus = 1

@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use axum::{
-    Router,
+    Json, Router,
     extract::{MatchedPath, Request},
     http::{HeaderValue, Method, header},
     middleware::from_fn,
     routing::{delete, get, patch, post, put},
 };
 use clerk_rs::validators::{axum::ClerkLayer, jwks::MemoryCacheJwksProvider};
+use serde_json::json;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use crate::error::log_app_errors;
@@ -38,6 +39,9 @@ pub fn create_router(
             Method::DELETE,
         ])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
+
+    let health_routes =
+        Router::new().route("/health", get(|| async { Json(json!({"message": "OK"})) }));
 
     let app_routes = Router::new()
         .route(
@@ -106,7 +110,8 @@ pub fn create_router(
         None => app_routes,
     };
 
-    app_routes
+    health_routes
+        .merge(app_routes)
         .layer(cors_layer)
         .layer(from_fn(log_app_errors))
         .layer(TraceLayer::new_for_http().make_span_with(|req: &Request| {
