@@ -18,9 +18,6 @@ permissions:
 jobs:
   create_neon_branch:
     name: Create Neon Branch
-    outputs:
-      db_url: ${{ steps.create_neon_branch.outputs.db_url }}
-      db_url_with_pooler: ${{ steps.create_neon_branch.outputs.db_url_with_pooler }}
     if: |
       github.event_name == 'pull_request' && (
       github.event.action == 'synchronize'
@@ -72,17 +69,32 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FLY_APP: pr-${{ github.event.number }}-seating-chart-app
-      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      # Org-scoped token: flyctl apps create needs org permissions, unlike the
+      # app-scoped FLY_API_TOKEN used for prod deploys in rust.yml.
+      FLY_API_TOKEN: ${{ secrets.FLY_ORG_API_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
       - uses: superfly/flyctl-actions/setup-flyctl@v1
       - name: Create Fly app if it doesn't already exist
         run: flyctl apps create "$FLY_APP" --org personal || true
+      - name: Get Neon branch connection string
+        id: neon_conn
+        # Job-level outputs get silently dropped when they contain a value
+        # GitHub has masked as a secret (create-branch-action masks db_url) -
+        # fetch it fresh here instead of via `needs.create_neon_branch.outputs`.
+        run: |
+          conn=$(npx -y neonctl@latest connection-string \
+            "preview/pr-${{ github.event.number }}-${{ github.head_ref }}" \
+            --project-id ${{ vars.NEON_PROJECT_ID }} \
+            --api-key ${{ secrets.NEON_API_KEY }} \
+            --pooled false)
+          echo "::add-mask::$conn"
+          echo "db_url=$conn" >> "$GITHUB_OUTPUT"
       - name: Stage Fly secrets
         run: |
           flyctl secrets set \
-            DATABASE_URL="${{ needs.create_neon_branch.outputs.db_url }}" \
+            DATABASE_URL="${{ steps.neon_conn.outputs.db_url }}" \
             CLERK_SECRET_KEY="${{ secrets.CLERK_SECRET_KEY }}" \
             --app "$FLY_APP" --stage
       - name: Deploy
@@ -124,7 +136,7 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
     env:
-      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      FLY_API_TOKEN: ${{ secrets.FLY_ORG_API_TOKEN }}
     steps:
       - uses: superfly/flyctl-actions/setup-flyctl@v1
       - name: Destroy Fly app
