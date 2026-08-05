@@ -41,7 +41,10 @@ export function RouteErrorCard({
           <CardDescription>{details}</CardDescription>
         </CardHeader>
         <CardFooter>
-          <Button variant="outline" render={<Link to={backTo}>{backLabel}</Link>} />
+          <Button
+            variant="outline"
+            render={<Link to={backTo}>{backLabel}</Link>}
+          />
         </CardFooter>
         {stack && (
           <CardContent>

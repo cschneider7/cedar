@@ -5,11 +5,15 @@ services:
     env_file:
       - ./.env
     ports:
-      - '5432:5432'
+      - "5432:5432"
     volumes:
       - postgresDb:/var/lib/postgresql
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-seating_chart}']
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-seating_chart}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -26,7 +30,7 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-seating_chart}
     ports:
-      - '3000:3000'
+      - "3000:3000"
     volumes:
       - .:/app
       - backend_cargo_registry:/usr/local/cargo/registry
@@ -36,7 +40,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:3000/health']
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -51,7 +55,7 @@ services:
     env_file:
       - ./.env
     ports:
-      - '5173:5173'
+      - "5173:5173"
     volumes:
       - .:/app
       - frontend_node_modules:/app/node_modules

@@ -1,0 +1,34 @@
+name: Smoke test
+description: Poll a health-check URL until it responds 200, retrying with backoff.
+inputs:
+  url:
+    description: Health-check URL to poll.
+    required: true
+  attempts:
+    description: Number of attempts before giving up.
+    required: false
+    default: "10"
+  interval-seconds:
+    description: Seconds to sleep between attempts.
+    required: false
+    default: "6"
+runs:
+  using: composite
+  steps:
+    - name: Poll health check
+      shell: bash
+      run: |
+        url="${{ inputs.url }}"
+        attempts="${{ inputs.attempts }}"
+        interval="${{ inputs.interval-seconds }}"
+        for i in $(seq 1 "$attempts"); do
+          status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url")
+          echo "Attempt $i: HTTP $status"
+          if [ "$status" = "200" ]; then
+            echo "$url is healthy."
+            exit 0
+          fi
+          sleep "$interval"
+        done
+        echo "$url did not become healthy after $attempts attempts (last status: $status)."
+        exit 1
