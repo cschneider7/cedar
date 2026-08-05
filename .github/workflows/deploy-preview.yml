@@ -6,7 +6,6 @@ on:
       - opened
       - reopened
       - synchronize
-      - closed
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -19,11 +18,6 @@ permissions:
 jobs:
   deploy_preview:
     name: Deploy Preview
-    if: |
-      github.event_name == 'pull_request' && (
-      github.event.action == 'synchronize'
-      || github.event.action == 'opened'
-      || github.event.action == 'reopened')
     runs-on: ubuntu-latest
     environment:
       name: pr-${{ github.event.number }}
@@ -127,25 +121,3 @@ jobs:
           - Neon branch: https://console.neon.tech/app/projects/${{ vars.NEON_PROJECT_ID }}/branches/${{ steps.create-branch.outputs.branch_id }}
           EOF
           )"
-
-  destroy_preview:
-    name: Destroy Preview
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
-    runs-on: ubuntu-latest
-    env:
-      FLY_API_TOKEN: ${{ secrets.FLY_ORG_API_TOKEN }}
-      FLY_REGION: sjc
-      FLY_ORG: personal
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-      - uses: superfly/fly-pr-review-apps@1.5.0
-        with:
-          name: pr-${{ github.event.number }}-seating-chart-app
-          config: fly.toml
-      - name: Delete Neon Branch
-        uses: neondatabase/delete-branch-action@v3
-        with:
-          project_id: ${{ vars.NEON_PROJECT_ID }}
-          branch: preview/pr-${{ github.event.number }}-${{ github.head_ref }}
-          api_key: ${{ secrets.NEON_API_KEY }}
