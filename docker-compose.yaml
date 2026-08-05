@@ -18,7 +18,8 @@ services:
   backend:
     build:
       context: .
-      dockerfile: class_management/Dockerfile.dev
+      dockerfile: Dockerfile
+      target: backend-dev
     container_name: backend
     env_file:
       - ./.env
@@ -44,7 +45,8 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
+      target: frontend-dev
     container_name: frontend
     env_file:
       - ./.env

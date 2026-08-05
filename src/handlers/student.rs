@@ -376,7 +376,7 @@ mod tests {
             .unwrap()
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn create_student_success(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
@@ -407,7 +407,7 @@ mod tests {
     }
 
     // `student_id` has no uniqueness constraint, so duplicates are accepted.
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn create_student_allows_duplicate_student_id(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
@@ -443,7 +443,7 @@ mod tests {
 
     // `check_classroom_ownership` rejects any classroom_id that doesn't
     // belong to the caller — including one that doesn't exist at all.
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn create_student_rejects_nonexistent_classroom_id(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -474,7 +474,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn create_student_rejects_another_users_classroom_id(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -503,7 +503,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn update_student_partial_leaves_other_fields_unchanged(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -532,7 +532,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn update_student_nonexistent_id_returns_404(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
@@ -556,7 +556,7 @@ mod tests {
     }
 
     // Double-Option deserialization: omitted keeps, explicit null clears.
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn update_student_omitted_classroom_id_keeps_existing_value(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -583,7 +583,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn update_student_explicit_null_classroom_id_clears_value(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -610,7 +610,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn update_student_new_classroom_id_sets_value(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
@@ -635,7 +635,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn update_student_rejects_another_users_classroom_id(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -660,7 +660,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn delete_student_success(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
@@ -684,7 +684,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn delete_student_nonexistent_id_returns_404(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
@@ -707,7 +707,7 @@ mod tests {
 
     // --- auth/scoping coverage ---
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn unauthenticated_requests_return_401(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let student_id = Uuid::new_v4();
@@ -741,7 +741,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn cross_user_get_update_delete_student_returns_404(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -788,7 +788,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn list_students_excludes_other_users_students(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_a_id = test_user_id();
@@ -812,7 +812,7 @@ mod tests {
 
     // --- pagination/search coverage ---
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn list_students_unpaginated_when_no_params_matches_current_behavior(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -835,7 +835,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn list_students_paginated_returns_correct_slice_and_count(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -868,7 +868,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn list_students_paginated_second_page_returns_remaining_slice(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -897,7 +897,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn list_students_search_filters_by_name_case_insensitively(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -925,7 +925,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn list_students_search_no_matches_returns_empty_with_zero_count(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -952,7 +952,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn list_students_out_of_range_page_clamps_to_last_page(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -981,7 +981,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn list_students_respects_page_size(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
@@ -1006,7 +1006,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn list_students_page_size_is_capped_at_100(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
@@ -1027,7 +1027,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn list_students_pagination_excludes_other_users_students(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -1053,7 +1053,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn list_students_q_alone_without_page_triggers_paginated_branch(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -1081,7 +1081,7 @@ mod tests {
 
     // --- sorting coverage ---
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn list_students_sorts_by_name_desc(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
@@ -1108,7 +1108,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn list_students_sorts_by_student_id_asc(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
@@ -1135,7 +1135,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn list_students_sorts_by_student_id_desc(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
@@ -1162,7 +1162,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn list_students_sorts_by_classroom_period_asc(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
@@ -1189,7 +1189,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn list_students_sorts_by_classroom_puts_unassigned_last_regardless_of_direction(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -1222,7 +1222,7 @@ mod tests {
 
     // --- bulk delete coverage ---
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn bulk_delete_students_removes_only_callers_own_students(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
@@ -1254,7 +1254,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn bulk_delete_students_ignores_nonexistent_ids(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
@@ -1279,7 +1279,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[sqlx::test]
     async fn bulk_delete_students_empty_ids_is_a_noop(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
