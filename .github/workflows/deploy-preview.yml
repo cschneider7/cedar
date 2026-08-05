@@ -30,8 +30,6 @@ jobs:
       url: ${{ steps.vercel_deploy.outputs.preview_url }}
     env:
       FLY_APP: pr-${{ github.event.number }}-seating-chart-app
-      # Org-scoped token: creating a new review app needs org permissions,
-      # unlike the app-scoped FLY_API_TOKEN used for prod deploys.
       FLY_API_TOKEN: ${{ secrets.FLY_ORG_API_TOKEN }}
       FLY_REGION: sjc
       FLY_ORG: personal
@@ -41,8 +39,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-      # Needed for the manual "Update Fly CORS origin" flyctl call later -
-      # fly-pr-review-apps itself bundles its own flyctl inside its container.
       - uses: superfly/flyctl-actions/setup-flyctl@v1
 
       - name: Get branch expiration date as an env variable (2 weeks from now)
@@ -84,9 +80,6 @@ jobs:
         with:
           name: ${{ env.FLY_APP }}
           config: fly.toml
-          # Read from this same job's Neon step, not a cross-job `needs` output -
-          # GitHub silently drops job outputs once masked as secrets (which
-          # create-branch-action's db_url is), so cross-job reads come back "".
           secrets: >-
             DATABASE_URL=${{ steps.create-branch.outputs.db_url }}
             CLERK_SECRET_KEY=${{ secrets.CLERK_SECRET_KEY }}
@@ -109,8 +102,6 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
       - name: Write preview API URL for Vercel build
-        # VITE_API_URL is baked in at build time (Vite convention) - point this
-        # PR's frontend preview at this PR's own Fly backend, not prod/localhost.
         run: echo "VITE_API_URL=${{ steps.deploy_fly.outputs.url }}/api/v1" >> .env.local
       - name: Pull Vercel environment
         run: vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
@@ -123,8 +114,6 @@ jobs:
           echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
 
       - name: Update Fly CORS origin
-        # Only known now that Vercel has returned its exact preview URL - a
-        # secrets-only redeploy (no rebuild) since the app already has a release.
         run: flyctl secrets set FRONTEND_ORIGIN="${{ steps.vercel_deploy.outputs.preview_url }}" --app "$FLY_APP"
 
       - name: Comment preview URLs on PR
@@ -150,8 +139,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-      # Same action as the deploy job - it destroys the app itself when it
-      # sees a 'closed' PR action, instead of a separate manual flyctl call.
       - uses: superfly/fly-pr-review-apps@1.5.0
         with:
           name: pr-${{ github.event.number }}-seating-chart-app
