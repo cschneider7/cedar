@@ -17,28 +17,46 @@ permissions:
   deployments: write
 
 jobs:
-  create_neon_branch:
-    name: Create Neon Branch
+  deploy_preview:
+    name: Deploy Preview
     if: |
       github.event_name == 'pull_request' && (
       github.event.action == 'synchronize'
       || github.event.action == 'opened'
       || github.event.action == 'reopened')
     runs-on: ubuntu-latest
+    environment:
+      name: pr-${{ github.event.number }}
+      url: ${{ steps.vercel_deploy.outputs.preview_url }}
+    env:
+      FLY_APP: pr-${{ github.event.number }}-seating-chart-app
+      # Org-scoped token: creating a new review app needs org permissions,
+      # unlike the app-scoped FLY_API_TOKEN used for prod deploys.
+      FLY_API_TOKEN: ${{ secrets.FLY_ORG_API_TOKEN }}
+      FLY_REGION: sjc
+      FLY_ORG: personal
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+      # Needed for the manual "Update Fly CORS origin" flyctl call later -
+      # fly-pr-review-apps itself bundles its own flyctl inside its container.
+      - uses: superfly/flyctl-actions/setup-flyctl@v1
+
       - name: Get branch expiration date as an env variable (2 weeks from now)
-        id: get_expiration_date
         run: echo "EXPIRES_AT=$(date -u --date '+14 days' +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
+
       - name: Create Neon Branch
-        id: create_neon_branch
+        id: create-branch
         uses: neondatabase/create-branch-action@v6
         with:
           project_id: ${{ vars.NEON_PROJECT_ID }}
           branch_name: preview/pr-${{ github.event.number }}-${{ github.head_ref }}
           api_key: ${{ secrets.NEON_API_KEY }}
           expires_at: ${{ env.EXPIRES_AT }}
+
       - name: Cache sqlx-cli
         id: cache-sqlx-cli
         uses: actions/cache@v4
@@ -51,7 +69,8 @@ jobs:
       - name: Run Migrations
         run: sqlx migrate run
         env:
-          DATABASE_URL: "${{ steps.create_neon_branch.outputs.db_url }}"
+          DATABASE_URL: "${{ steps.create-branch.outputs.db_url }}"
+
       - name: Post Schema Diff Comment to PR
         uses: neondatabase/schema-diff-action@v1
         with:
@@ -59,78 +78,69 @@ jobs:
           compare_branch: preview/pr-${{ github.event.number }}-${{ github.head_ref }}
           api_key: ${{ secrets.NEON_API_KEY }}
 
-  deploy_fly_preview:
-    name: Deploy Fly Preview App
-    needs: create_neon_branch
-    if: |
-      github.event_name == 'pull_request' && (
-      github.event.action == 'synchronize'
-      || github.event.action == 'opened'
-      || github.event.action == 'reopened')
-    runs-on: ubuntu-latest
-    environment:
-      name: pr-${{ github.event.number }}
-      url: ${{ steps.deploy.outputs.url }}
-    env:
-      # Org-scoped token: creating a new review app needs org permissions,
-      # unlike the app-scoped FLY_API_TOKEN used for prod deploys in rust.yml.
-      FLY_API_TOKEN: ${{ secrets.FLY_ORG_API_TOKEN }}
-      FLY_REGION: sjc
-      FLY_ORG: personal
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-      - name: Get Neon branch connection string
-        id: neon_conn
-        # Job-level outputs get silently dropped when they contain a value
-        # GitHub has masked as a secret (create-branch-action masks db_url) -
-        # fetch it fresh here instead of via `needs.create_neon_branch.outputs`.
-        run: |
-          conn=$(npx -y neonctl@latest connection-string \
-            "preview/pr-${{ github.event.number }}-${{ github.head_ref }}" \
-            --project-id ${{ vars.NEON_PROJECT_ID }} \
-            --api-key ${{ secrets.NEON_API_KEY }} \
-            --pooled false)
-          echo "::add-mask::$conn"
-          echo "db_url=$conn" >> "$GITHUB_OUTPUT"
-      - name: Deploy review app
-        id: deploy
+      - name: Deploy Fly preview app
+        id: deploy_fly
         uses: superfly/fly-pr-review-apps@1.5.0
         with:
-          name: pr-${{ github.event.number }}-seating-chart-app
+          name: ${{ env.FLY_APP }}
           config: fly.toml
+          # Read from this same job's Neon step, not a cross-job `needs` output -
+          # GitHub silently drops job outputs once masked as secrets (which
+          # create-branch-action's db_url is), so cross-job reads come back "".
           secrets: >-
-            DATABASE_URL=${{ steps.neon_conn.outputs.db_url }}
+            DATABASE_URL=${{ steps.create-branch.outputs.db_url }}
             CLERK_SECRET_KEY=${{ secrets.CLERK_SECRET_KEY }}
-      - name: Smoke test preview app
+
+      - name: Smoke test Fly preview app
         run: |
-          url="${{ steps.deploy.outputs.url }}/health"
+          url="${{ steps.deploy_fly.outputs.url }}/health"
           for i in $(seq 1 10); do
             status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url")
             echo "Attempt $i: HTTP $status"
             if [ "$status" = "200" ]; then
-              echo "Preview app is healthy."
+              echo "Fly preview app is healthy."
               exit 0
             fi
             sleep 6
           done
-          echo "Preview app did not become healthy after retries (last status: $status)."
+          echo "Fly preview app did not become healthy after retries (last status: $status)."
           exit 1
 
-  delete_neon_branch:
-    name: Delete Neon Branch
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Delete Neon Branch
-        uses: neondatabase/delete-branch-action@v3
-        with:
-          project_id: ${{ vars.NEON_PROJECT_ID }}
-          branch: preview/pr-${{ github.event.number }}-${{ github.head_ref }}
-          api_key: ${{ secrets.NEON_API_KEY }}
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+      - name: Write preview API URL for Vercel build
+        # VITE_API_URL is baked in at build time (Vite convention) - point this
+        # PR's frontend preview at this PR's own Fly backend, not prod/localhost.
+        run: echo "VITE_API_URL=${{ steps.deploy_fly.outputs.url }}/api/v1" >> .env.local
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
+      - name: Build Vercel project
+        run: vercel build --token="$VERCEL_TOKEN"
+      - name: Deploy preview to Vercel
+        id: vercel_deploy
+        run: |
+          preview_url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
+          echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
 
-  destroy_fly_preview:
-    name: Destroy Fly Preview App
+      - name: Update Fly CORS origin
+        # Only known now that Vercel has returned its exact preview URL - a
+        # secrets-only redeploy (no rebuild) since the app already has a release.
+        run: flyctl secrets set FRONTEND_ORIGIN="${{ steps.vercel_deploy.outputs.preview_url }}" --app "$FLY_APP"
+
+      - name: Comment preview URLs on PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment ${{ github.event.number }} --body "$(cat <<EOF
+          🚀 Preview environment deployed:
+          - Frontend (Vercel): ${{ steps.vercel_deploy.outputs.preview_url }}
+          - Backend (Fly): ${{ steps.deploy_fly.outputs.url }}
+          - Neon branch: https://console.neon.tech/app/projects/${{ vars.NEON_PROJECT_ID }}/branches/${{ steps.create-branch.outputs.branch_id }}
+          EOF
+          )"
+
+  destroy_preview:
+    name: Destroy Preview
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
     env:
@@ -146,3 +156,9 @@ jobs:
         with:
           name: pr-${{ github.event.number }}-seating-chart-app
           config: fly.toml
+      - name: Delete Neon Branch
+        uses: neondatabase/delete-branch-action@v3
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          branch: preview/pr-${{ github.event.number }}-${{ github.head_ref }}
+          api_key: ${{ secrets.NEON_API_KEY }}

@@ -1,0 +1,37 @@
+name: Deploy Production
+
+on:
+  workflow_run:
+    workflows: ["Rust CI"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy to Fly.io
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: superfly/flyctl-actions/setup-flyctl@v1
+      - name: Deploy
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Smoke test deployed app
+        run: |
+          app_name=$(grep -m1 '^app = ' fly.toml | sed -E 's/^app = "(.*)"$/\1/')
+          url="https://${app_name}.fly.dev/health"
+          for i in $(seq 1 10); do
+            status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url")
+            echo "Attempt $i: HTTP $status"
+            if [ "$status" = "200" ]; then
+              echo "App is healthy."
+              exit 0
+            fi
+            sleep 6
+          done
+          echo "App did not become healthy after retries (last status: $status)."
+          exit 1
