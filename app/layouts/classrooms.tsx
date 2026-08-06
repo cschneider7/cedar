@@ -1,7 +1,10 @@
 import { Outlet } from "react-router"
 import { RouteErrorCard } from "~/components/route-error-card"
+import { requireAuth } from "~/lib/auth"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 import type { Route } from "./+types/classrooms"
+
+export const middleware: Route.MiddlewareFunction[] = [requireAuth]
 
 export const handle: BreadcrumbHandle = {
   breadcrumb: () => "Classrooms",

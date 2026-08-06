@@ -7,11 +7,13 @@
     "dev": "react-router dev",
     "start": "react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
     "@clerk/react-router": "^3.6.3",
+    "@clerk/themes": "^2.4.57",
     "@fontsource-variable/inter": "^5.2.8",
     "@hookform/resolvers": "^5.4.0",
     "@react-router/node": "8.3.0",
@@ -35,6 +37,8 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@clerk/testing": "^2.2.18",
+    "@playwright/test": "^1.62.1",
     "@react-router/dev": "8.3.0",
     "@tailwindcss/vite": "^4.2.2",
     "@types/node": "^22",

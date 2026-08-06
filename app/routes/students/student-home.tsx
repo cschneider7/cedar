@@ -82,7 +82,7 @@ import {
   type StudentViewMode,
 } from "~/hooks/use-student-view-mode"
 import { getClassrooms, getStudentsPage } from "~/lib/api"
-import { requireToken } from "~/lib/auth"
+import { tokenFromRequest } from "~/lib/auth"
 import type { Classroom, Student } from "~/lib/schemas"
 import {
   getStudentColumns,
@@ -92,7 +92,7 @@ import {
 import type { Route } from "./+types/student-home"
 
 export async function loader(args: Route.LoaderArgs) {
-  const token = await requireToken(args)
+  const token = await tokenFromRequest(args)
   const { request } = args
   const url = new URL(request.url)
   const page = Math.max(1, Number(url.searchParams.get("page")) || 1)

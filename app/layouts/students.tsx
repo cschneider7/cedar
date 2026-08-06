@@ -2,8 +2,10 @@ import type { Route } from "./+types/students"
 
 import { Outlet } from "react-router"
 import { RouteErrorCard } from "~/components/route-error-card"
-import { requireToken } from "~/lib/auth"
+import { requireAuth } from "~/lib/auth"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
+
+export const middleware: Route.MiddlewareFunction[] = [requireAuth]
 
 export const handle: BreadcrumbHandle = {
   breadcrumb: () => "Students",
@@ -15,10 +17,6 @@ export function meta({}: Route.MetaArgs) {
     { title: "Students" },
     { name: "description", content: "Seating chart app" },
   ]
-}
-
-export async function loader(args: Route.LoaderArgs) {
-  await requireToken(args)
 }
 
 export default function Layout() {

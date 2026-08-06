@@ -34,7 +34,7 @@ import { StudentFormDialog } from "~/components/student-form-dialog"
 import { Spinner } from "~/components/ui/spinner"
 import type { MutationResult } from "~/lib/action-results"
 import { getClassroom, getStudent } from "~/lib/api"
-import { requireToken } from "~/lib/auth"
+import { tokenFromRequest } from "~/lib/auth"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 import type { Route } from "./+types/student"
 
@@ -46,7 +46,7 @@ export const handle: BreadcrumbHandle = {
 }
 
 export async function loader(args: Route.LoaderArgs) {
-  const token = await requireToken(args)
+  const token = await tokenFromRequest(args)
   const { params } = args
   const student = await getStudent(params.studentId, token)
   const classroom = student.classroom_id
