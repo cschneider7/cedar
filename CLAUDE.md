@@ -13,7 +13,7 @@ The frontend calls the backend directly over HTTP at hardcoded `http://localhost
 
 ## Installed skills
 
-Four Claude Code skills are installed in this repo (tracked in `skills-lock.json`, content under `.agents/skills/`): `react-router`, `shadcn`, `neon`, and `neon-postgres`. All auto-trigger on their respective topics, so no manual invocation is needed — but be aware they exist and take precedence over prior/general knowledge:
+Four Claude Code skills are relevant to this project: `react-router`, `shadcn`, `neon`, and `neon-postgres`. These are installed globally (user scope, available across all projects, not tracked in this repo) rather than project-locally. All auto-trigger on their respective topics, so no manual invocation is needed — but be aware they exist and take precedence over prior/general knowledge:
 
 - **react-router** — this app is Framework Mode (`@react-router/dev`, SSR, `app/routes.ts`-based routing per the Frontend architecture section below); load the Framework Mode reference specifically, not Data/Declarative/RSC mode guidance.
 - **shadcn** — this app uses the `base-rhea` style on Base UI (see the shadcn bullet in Frontend architecture below); use the skill's CLI commands (`npx shadcn@latest ...`) to add/update components rather than hand-writing them, and check `npx shadcn@latest info --json` for current project/component state before assuming what's installed.
