@@ -4,9 +4,7 @@ import { tokenFromRequest } from "~/lib/auth"
 import { CreateClassroomSchema } from "~/lib/schemas"
 import type { Route } from "./+types/create-classroom"
 
-export async function action(
-  args: Route.ActionArgs
-): Promise<MutationResult> {
+export async function action(args: Route.ActionArgs): Promise<MutationResult> {
   const rawData = await args.request.json()
   const result = CreateClassroomSchema.safeParse(rawData)
 

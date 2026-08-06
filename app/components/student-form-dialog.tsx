@@ -37,8 +37,7 @@ import type { Classroom, Student } from "~/lib/schemas"
 import { CreateStudentSchema, UpdateStudentSchema } from "~/lib/schemas"
 
 type StudentFormDialogProps = (
-  | { mode: "create" }
-  | { mode: "edit"; student: Student }
+  { mode: "create" } | { mode: "edit"; student: Student }
 ) & {
   trigger?: React.ReactElement
   open?: boolean

@@ -19,6 +19,7 @@ jobs:
   deploy_preview:
     name: Deploy Preview
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment:
       name: pr-${{ github.event.number }}
       url: ${{ steps.vercel_deploy.outputs.preview_url }}
@@ -79,19 +80,9 @@ jobs:
             CLERK_SECRET_KEY=${{ secrets.CLERK_SECRET_KEY }}
 
       - name: Smoke test Fly preview app
-        run: |
-          url="${{ steps.deploy_fly.outputs.url }}/health"
-          for i in $(seq 1 10); do
-            status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url")
-            echo "Attempt $i: HTTP $status"
-            if [ "$status" = "200" ]; then
-              echo "Fly preview app is healthy."
-              exit 0
-            fi
-            sleep 6
-          done
-          echo "Fly preview app did not become healthy after retries (last status: $status)."
-          exit 1
+        uses: ./.github/actions/smoke-test
+        with:
+          url: ${{ steps.deploy_fly.outputs.url }}/health
 
       - name: Install Vercel CLI
         run: npm install --global vercel@latest

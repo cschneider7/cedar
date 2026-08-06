@@ -151,10 +151,7 @@ export async function updateStudent(
   }
 }
 
-export async function deleteStudent(
-  studentId: string,
-  token?: string | null
-) {
+export async function deleteStudent(studentId: string, token?: string | null) {
   const response = await fetch(`${API_URL}/students/${studentId}`, {
     method: "DELETE",
     headers: withAuth(token),

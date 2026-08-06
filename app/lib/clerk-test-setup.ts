@@ -17,7 +17,10 @@ vi.mock("@clerk/react-router/server", () => {
       }) => unknown
     ) => {
       const auth = await getAuth()
-      return callback({ ...args, request: Object.assign(args.request, { auth }) })
+      return callback({
+        ...args,
+        request: Object.assign(args.request, { auth }),
+      })
     }
   )
   return { getAuth, rootAuthLoader, clerkMiddleware: vi.fn(() => vi.fn()) }

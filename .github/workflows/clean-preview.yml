@@ -15,6 +15,7 @@ jobs:
   clean_preview:
     name: Clean up Preview Deployment
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_ORG_API_TOKEN }}
       FLY_REGION: sjc

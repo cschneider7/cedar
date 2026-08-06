@@ -42,8 +42,7 @@ const periodOptions = Array.from({ length: 9 }, (_, i) => ({
 }))
 
 type ClassroomFormDialogProps = (
-  | { mode: "create" }
-  | { mode: "edit"; classroom: Classroom }
+  { mode: "create" } | { mode: "edit"; classroom: Classroom }
 ) & {
   trigger?: React.ReactElement
   open?: boolean
