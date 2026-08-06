@@ -6,7 +6,7 @@ import {
   getStudents,
   updateClassroomSeatingChart,
 } from "~/lib/api"
-import { requireToken, tokenFromRequest } from "~/lib/auth"
+import { tokenFromRequest } from "~/lib/auth"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 import type { SeatingChart } from "~/lib/schemas"
 import type { Route } from "./+types/classroom"
@@ -26,7 +26,7 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader(args: Route.LoaderArgs) {
-  const token = await requireToken(args)
+  const token = await tokenFromRequest(args)
   const { params } = args
   const [classroom, seatingChart, allStudents] = await Promise.all([
     getClassroom(params.classroomId, token),

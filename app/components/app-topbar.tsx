@@ -124,16 +124,24 @@ function UserMenu() {
     `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase() ||
     displayName.slice(0, 2).toUpperCase()
 
+  // Avatar renders at size-8 (32px) — request a 2x-retina-sized crop
+  // instead of Clerk's full-size default image.
+  const avatarImageUrl = new URL(user.imageUrl)
+  avatarImageUrl.searchParams.set("width", "64")
+  avatarImageUrl.searchParams.set("height", "64")
+  avatarImageUrl.searchParams.set("fit", "crop")
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
           <button
             type="button"
+            aria-label="Account menu"
             className="rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
           >
             <Avatar>
-              <AvatarImage src={user.imageUrl} alt={displayName} />
+              <AvatarImage src={avatarImageUrl.toString()} alt={displayName} />
               <AvatarFallback>{initials}</AvatarFallback>
             </Avatar>
           </button>

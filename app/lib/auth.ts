@@ -1,16 +1,26 @@
 import { getAuth } from "@clerk/react-router/server"
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router"
+import type {
+  ActionFunctionArgs,
+  LoaderFunctionArgs,
+  MiddlewareFunction,
+} from "react-router"
 import { redirect } from "react-router"
 
-/** Loader guard: redirects to `/login` if unauthenticated, otherwise returns
- * a bearer token for forwarding to the backend. */
-export async function requireToken(args: LoaderFunctionArgs): Promise<string> {
+/** Route/layout middleware: redirects to `/login` if unauthenticated,
+ * otherwise lets the request continue to the matched loader/action. Runs
+ * for both loaders and actions under the route it's attached to, so a
+ * single `middleware = [requireAuth]` on a layout gates its whole subtree
+ * (including action-only routes) without each one needing its own guard. */
+export const requireAuth: MiddlewareFunction<Response | void> = async (
+  args,
+  next
+) => {
   const { isAuthenticated, getToken } = await getAuth(args)
   const token = isAuthenticated ? await getToken() : null
   if (!token) {
     throw redirect("/login")
   }
-  return token
+  return next()
 }
 
 /** Action-only helper: no redirect, just best-effort token forwarding —

@@ -37,7 +37,7 @@ import {
 import { Spinner } from "~/components/ui/spinner"
 import type { MutationResult } from "~/lib/action-results"
 import { getClassrooms, getStudents } from "~/lib/api"
-import { requireToken } from "~/lib/auth"
+import { tokenFromRequest } from "~/lib/auth"
 import type { Classroom } from "~/lib/schemas"
 import type { Route } from "./+types/classroom-home"
 
@@ -49,7 +49,7 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader(args: Route.LoaderArgs) {
-  const token = await requireToken(args)
+  const token = await tokenFromRequest(args)
   const [classrooms, students] = await Promise.all([
     getClassrooms(token),
     getStudents(token),

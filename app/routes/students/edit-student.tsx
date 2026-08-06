@@ -1,11 +1,11 @@
 import type { MutationResult } from "~/lib/action-results"
 import { getClassrooms, updateStudent } from "~/lib/api"
-import { requireToken, tokenFromRequest } from "~/lib/auth"
+import { tokenFromRequest } from "~/lib/auth"
 import { UpdateStudentSchema } from "~/lib/schemas"
 import type { Route } from "./+types/edit-student"
 
 export async function loader(args: Route.LoaderArgs) {
-  const token = await requireToken(args)
+  const token = await tokenFromRequest(args)
   const classrooms = await getClassrooms(token)
   return { classrooms: classrooms }
 }

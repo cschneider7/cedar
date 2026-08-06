@@ -1,22 +1,25 @@
 import { getAuth } from "@clerk/react-router/server"
 import { describe, expect, it, vi } from "vitest"
-import { requireToken, tokenFromRequest } from "~/lib/auth"
+import { requireAuth, tokenFromRequest } from "~/lib/auth"
 import { makeArgs } from "~/lib/test-utils"
 
-describe("requireToken", () => {
-  it("returns the token when the session is valid", async () => {
-    const token = await requireToken(makeArgs("http://test/classrooms"))
-    expect(token).toBe("test-token")
+describe("requireAuth", () => {
+  it("calls next() and returns its result when the session is valid", async () => {
+    const next = vi.fn(async () => new Response("ok"))
+    const result = await requireAuth(makeArgs("http://test/classrooms"), next)
+    expect(next).toHaveBeenCalledOnce()
+    expect(result).toBeInstanceOf(Response)
   })
 
-  it("throws a redirect to /login when unauthenticated", async () => {
+  it("throws a redirect to /login without calling next() when unauthenticated", async () => {
     vi.mocked(getAuth).mockResolvedValueOnce({
       isAuthenticated: false,
       getToken: async () => null,
     } as Awaited<ReturnType<typeof getAuth>>)
+    const next = vi.fn(async () => new Response("ok"))
 
     try {
-      await requireToken(makeArgs("http://test/classrooms/abc123"))
+      await requireAuth(makeArgs("http://test/classrooms/abc123"), next)
       expect.fail("expected a redirect to be thrown")
     } catch (response) {
       expect(response).toBeInstanceOf(Response)
@@ -24,6 +27,7 @@ describe("requireToken", () => {
       expect(res.status).toBe(302)
       expect(res.headers.get("Location")).toBe("/login")
     }
+    expect(next).not.toHaveBeenCalled()
   })
 })
 

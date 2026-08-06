@@ -1,4 +1,4 @@
-import { dark } from "@clerk/themes"
+import { dark, shadcn } from "@clerk/themes"
 import type { ClerkAppearanceTheme } from "@clerk/shared/types"
 import { useEffect, useState } from "react"
 import { useTheme } from "~/components/ui/theme-provider"
@@ -20,7 +20,7 @@ export function useClerkAppearance(): ClerkAppearanceTheme {
   }, [theme])
 
   return {
-    theme: resolvedDark ? dark : undefined,
+    theme: resolvedDark ? [shadcn, dark] : shadcn,
     variables: {
       colorPrimary: "var(--primary)",
       colorBackground: "var(--card)",

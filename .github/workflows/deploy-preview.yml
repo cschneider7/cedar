@@ -86,10 +86,14 @@ jobs:
 
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
-      - name: Write preview API URL for Vercel build
-        run: echo "VITE_API_URL=${{ steps.deploy_fly.outputs.url }}/api/v1" >> .env.local
       - name: Pull Vercel environment
+        # Pulls Preview-scoped env vars configured in the Vercel dashboard,
+        # notably VITE_CLERK_PUBLISHABLE_KEY — this workflow never sets it.
         run: vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
+      - name: Write preview API URL for Vercel build
+        # Must run after `vercel pull` — it overwrites .env.local wholesale,
+        # so writing this first would get silently wiped out.
+        run: echo "VITE_API_URL=${{ steps.deploy_fly.outputs.url }}/api/v1" >> .env.local
       - name: Build Vercel project
         run: vercel build --token="$VERCEL_TOKEN"
       - name: Deploy preview to Vercel
