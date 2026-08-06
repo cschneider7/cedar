@@ -2,7 +2,6 @@ import { SignUp } from "@clerk/react-router"
 import { getAuth } from "@clerk/react-router/server"
 import { Link, redirect } from "react-router"
 import { useClerkAppearance } from "~/hooks/use-clerk-appearance"
-import { sanitizeRedirectTo } from "~/lib/auth"
 import type { Route } from "./+types/signup"
 
 export function meta({}: Route.MetaArgs) {
@@ -10,15 +9,11 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader(args: Route.LoaderArgs) {
-  const url = new URL(args.request.url)
-  const redirectTo = sanitizeRedirectTo(url.searchParams.get("redirectTo"))
   const { isAuthenticated } = await getAuth(args)
-  if (isAuthenticated) throw redirect(redirectTo)
-  return { redirectTo }
+  if (isAuthenticated) throw redirect("/")
 }
 
-export default function Signup({ loaderData }: Route.ComponentProps) {
-  const { redirectTo } = loaderData
+export default function Signup() {
   const appearance = useClerkAppearance()
 
   return (
@@ -28,8 +23,8 @@ export default function Signup({ loaderData }: Route.ComponentProps) {
       </Link>
       <SignUp
         routing="hash"
-        fallbackRedirectUrl={redirectTo}
-        signInUrl={`/login?redirectTo=${encodeURIComponent(redirectTo)}`}
+        fallbackRedirectUrl="/"
+        signInUrl="/login"
         appearance={appearance}
       />
     </div>

@@ -9,7 +9,7 @@ describe("requireToken", () => {
     expect(token).toBe("test-token")
   })
 
-  it("throws a redirect to /login with redirectTo when unauthenticated", async () => {
+  it("throws a redirect to /login when unauthenticated", async () => {
     vi.mocked(getAuth).mockResolvedValueOnce({
       isAuthenticated: false,
       getToken: async () => null,
@@ -22,9 +22,7 @@ describe("requireToken", () => {
       expect(response).toBeInstanceOf(Response)
       const res = response as Response
       expect(res.status).toBe(302)
-      expect(res.headers.get("Location")).toBe(
-        "/login?redirectTo=%2Fclassrooms%2Fabc123"
-      )
+      expect(res.headers.get("Location")).toBe("/login")
     }
   })
 })
