@@ -25,7 +25,12 @@ jobs:
         run: flyctl deploy --remote-only
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Resolve Fly app URL
+        id: fly_app
+        run: |
+          app_name=$(grep -m1 '^app = ' fly.toml | sed -E 's/^app = "(.*)"$/\1/')
+          echo "url=https://${app_name}.fly.dev" >> "$GITHUB_OUTPUT"
       - name: Smoke test deployed app
         uses: ./.github/actions/smoke-test
         with:
-          url: https://seating-chart-app.fly.dev/health
+          url: ${{ steps.fly_app.outputs.url }}/health
