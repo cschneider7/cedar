@@ -2,8 +2,16 @@ import { getAuth } from "@clerk/react-router/server"
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router"
 import { redirect } from "react-router"
 
-/** Loader guard: redirects to `/` with a `redirectTo` back to the page that
- * was requested if unauthenticated, otherwise returns a bearer token for
+/** Only accept same-app relative paths ("/foo", not "//evil.com" or an
+ * absolute URL) as a post-login redirect target. */
+export function sanitizeRedirectTo(value: string | null): string {
+  if (!value) return "/"
+  if (!value.startsWith("/") || value.startsWith("//")) return "/"
+  return value
+}
+
+/** Loader guard: redirects to `/login` with a `redirectTo` back to the page
+ * that was requested if unauthenticated, otherwise returns a bearer token for
  * forwarding to the backend. */
 export async function requireToken(args: LoaderFunctionArgs): Promise<string> {
   const { isAuthenticated, getToken } = await getAuth(args)
@@ -11,7 +19,7 @@ export async function requireToken(args: LoaderFunctionArgs): Promise<string> {
   if (!token) {
     const url = new URL(args.request.url)
     const path = url.pathname + url.search
-    throw redirect(`/?redirectTo=${encodeURIComponent(path)}`)
+    throw redirect(`/login?redirectTo=${encodeURIComponent(path)}`)
   }
   return token
 }
