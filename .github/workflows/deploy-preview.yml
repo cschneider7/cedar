@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
-      name: pr-${{ github.event.number }}
+      name: Preview
       url: ${{ steps.vercel_deploy.outputs.preview_url }}
     env:
       FLY_APP: pr-${{ github.event.number }}-seating-chart-app
