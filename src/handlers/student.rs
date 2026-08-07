@@ -465,7 +465,7 @@ mod tests {
             "student_id": 1,
             "name": "Bob Burger",
             "classroom_id": null,
-            "image_url": "https://example.public.blob.vercel-storage.com/bob.jpg",
+            "image_url": "students/user_1/bob.jpg",
         });
 
         let response = app
@@ -482,7 +482,7 @@ mod tests {
         let json = body_json(response).await;
         assert_eq!(
             json["data"]["image_url"],
-            "https://example.public.blob.vercel-storage.com/bob.jpg"
+            "students/user_1/bob.jpg"
         );
 
         Ok(())
@@ -755,7 +755,7 @@ mod tests {
             &user_id,
             1,
             "Bob",
-            "https://example.public.blob.vercel-storage.com/bob.jpg",
+            "students/user_1/bob.jpg",
         )
         .await;
 
@@ -774,7 +774,7 @@ mod tests {
         let json = body_json(response).await;
         assert_eq!(
             json["data"]["image_url"],
-            "https://example.public.blob.vercel-storage.com/bob.jpg"
+            "students/user_1/bob.jpg"
         );
 
         Ok(())
@@ -791,7 +791,7 @@ mod tests {
             &user_id,
             1,
             "Bob",
-            "https://example.public.blob.vercel-storage.com/bob.jpg",
+            "students/user_1/bob.jpg",
         )
         .await;
 
@@ -825,11 +825,11 @@ mod tests {
             &user_id,
             1,
             "Bob",
-            "https://example.public.blob.vercel-storage.com/old.jpg",
+            "students/user_1/old.jpg",
         )
         .await;
 
-        let body = json!({"image_url": "https://example.public.blob.vercel-storage.com/new.jpg"});
+        let body = json!({"image_url": "students/user_1/new.jpg"});
         let response = app
             .oneshot(authenticated_json_request(
                 "PATCH",
@@ -843,7 +843,7 @@ mod tests {
 
         assert_eq!(
             *recorder.0.lock().unwrap(),
-            vec!["https://example.public.blob.vercel-storage.com/old.jpg".to_string()]
+            vec!["students/user_1/old.jpg".to_string()]
         );
 
         Ok(())
@@ -861,7 +861,7 @@ mod tests {
             &user_id,
             1,
             "Bob",
-            "https://example.public.blob.vercel-storage.com/bob.jpg",
+            "students/user_1/bob.jpg",
         )
         .await;
 
@@ -916,7 +916,7 @@ mod tests {
             &user_id,
             1,
             "Bob",
-            "https://example.public.blob.vercel-storage.com/bob.jpg",
+            "students/user_1/bob.jpg",
         )
         .await;
 
@@ -932,7 +932,7 @@ mod tests {
 
         assert_eq!(
             *recorder.0.lock().unwrap(),
-            vec!["https://example.public.blob.vercel-storage.com/bob.jpg".to_string()]
+            vec!["students/user_1/bob.jpg".to_string()]
         );
 
         Ok(())
@@ -1520,7 +1520,7 @@ mod tests {
             &user_id,
             1,
             "Bob",
-            "https://example.public.blob.vercel-storage.com/bob.jpg",
+            "students/user_1/bob.jpg",
         )
         .await;
         let without_image = insert_student(&pool, &user_id, None, 2, "Alice").await;
@@ -1538,7 +1538,7 @@ mod tests {
 
         assert_eq!(
             *recorder.0.lock().unwrap(),
-            vec!["https://example.public.blob.vercel-storage.com/bob.jpg".to_string()]
+            vec!["students/user_1/bob.jpg".to_string()]
         );
 
         Ok(())

@@ -1,11 +1,18 @@
 import { getAuth } from "@clerk/react-router/server"
-import { handleUpload } from "@vercel/blob/client"
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { describe, expect, it, vi } from "vitest"
 import { makeArgs } from "~/lib/test-utils"
 import { action } from "./student-image-upload"
 
-vi.mock("@vercel/blob/client", () => ({
-  handleUpload: vi.fn(),
+vi.mock("@aws-sdk/client-s3", () => ({
+  PutObjectCommand: vi.fn((input: unknown) => input),
+}))
+vi.mock("@aws-sdk/s3-request-presigner", () => ({
+  getSignedUrl: vi.fn(),
+}))
+vi.mock("~/lib/s3.server", () => ({
+  s3PublicClient: {},
+  S3_BUCKET: "test-bucket",
 }))
 
 function authenticatedAs(userId: string) {
@@ -16,10 +23,10 @@ function authenticatedAs(userId: string) {
   } as Awaited<ReturnType<typeof getAuth>>)
 }
 
-const args = () =>
+const args = (contentLength?: number) =>
   makeArgs("http://test/api/student-image-upload", {
     method: "POST",
-    body: { type: "blob.generate-client-token", payload: {} },
+    body: { contentLength },
   })
 
 describe("student-image-upload action", () => {
@@ -30,7 +37,7 @@ describe("student-image-upload action", () => {
     } as Awaited<ReturnType<typeof getAuth>>)
 
     try {
-      await action(args())
+      await action(args(1024))
       expect.fail("expected a 401 to be thrown")
     } catch (response) {
       expect(response).toBeInstanceOf(Response)
@@ -38,73 +45,28 @@ describe("student-image-upload action", () => {
     }
   })
 
-  it("constrains the token and scopes the pathname to the current user", async () => {
+  it("returns 400 when contentLength is missing", async () => {
     authenticatedAs("user_1")
-    vi.mocked(handleUpload).mockImplementationOnce(
-      async ({ onBeforeGenerateToken }) => {
-        const constraints = await onBeforeGenerateToken(
-          "students/user_1/photo.jpg",
-          null,
-          false
-        )
-        return {
-          type: "blob.generate-client-token" as const,
-          clientToken: JSON.stringify(constraints),
-        }
-      }
-    )
-
-    const response = await action(args())
-    const json = await response.json()
-    const constraints = JSON.parse(json.clientToken)
-
-    expect(constraints).toEqual({
-      allowedContentTypes: ["image/webp"],
-      maximumSizeInBytes: 5 * 1024 * 1024,
-      addRandomSuffix: true,
-    })
-  })
-
-  it("rejects a pathname not scoped to the current user", async () => {
-    authenticatedAs("user_1")
-    vi.mocked(handleUpload).mockImplementationOnce(
-      async ({ onBeforeGenerateToken }) => {
-        await onBeforeGenerateToken(
-          "students/someone-else/photo.jpg",
-          null,
-          false
-        )
-        return { type: "blob.generate-client-token" as const, clientToken: "" }
-      }
-    )
-
-    const response = await action(args())
+    const response = await action(args(undefined))
     expect(response.status).toBe(400)
   })
 
-  it("no-ops onUploadCompleted, leaving image_url persistence to the student API call", async () => {
+  it("returns 400 when contentLength exceeds the 5MB limit", async () => {
     authenticatedAs("user_1")
-    vi.mocked(handleUpload).mockImplementationOnce(
-      async ({ onUploadCompleted }) => {
-        await onUploadCompleted?.({
-          blob: {
-            pathname: "students/user_1/photo.jpg",
-            contentType: "image/jpeg",
-            contentDisposition: "inline",
-            url: "https://example.public.blob.vercel-storage.com/photo.jpg",
-            downloadUrl:
-              "https://example.public.blob.vercel-storage.com/photo.jpg?download=1",
-            etag: "etag-1",
-          },
-        })
-        return {
-          type: "blob.upload-completed" as const,
-          response: "ok" as const,
-        }
-      }
+    const response = await action(args(6 * 1024 * 1024))
+    expect(response.status).toBe(400)
+  })
+
+  it("returns a presigned url and a key scoped to the current user", async () => {
+    authenticatedAs("user_1")
+    vi.mocked(getSignedUrl).mockResolvedValueOnce(
+      "https://minio.example/presigned"
     )
 
-    const response = await action(args())
-    expect(response.status).toBe(200)
+    const response = await action(args(1024))
+    const json = await response.json()
+
+    expect(json.url).toBe("https://minio.example/presigned")
+    expect(json.key).toMatch(/^students\/user_1\/.+\.webp$/)
   })
 })

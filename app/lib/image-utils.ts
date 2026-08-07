@@ -9,13 +9,13 @@ export const OUTPUT_IMAGE_QUALITY = 0.85
 
 /**
  * Builds the URL a student's private photo must be fetched through, since
- * private Blob URLs aren't directly browser-fetchable (see the "api/student-image"
- * resource route, which authenticates the request and streams the blob).
- * @param imageUrl - The student's stored `image_url` (a private Blob URL)
+ * the S3-compatible bucket is private (see the "api/student-image" resource
+ * route, which authenticates the request and streams the object).
+ * @param imageKey - The student's stored `image_url` (an S3 object key)
  * @returns The proxy URL to use as an `<img>` `src`
  */
-export function studentImageProxyUrl(imageUrl: string): string {
-  return `/api/student-image?url=${encodeURIComponent(imageUrl)}`
+export function studentImageProxyUrl(imageKey: string): string {
+  return `/api/student-image?key=${encodeURIComponent(imageKey)}`
 }
 
 /**

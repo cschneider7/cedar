@@ -1,6 +1,4 @@
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useAuth } from "@clerk/react-router"
-import { upload } from "@vercel/blob/client"
 import { Controller, useForm } from "react-hook-form"
 import { useEffect, useState } from "react"
 import { useFetcher, useNavigate } from "react-router"
@@ -63,7 +61,6 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
   const open = props.open ?? uncontrolledOpen
   const setOpen = props.onOpenChange ?? setUncontrolledOpen
   const navigate = useNavigate()
-  const { userId } = useAuth()
 
   const [photo, setPhoto] = useState<PhotoFieldValue>(() =>
     defaultPhotoValue(props)
@@ -130,12 +127,29 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
     if (photo.kind === "staged") {
       setIsUploading(true)
       try {
-        const blob = await upload(
-          `students/${userId}/${crypto.randomUUID()}-${photo.file.name}`,
-          photo.file,
-          { access: "private", handleUploadUrl: "/api/student-image-upload" }
-        )
-        submitData.image_url = blob.url
+        const tokenRes = await fetch("/api/student-image-upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contentLength: photo.file.size }),
+        })
+        if (!tokenRes.ok) {
+          throw new Error("Failed to prepare photo upload")
+        }
+        const { url, key } = (await tokenRes.json()) as {
+          url: string
+          key: string
+        }
+
+        const putRes = await fetch(url, {
+          method: "PUT",
+          headers: { "Content-Type": photo.file.type },
+          body: photo.file,
+        })
+        if (!putRes.ok) {
+          throw new Error("Failed to upload photo")
+        }
+
+        submitData.image_url = key
       } catch (error) {
         setUploadError((error as Error).message)
         setIsUploading(false)

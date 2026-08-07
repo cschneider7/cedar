@@ -74,11 +74,10 @@ describe("validateImageFile", () => {
 })
 
 describe("studentImageProxyUrl", () => {
-  it("wraps the blob url in the proxy route as an encoded query param", () => {
-    const blobUrl =
-      "https://store123.private.blob.vercel-storage.com/students/user_1/photo.jpg"
-    expect(studentImageProxyUrl(blobUrl)).toBe(
-      `/api/student-image?url=${encodeURIComponent(blobUrl)}`
+  it("wraps the object key in the proxy route as an encoded query param", () => {
+    const key = "students/user_1/photo.webp"
+    expect(studentImageProxyUrl(key)).toBe(
+      `/api/student-image?key=${encodeURIComponent(key)}`
     )
   })
 })
