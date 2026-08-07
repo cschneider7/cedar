@@ -480,10 +480,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::CREATED);
 
         let json = body_json(response).await;
-        assert_eq!(
-            json["data"]["image_url"],
-            "students/user_1/bob.jpg"
-        );
+        assert_eq!(json["data"]["image_url"], "students/user_1/bob.jpg");
 
         Ok(())
     }
@@ -750,14 +747,9 @@ mod tests {
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
-        let existing = insert_student_with_image_url(
-            &pool,
-            &user_id,
-            1,
-            "Bob",
-            "students/user_1/bob.jpg",
-        )
-        .await;
+        let existing =
+            insert_student_with_image_url(&pool, &user_id, 1, "Bob", "students/user_1/bob.jpg")
+                .await;
 
         let body = json!({"name": "Bob Updated"});
         let response = app
@@ -772,10 +764,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         let json = body_json(response).await;
-        assert_eq!(
-            json["data"]["image_url"],
-            "students/user_1/bob.jpg"
-        );
+        assert_eq!(json["data"]["image_url"], "students/user_1/bob.jpg");
 
         Ok(())
     }
@@ -786,14 +775,9 @@ mod tests {
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
-        let existing = insert_student_with_image_url(
-            &pool,
-            &user_id,
-            1,
-            "Bob",
-            "students/user_1/bob.jpg",
-        )
-        .await;
+        let existing =
+            insert_student_with_image_url(&pool, &user_id, 1, "Bob", "students/user_1/bob.jpg")
+                .await;
 
         let body = json!({"image_url": null});
         let response = app
@@ -820,14 +804,9 @@ mod tests {
         let recorder = std::sync::Arc::new(RecordingBlobDeleter::default());
         let app = app_with_blob_deleter(pool.clone(), recorder.clone());
         let user_id = test_user_id();
-        let existing = insert_student_with_image_url(
-            &pool,
-            &user_id,
-            1,
-            "Bob",
-            "students/user_1/old.jpg",
-        )
-        .await;
+        let existing =
+            insert_student_with_image_url(&pool, &user_id, 1, "Bob", "students/user_1/old.jpg")
+                .await;
 
         let body = json!({"image_url": "students/user_1/new.jpg"});
         let response = app
@@ -856,14 +835,9 @@ mod tests {
         let recorder = std::sync::Arc::new(RecordingBlobDeleter::default());
         let app = app_with_blob_deleter(pool.clone(), recorder.clone());
         let user_id = test_user_id();
-        let existing = insert_student_with_image_url(
-            &pool,
-            &user_id,
-            1,
-            "Bob",
-            "students/user_1/bob.jpg",
-        )
-        .await;
+        let existing =
+            insert_student_with_image_url(&pool, &user_id, 1, "Bob", "students/user_1/bob.jpg")
+                .await;
 
         let body = json!({"name": "Bob Updated"});
         let response = app
@@ -911,14 +885,9 @@ mod tests {
         let recorder = std::sync::Arc::new(RecordingBlobDeleter::default());
         let app = app_with_blob_deleter(pool.clone(), recorder.clone());
         let user_id = test_user_id();
-        let existing = insert_student_with_image_url(
-            &pool,
-            &user_id,
-            1,
-            "Bob",
-            "students/user_1/bob.jpg",
-        )
-        .await;
+        let existing =
+            insert_student_with_image_url(&pool, &user_id, 1, "Bob", "students/user_1/bob.jpg")
+                .await;
 
         let response = app
             .oneshot(authenticated_request(
@@ -1515,14 +1484,9 @@ mod tests {
         let recorder = std::sync::Arc::new(RecordingBlobDeleter::default());
         let app = app_with_blob_deleter(pool.clone(), recorder.clone());
         let user_id = test_user_id();
-        let with_image = insert_student_with_image_url(
-            &pool,
-            &user_id,
-            1,
-            "Bob",
-            "students/user_1/bob.jpg",
-        )
-        .await;
+        let with_image =
+            insert_student_with_image_url(&pool, &user_id, 1, "Bob", "students/user_1/bob.jpg")
+                .await;
         let without_image = insert_student(&pool, &user_id, None, 2, "Alice").await;
 
         let response = app

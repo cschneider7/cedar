@@ -20,3 +20,8 @@ jobs:
       - uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: high
+          # rustls-webpki DoS via malformed CRL, pulled in transitively by
+          # aws-sdk-s3 -> aws-smithy-http-client's hyper-rustls "acceptor"
+          # feature (server-side TLS code we never exercise as an S3 client).
+          # No newer aws-sdk-s3 release avoids this as of 1.141.0 (latest).
+          allow-ghsas: GHSA-82j2-j2ch-gfr8
