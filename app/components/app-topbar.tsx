@@ -1,5 +1,5 @@
 import { Show, useClerk, useUser } from "@clerk/react-router"
-import { Plus } from "lucide-react"
+import { LogOut, Monitor, Moon, Plus, Settings, Sun } from "lucide-react"
 import { Fragment, useState } from "react"
 import { Link, useMatches } from "react-router"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
@@ -20,12 +20,18 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"
 import { Input } from "~/components/ui/input"
 import { Separator } from "~/components/ui/separator"
 import { SidebarTrigger } from "~/components/ui/sidebar"
+import { useTheme, type Theme } from "~/components/ui/theme-provider"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 
 function Breadcrumbs() {
@@ -111,9 +117,20 @@ function CreateDropdown() {
   )
 }
 
+const themeIcons = {
+  light: Sun,
+  dark: Moon,
+  system: Monitor,
+} as const
+
+function isTheme(value: unknown): value is Theme {
+  return value === "light" || value === "dark" || value === "system"
+}
+
 function UserMenu() {
   const { user } = useUser()
   const { signOut, openUserProfile } = useClerk()
+  const { theme, setTheme } = useTheme()
 
   if (!user) return null
 
@@ -125,11 +142,19 @@ function UserMenu() {
     displayName.slice(0, 2).toUpperCase()
 
   // Avatar renders at size-8 (32px) — request a 2x-retina-sized crop
-  // instead of Clerk's full-size default image.
-  const avatarImageUrl = new URL(user.imageUrl)
-  avatarImageUrl.searchParams.set("width", "64")
-  avatarImageUrl.searchParams.set("height", "64")
-  avatarImageUrl.searchParams.set("fit", "crop")
+  // instead of Clerk's full-size default image. imageUrl can be briefly
+  // empty right after a page refresh, before Clerk finishes loading the
+  // full user profile client-side.
+  let avatarImageUrl: string | undefined
+  if (user.imageUrl) {
+    const url = new URL(user.imageUrl)
+    url.searchParams.set("width", "64")
+    url.searchParams.set("height", "64")
+    url.searchParams.set("fit", "crop")
+    avatarImageUrl = url.toString()
+  }
+
+  const ThemeIcon = themeIcons[theme]
 
   return (
     <DropdownMenu>
@@ -141,18 +166,17 @@ function UserMenu() {
             className="rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
           >
             <Avatar>
-              <AvatarImage src={avatarImageUrl.toString()} alt={displayName} />
+              <AvatarImage src={avatarImageUrl} alt={displayName} />
               <AvatarFallback>{initials}</AvatarFallback>
             </Avatar>
           </button>
         }
       />
-      <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuContent align="end" className="w-max max-w-45">
         <DropdownMenuGroup>
           <DropdownMenuLabel>
-            <div className="truncate">{displayName}</div>
             {email && (
-              <div className="truncate text-xs font-normal text-muted-foreground">
+              <div className="truncate text-sm font-normal text-muted-foreground">
                 {email}
               </div>
             )}
@@ -160,10 +184,39 @@ function UserMenu() {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => openUserProfile()}>
-          Manage account
+          <Settings />
+          Account
         </DropdownMenuItem>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <ThemeIcon />
+            <span>Theme</span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuRadioGroup
+              value={theme}
+              onValueChange={(value) => {
+                if (isTheme(value)) setTheme(value)
+              }}
+            >
+              <DropdownMenuRadioItem value="light" closeOnClick>
+                Light
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="dark" closeOnClick>
+                Dark
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="system" closeOnClick>
+                System
+              </DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => signOut({ redirectUrl: "/" })}>
+        <DropdownMenuItem
+          variant="destructive"
+          onClick={() => signOut({ redirectUrl: "/" })}
+        >
+          <LogOut />
           Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>

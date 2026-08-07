@@ -1,12 +1,9 @@
 import {
   ClipboardList,
   Home,
-  Monitor,
-  Moon,
   MoreHorizontal,
   Plus,
   SheetIcon,
-  Sun,
   UsersRound,
 } from "lucide-react"
 import { useState } from "react"
@@ -23,7 +20,6 @@ import {
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupAction,
   SidebarGroupContent,
@@ -34,7 +30,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "~/components/ui/sidebar"
-import { useTheme } from "~/components/ui/theme-provider"
 import type { Classroom } from "~/lib/schemas"
 import type { loader as rootLoader } from "~/root"
 
@@ -95,43 +90,6 @@ function ClassroomRow({
         open={editOpen}
         onOpenChange={setEditOpen}
       />
-    </SidebarMenuItem>
-  )
-}
-
-const themeIcons = {
-  light: Sun,
-  dark: Moon,
-  system: Monitor,
-} as const
-
-function AppearanceMenuItem() {
-  const { theme, setTheme } = useTheme()
-  const ThemeIcon = themeIcons[theme]
-
-  return (
-    <SidebarMenuItem>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <SidebarMenuButton tooltip="Appearance">
-              <ThemeIcon />
-              <span>Appearance</span>
-            </SidebarMenuButton>
-          }
-        />
-        <DropdownMenuContent side="right" align="start">
-          <DropdownMenuItem onClick={() => setTheme("light")}>
-            Light
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setTheme("dark")}>
-            Dark
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setTheme("system")}>
-            System
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
     </SidebarMenuItem>
   )
 }
@@ -220,11 +178,6 @@ export function AppSidebar() {
           <SidebarGroupContent></SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
-        <SidebarMenu className="mb-3">
-          <AppearanceMenuItem />
-        </SidebarMenu>
-      </SidebarFooter>
       <ClassroomFormDialog
         mode="create"
         open={createOpen}
