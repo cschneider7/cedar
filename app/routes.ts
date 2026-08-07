@@ -9,6 +9,8 @@ import {
 export default [
   route("login", "routes/auth/login.tsx"),
   route("signup", "routes/auth/signup.tsx"),
+  route("api/student-image-upload", "routes/api/student-image-upload.tsx"),
+  route("api/student-image", "routes/api/student-image.tsx"),
   layout("layouts/app-shell.tsx", [
     index("routes/home.tsx"),
 

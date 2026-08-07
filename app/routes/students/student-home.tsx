@@ -21,6 +21,7 @@ import {
   useNavigation,
 } from "react-router"
 import { toast } from "sonner"
+import { StudentAvatar } from "~/components/student-avatar"
 import { StudentFormDialog } from "~/components/student-form-dialog"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import {
@@ -182,7 +183,7 @@ function StudentCard({
     <Item variant="outline" render={<Link to={`/students/${student.id}`} />}>
       <ItemHeader>
         <ItemMedia variant="image" className="aspect-square size-auto w-full">
-          <img src={`https://avatar.vercel.sh/${student.id}`} alt="" />
+          <StudentAvatar student={student} className="size-full text-4xl" />
         </ItemMedia>
       </ItemHeader>
       <ItemContent>

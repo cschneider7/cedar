@@ -110,7 +110,13 @@ describe("student-home loader", () => {
   it("returns the students page, page, q, viewMode, and classrooms", async () => {
     const page: StudentsPage = {
       students: [
-        { id: "s1", student_id: 1, name: "Alice", classroom_id: null },
+        {
+          id: "s1",
+          student_id: 1,
+          name: "Alice",
+          classroom_id: null,
+          image_url: null,
+        },
       ],
       page: 1,
       page_size: 24,

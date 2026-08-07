@@ -1,4 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod"
+import { useAuth } from "@clerk/react-router"
+import { upload } from "@vercel/blob/client"
 import { Controller, useForm } from "react-hook-form"
 import { useEffect, useState } from "react"
 import { useFetcher, useNavigate } from "react-router"
@@ -32,6 +34,10 @@ import {
   SelectValue,
 } from "~/components/ui/select"
 import { Spinner } from "~/components/ui/spinner"
+import {
+  StudentPhotoField,
+  type PhotoFieldValue,
+} from "~/components/student-photo-field"
 import type { MutationResult } from "~/lib/action-results"
 import type { Classroom, Student } from "~/lib/schemas"
 import { CreateStudentSchema, UpdateStudentSchema } from "~/lib/schemas"
@@ -44,12 +50,26 @@ type StudentFormDialogProps = (
   onOpenChange?: (open: boolean) => void
 }
 
+function defaultPhotoValue(props: StudentFormDialogProps): PhotoFieldValue {
+  if (props.mode === "edit" && props.student.image_url) {
+    return { kind: "existing", url: props.student.image_url }
+  }
+  return { kind: "none" }
+}
+
 export function StudentFormDialog(props: StudentFormDialogProps) {
   const { mode, trigger } = props
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
   const open = props.open ?? uncontrolledOpen
   const setOpen = props.onOpenChange ?? setUncontrolledOpen
   const navigate = useNavigate()
+  const { userId } = useAuth()
+
+  const [photo, setPhoto] = useState<PhotoFieldValue>(() =>
+    defaultPhotoValue(props)
+  )
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
   const formPath =
     mode === "create" ? "/students/new" : `/students/${props.student.id}/edit`
@@ -91,19 +111,44 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
   useEffect(() => {
     if (open) {
       form.reset(defaultValues)
+      setPhoto(defaultPhotoValue(props))
+      setUploadError(null)
     }
   }, [open])
 
-  const onSubmit = (data: z.infer<typeof schema>) => {
-    const submitData =
+  const onSubmit = async (data: z.infer<typeof schema>) => {
+    setUploadError(null)
+    const submitData: Record<string, unknown> =
       mode === "create"
-        ? data
+        ? { ...data }
         : Object.fromEntries(
             Object.entries(data).filter(
               ([key]) => dirtyFields[key as keyof typeof dirtyFields]
             )
           )
-    submitFetcher.submit(submitData, {
+
+    if (photo.kind === "staged") {
+      setIsUploading(true)
+      try {
+        const blob = await upload(
+          `students/${userId}/${crypto.randomUUID()}-${photo.file.name}`,
+          photo.file,
+          { access: "private", handleUploadUrl: "/api/student-image-upload" }
+        )
+        submitData.image_url = blob.url
+      } catch (error) {
+        setUploadError((error as Error).message)
+        setIsUploading(false)
+        return
+      }
+      setIsUploading(false)
+    } else if (photo.kind === "removed") {
+      submitData.image_url = null
+    } else if (mode === "create" && photo.kind === "none") {
+      submitData.image_url = null
+    }
+
+    submitFetcher.submit(submitData as z.infer<typeof schema>, {
       method: "post",
       action: formPath,
       encType: "application/json",
@@ -147,13 +192,25 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
               : "Enter student info here."}
           </DialogDescription>
         </DialogHeader>
-        {submitFetcher.data && !submitFetcher.data.ok && (
+        {(uploadError ||
+          (submitFetcher.data &&
+            !submitFetcher.data.ok &&
+            submitFetcher.data.error)) && (
           <Alert variant="destructive">
-            <AlertDescription>{submitFetcher.data.error}</AlertDescription>
+            <AlertDescription>
+              {uploadError ||
+                (submitFetcher.data && !submitFetcher.data.ok
+                  ? submitFetcher.data.error
+                  : null)}
+            </AlertDescription>
           </Alert>
         )}
         <form id="student-form" onSubmit={form.handleSubmit(onSubmit)}>
           <FieldGroup>
+            <Field>
+              <FieldLabel>Photo</FieldLabel>
+              <StudentPhotoField value={photo} onChange={setPhoto} />
+            </Field>
             <Controller
               name="name"
               control={form.control}
@@ -237,8 +294,12 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
           <DialogClose render={<Button type="button" variant="outline" />}>
             Cancel
           </DialogClose>
-          <Button type="submit" form="student-form" disabled={isSubmitting}>
-            {isSubmitting && <Spinner />}
+          <Button
+            type="submit"
+            form="student-form"
+            disabled={isSubmitting || isUploading}
+          >
+            {(isSubmitting || isUploading) && <Spinner />}
             Submit
           </Button>
         </DialogFooter>

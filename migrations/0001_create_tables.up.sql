@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS students (
     classroom_id UUID REFERENCES classrooms ON DELETE SET NULL,
     student_id INTEGER NOT NULL,
     name TEXT NOT NULL,
+    image_url TEXT,
     created_time TIMESTAMPTZ DEFAULT now()
 );
 

@@ -1,3 +1,4 @@
+import { StudentAvatar } from "~/components/student-avatar"
 import { Empty, EmptyDescription } from "~/components/ui/empty"
 import { Item, ItemContent, ItemHeader, ItemTitle } from "~/components/ui/item"
 import { ScrollArea } from "~/components/ui/scroll-area"
@@ -25,14 +26,9 @@ function StudentChip({
       className="aspect-square w-24 shrink-0 overflow-hidden"
     >
       <ItemHeader>
-        <img
-          src={`https://avatar.vercel.sh/${student.id}`}
-          alt="Student image"
-          draggable="false"
-          width={100}
-          height={80}
-          loading="lazy"
-          className="aspect-5/4 w-full rounded-sm object-cover brightness-60 grayscale dark:brightness-40"
+        <StudentAvatar
+          student={student}
+          className="aspect-5/4 w-full rounded-sm"
         />
       </ItemHeader>
       <ItemContent>

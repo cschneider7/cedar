@@ -1,6 +1,10 @@
 #![cfg(test)]
 
-use std::sync::Arc;
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::{Arc, Mutex},
+};
 
 use axum::{Router, body::Body, http::Request, response::Response};
 use clerk_rs::validators::authorizer::ClerkJwt;
@@ -8,9 +12,22 @@ use http_body_util::BodyExt;
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::{AppState, model::ClassroomModel, routes::create_router};
+use crate::{AppState, blob::BlobDeleter, model::ClassroomModel, routes::create_router};
 
 const TEST_FRONTEND_ORIGIN: &str = "http://localhost:5173";
+
+/// A `BlobDeleter` test double that records every URL passed to `delete`
+/// instead of making a real network call, so tests can assert on cleanup
+/// behavior without mocking HTTP.
+#[derive(Clone, Default)]
+pub struct RecordingBlobDeleter(pub Arc<Mutex<Vec<String>>>);
+
+impl BlobDeleter for RecordingBlobDeleter {
+    fn delete(&self, url: String) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        self.0.lock().unwrap().push(url);
+        Box::pin(async {})
+    }
+}
 
 /// Builds the app router for tests with no Clerk layer attached — tests
 /// authenticate by attaching a hand-built `ClerkJwt` extension directly to
@@ -19,7 +36,16 @@ const TEST_FRONTEND_ORIGIN: &str = "http://localhost:5173";
 /// auth-extraction and user-scoping logic is still exercised the same way;
 /// only Clerk's signature-verification step is bypassed.
 pub fn app(pool: sqlx::PgPool) -> Router {
-    let app_state = Arc::new(AppState { db: pool });
+    app_with_blob_deleter(pool, Arc::new(RecordingBlobDeleter::default()))
+}
+
+/// Same as `app`, but with an injectable `BlobDeleter` for tests asserting on
+/// blob cleanup calls (see `RecordingBlobDeleter`).
+pub fn app_with_blob_deleter(pool: sqlx::PgPool, blob_deleter: Arc<dyn BlobDeleter>) -> Router {
+    let app_state = Arc::new(AppState {
+        db: pool,
+        blob_deleter,
+    });
     create_router(app_state, None, TEST_FRONTEND_ORIGIN.to_string())
 }
 

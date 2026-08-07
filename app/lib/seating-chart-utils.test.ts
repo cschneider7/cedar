@@ -30,7 +30,7 @@ import {
 const DEFAULT_BOUNDARY = { width: 1080, height: 820 }
 
 function makeStudent(id: string): Student {
-  return { id, student_id: 1, name: id, classroom_id: "c1" }
+  return { id, student_id: 1, name: id, classroom_id: "c1", image_url: null }
 }
 
 function makeSeatingChart(

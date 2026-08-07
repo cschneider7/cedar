@@ -78,6 +78,7 @@ jobs:
           secrets: >-
             DATABASE_URL=${{ steps.create-branch.outputs.db_url }}
             CLERK_SECRET_KEY=${{ secrets.CLERK_SECRET_KEY }}
+            BLOB_READ_WRITE_TOKEN=${{ secrets.BLOB_READ_WRITE_TOKEN }}
 
       - name: Smoke test Fly preview app
         uses: ./.github/actions/smoke-test

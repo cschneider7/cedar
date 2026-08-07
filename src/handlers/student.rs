@@ -236,14 +236,16 @@ pub async fn create_student_handler(
             user_id,
             classroom_id,
             student_id,
-            name
+            name,
+            image_url
         )
-        VALUES ($1, $2, $3, $4)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING *"#,
         user_id,
         body.classroom_id,
         body.student_id,
-        &body.name
+        &body.name,
+        body.image_url
     )
     .fetch_one(&data.db)
     .await?;
@@ -271,6 +273,10 @@ pub async fn update_student_handler(
     let new_classroom_id = body.classroom_id.unwrap_or(student.classroom_id);
     let new_student_id = body.student_id.unwrap_or(student.student_id);
     let new_name = body.name.as_ref().unwrap_or(&student.name);
+    let new_image_url = body
+        .image_url
+        .clone()
+        .unwrap_or_else(|| student.image_url.clone());
 
     check_classroom_ownership(&data.db, new_classroom_id, &user_id).await?;
 
@@ -279,16 +285,24 @@ pub async fn update_student_handler(
         r#"UPDATE students SET
             classroom_id = $1,
             student_id = $2,
-            name = $3
-        WHERE id = $4
+            name = $3,
+            image_url = $4
+        WHERE id = $5
         RETURNING *"#,
         new_classroom_id,
         new_student_id,
         &new_name,
+        new_image_url,
         student.id
     )
     .fetch_one(&data.db)
     .await?;
+
+    if student.image_url != updated_student.image_url
+        && let Some(old_url) = student.image_url
+    {
+        data.blob_deleter.delete(old_url).await;
+    }
 
     Ok((StatusCode::OK, Json(json!({"data": updated_student}))))
 }
@@ -308,6 +322,10 @@ pub async fn delete_student_handler(
     .fetch_one(&data.db)
     .await?;
 
+    if let Some(url) = student.image_url.clone() {
+        data.blob_deleter.delete(url).await;
+    }
+
     Ok((StatusCode::OK, Json(json!({"data": student}))))
 }
 
@@ -320,17 +338,28 @@ pub async fn bulk_delete_students_handler(
     State(data): State<Arc<AppState>>,
     Json(body): Json<BulkDeleteStudentsSchema>,
 ) -> Result<impl IntoResponse, AppError> {
-    let result = sqlx::query!(
-        r#"DELETE FROM students WHERE user_id = $1 AND id = ANY($2)"#,
+    struct DeletedImageUrl {
+        image_url: Option<String>,
+    }
+
+    let deleted = sqlx::query_as!(
+        DeletedImageUrl,
+        r#"DELETE FROM students WHERE user_id = $1 AND id = ANY($2) RETURNING image_url"#,
         user_id,
         &body.ids
     )
-    .execute(&data.db)
+    .fetch_all(&data.db)
     .await?;
+
+    for row in &deleted {
+        if let Some(url) = row.image_url.clone() {
+            data.blob_deleter.delete(url).await;
+        }
+    }
 
     Ok((
         StatusCode::OK,
-        Json(json!({"data": {"deleted_count": result.rows_affected()}})),
+        Json(json!({"data": {"deleted_count": deleted.len()}})),
     ))
 }
 
@@ -343,8 +372,8 @@ mod tests {
 
     use super::*;
     use crate::test_support::{
-        app, authenticated_json_request, authenticated_request, body_json, insert_classroom,
-        test_user_id,
+        RecordingBlobDeleter, app, app_with_blob_deleter, authenticated_json_request,
+        authenticated_request, body_json, insert_classroom, test_user_id,
     };
 
     async fn insert_student(
@@ -363,6 +392,28 @@ mod tests {
             classroom_id,
             student_id,
             name
+        )
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    }
+
+    async fn insert_student_with_image_url(
+        pool: &sqlx::PgPool,
+        user_id: &str,
+        student_id: i32,
+        name: &str,
+        image_url: &str,
+    ) -> StudentModel {
+        sqlx::query_as!(
+            StudentModel,
+            r#"INSERT INTO students (user_id, classroom_id, student_id, name, image_url)
+            VALUES ($1, NULL, $2, $3, $4)
+            RETURNING *"#,
+            user_id,
+            student_id,
+            name,
+            image_url
         )
         .fetch_one(pool)
         .await
@@ -402,6 +453,37 @@ mod tests {
         assert_eq!(json["data"]["student_id"], 1);
         assert_eq!(json["data"]["name"], "Bob Burger");
         assert!(json["data"]["classroom_id"].is_null());
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn create_student_with_image_url_success(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let body = json!({
+            "student_id": 1,
+            "name": "Bob Burger",
+            "classroom_id": null,
+            "image_url": "https://example.public.blob.vercel-storage.com/bob.jpg",
+        });
+
+        let response = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/students",
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let json = body_json(response).await;
+        assert_eq!(
+            json["data"]["image_url"],
+            "https://example.public.blob.vercel-storage.com/bob.jpg"
+        );
 
         Ok(())
     }
@@ -660,6 +742,146 @@ mod tests {
         Ok(())
     }
 
+    // Double-Option deserialization for image_url: omitted keeps, explicit
+    // null clears — same pattern as classroom_id above.
+    #[sqlx::test]
+    async fn update_student_omitted_image_url_keeps_existing_value(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let existing = insert_student_with_image_url(
+            &pool,
+            &user_id,
+            1,
+            "Bob",
+            "https://example.public.blob.vercel-storage.com/bob.jpg",
+        )
+        .await;
+
+        let body = json!({"name": "Bob Updated"});
+        let response = app
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                &format!("/api/v1/students/{}", existing.id),
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        assert_eq!(
+            json["data"]["image_url"],
+            "https://example.public.blob.vercel-storage.com/bob.jpg"
+        );
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn update_student_explicit_null_image_url_clears_value(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let existing = insert_student_with_image_url(
+            &pool,
+            &user_id,
+            1,
+            "Bob",
+            "https://example.public.blob.vercel-storage.com/bob.jpg",
+        )
+        .await;
+
+        let body = json!({"image_url": null});
+        let response = app
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                &format!("/api/v1/students/{}", existing.id),
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        assert!(json["data"]["image_url"].is_null());
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn update_student_replacing_image_url_deletes_old_blob(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let recorder = std::sync::Arc::new(RecordingBlobDeleter::default());
+        let app = app_with_blob_deleter(pool.clone(), recorder.clone());
+        let user_id = test_user_id();
+        let existing = insert_student_with_image_url(
+            &pool,
+            &user_id,
+            1,
+            "Bob",
+            "https://example.public.blob.vercel-storage.com/old.jpg",
+        )
+        .await;
+
+        let body = json!({"image_url": "https://example.public.blob.vercel-storage.com/new.jpg"});
+        let response = app
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                &format!("/api/v1/students/{}", existing.id),
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        assert_eq!(
+            *recorder.0.lock().unwrap(),
+            vec!["https://example.public.blob.vercel-storage.com/old.jpg".to_string()]
+        );
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn update_student_unchanged_image_url_does_not_delete_blob(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let recorder = std::sync::Arc::new(RecordingBlobDeleter::default());
+        let app = app_with_blob_deleter(pool.clone(), recorder.clone());
+        let user_id = test_user_id();
+        let existing = insert_student_with_image_url(
+            &pool,
+            &user_id,
+            1,
+            "Bob",
+            "https://example.public.blob.vercel-storage.com/bob.jpg",
+        )
+        .await;
+
+        let body = json!({"name": "Bob Updated"});
+        let response = app
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                &format!("/api/v1/students/{}", existing.id),
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        assert!(recorder.0.lock().unwrap().is_empty());
+
+        Ok(())
+    }
+
     #[sqlx::test]
     async fn delete_student_success(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
@@ -680,6 +902,38 @@ mod tests {
         assert_eq!(json["data"]["id"], existing.id.to_string());
 
         assert!(fetch_student(&pool, existing.id).await.is_none());
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn delete_student_with_image_url_deletes_blob(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let recorder = std::sync::Arc::new(RecordingBlobDeleter::default());
+        let app = app_with_blob_deleter(pool.clone(), recorder.clone());
+        let user_id = test_user_id();
+        let existing = insert_student_with_image_url(
+            &pool,
+            &user_id,
+            1,
+            "Bob",
+            "https://example.public.blob.vercel-storage.com/bob.jpg",
+        )
+        .await;
+
+        let response = app
+            .oneshot(authenticated_request(
+                "DELETE",
+                &format!("/api/v1/students/{}", existing.id),
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        assert_eq!(
+            *recorder.0.lock().unwrap(),
+            vec!["https://example.public.blob.vercel-storage.com/bob.jpg".to_string()]
+        );
 
         Ok(())
     }
@@ -1250,6 +1504,42 @@ mod tests {
         assert!(fetch_student(&pool, a1.id).await.is_none());
         assert!(fetch_student(&pool, a2.id).await.is_none());
         assert!(fetch_student(&pool, b1.id).await.is_some());
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn bulk_delete_students_deletes_blobs_for_each_row(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let recorder = std::sync::Arc::new(RecordingBlobDeleter::default());
+        let app = app_with_blob_deleter(pool.clone(), recorder.clone());
+        let user_id = test_user_id();
+        let with_image = insert_student_with_image_url(
+            &pool,
+            &user_id,
+            1,
+            "Bob",
+            "https://example.public.blob.vercel-storage.com/bob.jpg",
+        )
+        .await;
+        let without_image = insert_student(&pool, &user_id, None, 2, "Alice").await;
+
+        let response = app
+            .oneshot(authenticated_json_request(
+                "DELETE",
+                "/api/v1/students",
+                json!({"ids": [with_image.id, without_image.id]}),
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        assert_eq!(
+            *recorder.0.lock().unwrap(),
+            vec!["https://example.public.blob.vercel-storage.com/bob.jpg".to_string()]
+        );
 
         Ok(())
     }

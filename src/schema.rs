@@ -35,16 +35,19 @@ pub struct StudentSchema {
     pub classroom_id: Option<Uuid>,
     pub student_id: i32,
     pub name: String,
+    pub image_url: Option<String>,
 }
 
 /// Request body for partially updating a student; omitted fields keep their
-/// existing value, while an explicit `null` `classroom_id` clears it.
+/// existing value, while an explicit `null` `classroom_id`/`image_url` clears it.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateStudentSchema {
     #[serde(default, deserialize_with = "deserialize_some")]
     pub classroom_id: Option<Option<Uuid>>,
     pub student_id: Option<i32>,
     pub name: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub image_url: Option<Option<String>>,
 }
 
 /// A column `GET /api/v1/students` can sort by.
