@@ -33,7 +33,7 @@ jobs:
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - uses: superfly/flyctl-actions/setup-flyctl@v1
 
       - name: Get branch expiration date as an env variable (2 weeks from now)
