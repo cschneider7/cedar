@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT * FROM students\n                   WHERE user_id = $1 AND ($2::text IS NULL OR name ILIKE $2)\n                   ORDER BY name ASC\n                   LIMIT $3 OFFSET $4",
+  "query": "UPDATE students SET\n            classroom_id = $1,\n            student_id = $2,\n            name = $3,\n            image_url = $4\n        WHERE id = $5\n        RETURNING *",
   "describe": {
     "columns": [
       {
@@ -83,10 +83,11 @@
     ],
     "parameters": {
       "Left": [
+        "Uuid",
+        "Int4",
         "Text",
         "Text",
-        "Int8",
-        "Int8"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -99,5 +100,5 @@
       true
     ]
   },
-  "hash": "dc0ab4683a258f1231945e5b870a7cff4afff7feea8f9224cde89c6826f42992"
+  "hash": "ad66f106ea0a638d98e17d3ba2fb25257f1bc6faa52083ff93364b58333c423b"
 }

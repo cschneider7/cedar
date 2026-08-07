@@ -30,6 +30,7 @@ import {
 import { ArrowLeft, Trash2Icon } from "lucide-react"
 import { useEffect, useState } from "react"
 import { Link, useFetcher, useNavigate } from "react-router"
+import { StudentAvatar } from "~/components/student-avatar"
 import { StudentFormDialog } from "~/components/student-form-dialog"
 import { Spinner } from "~/components/ui/spinner"
 import type { MutationResult } from "~/lib/action-results"
@@ -92,12 +93,10 @@ export default function Component({ loaderData }: Route.ComponentProps) {
           Back to Students
         </Button>
       </div>
-      <Card className="relative mx-auto w-full max-w-sm pt-0">
-        <div className="absolute inset-0 z-30 aspect-video bg-black/35" />
-        <img
-          src={`https://avatar.vercel.sh/${student.id}`}
-          alt="Student image"
-          className="relative z-20 aspect-video w-full object-cover brightness-60 grayscale dark:brightness-40"
+      <Card className="mx-auto w-full max-w-sm pt-0">
+        <StudentAvatar
+          student={student}
+          className="aspect-square w-full text-6xl"
         />
         <CardHeader>
           <CardAction>

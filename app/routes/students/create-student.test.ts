@@ -6,6 +6,7 @@ const validPayload = {
   student_id: 123,
   name: "Bob Burger",
   classroom_id: null,
+  image_url: null,
 }
 
 const args = (body: unknown) =>
@@ -28,6 +29,24 @@ describe("create-student action", () => {
     expect(init?.method).toBe("POST")
     expect(JSON.parse(init?.body as string)).toEqual(validPayload)
 
+    expect(result).toEqual({ ok: true, id: createdStudent.id })
+  })
+
+  // StudentPhotoField's value isn't a react-hook-form-registered field, so
+  // the dialog's real submit payload never includes `image_url` at all when
+  // no photo is staged/removed — CreateStudentSchema must tolerate that (a
+  // required-but-nullable `image_url` broke this silently: zodResolver
+  // rejected before onSubmit ever ran, with no visible error).
+  it("creates the student when image_url is omitted entirely", async () => {
+    const { image_url: _imageUrl, ...payloadWithoutImageUrl } = validPayload
+    const createdStudent = { id: "student-1", ...payloadWithoutImageUrl }
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ data: createdStudent }), { status: 201 })
+    )
+
+    const result = await action(args(payloadWithoutImageUrl))
+
+    expect(fetch).toHaveBeenCalledTimes(1)
     expect(result).toEqual({ ok: true, id: createdStudent.id })
   })
 

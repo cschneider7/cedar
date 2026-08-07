@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE students SET\n            classroom_id = $1,\n            student_id = $2,\n            name = $3\n        WHERE id = $4\n        RETURNING *",
+  "query": "INSERT INTO students (\n            user_id,\n            classroom_id,\n            student_id,\n            name,\n            image_url\n        )\n        VALUES ($1, $2, $3, $4, $5)\n        RETURNING *",
   "describe": {
     "columns": [
       {
@@ -68,14 +68,26 @@
             "name": "created_time"
           }
         }
+      },
+      {
+        "ordinal": 6,
+        "name": "image_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "students",
+            "name": "image_url"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
+        "Text",
         "Uuid",
         "Int4",
         "Text",
-        "Uuid"
+        "Text"
       ]
     },
     "nullable": [
@@ -84,8 +96,9 @@
       true,
       false,
       false,
+      true,
       true
     ]
   },
-  "hash": "0f4d6413b287d4b9c0139df4c2a8f9ce62fe01c3f0028b53a5e04033effd722e"
+  "hash": "5b6d1721fa2a7b5c26d099df8b9938a13dee879affcb198a9e2721b987fa45d9"
 }

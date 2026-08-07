@@ -22,6 +22,7 @@ pub struct StudentModel {
     pub classroom_id: Option<Uuid>,
     pub student_id: i32,
     pub name: String,
+    pub image_url: Option<String>,
     pub created_time: Option<chrono::DateTime<chrono::Utc>>,
 }
 

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO students (\n            user_id,\n            classroom_id,\n            student_id,\n            name\n        )\n        VALUES ($1, $2, $3, $4)\n        RETURNING *",
+  "query": "INSERT INTO students (user_id, classroom_id, student_id, name, image_url)\n            VALUES ($1, NULL, $2, $3, $4)\n            RETURNING *",
   "describe": {
     "columns": [
       {
@@ -68,13 +68,24 @@
             "name": "created_time"
           }
         }
+      },
+      {
+        "ordinal": 6,
+        "name": "image_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "students",
+            "name": "image_url"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
         "Text",
-        "Uuid",
         "Int4",
+        "Text",
         "Text"
       ]
     },
@@ -84,8 +95,9 @@
       true,
       false,
       false,
+      true,
       true
     ]
   },
-  "hash": "a02c1b620dfecc619969ec186a8a8ccfafd29089f75808d931e528dd121fd627"
+  "hash": "88351c907eee43a67a9bf0eeca47a5b3e98e5937585d4e3dfaad574c3b6be606"
 }

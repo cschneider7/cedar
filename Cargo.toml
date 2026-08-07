@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+aws-sdk-s3 = "1"
 axum = "0.8.9"
 chrono = { version = "0.4.45", features = ["serde"] }
 clerk-rs = { version = "0.4.2", features = ["axum"] }

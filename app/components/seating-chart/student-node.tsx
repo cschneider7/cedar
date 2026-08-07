@@ -1,6 +1,7 @@
 import { useReactFlow, type Node, type NodeProps } from "@xyflow/react"
 import { Trash2Icon } from "lucide-react"
 import { memo, useContext } from "react"
+import { StudentAvatar } from "~/components/student-avatar"
 import { Button } from "~/components/ui/button"
 import {
   Item,
@@ -42,14 +43,9 @@ export const StudentNode = memo(function StudentNode({
         className="relative size-full gap-1 overflow-hidden p-1 **:data-[slot=item-title]:text-[10px]"
       >
         <ItemHeader>
-          <img
-            src={`https://avatar.vercel.sh/${data.student.id}`}
-            alt="Student image"
-            draggable="false"
-            width={100}
-            height={80}
-            loading="lazy"
-            className="aspect-5/4 w-full rounded-sm object-cover brightness-60 grayscale dark:brightness-40"
+          <StudentAvatar
+            student={data.student}
+            className="aspect-5/4 w-full rounded-sm"
           />
         </ItemHeader>
         <ItemContent>

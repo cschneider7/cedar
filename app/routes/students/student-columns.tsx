@@ -10,6 +10,7 @@ import {
 import { useEffect, useState } from "react"
 import { useFetcher } from "react-router"
 import { toast } from "sonner"
+import { StudentAvatar } from "~/components/student-avatar"
 import { StudentFormDialog } from "~/components/student-form-dialog"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import {
@@ -203,6 +204,14 @@ export function getStudentColumns({
           onClick={(e) => e.stopPropagation()}
           aria-label={`Select ${row.original.name}`}
         />
+      ),
+      enableSorting: false,
+    },
+    {
+      id: "avatar",
+      header: "",
+      cell: ({ row }) => (
+        <StudentAvatar student={row.original} className="size-8 rounded-full" />
       ),
       enableSorting: false,
     },

@@ -34,3 +34,5 @@ jobs:
       - run: npm run typecheck
       - run: npx prettier --check .
       - run: npm test
+        env:
+          VITE_API_URL: "http://localhost:3000/api/v1"
