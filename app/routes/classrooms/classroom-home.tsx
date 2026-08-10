@@ -1,21 +1,9 @@
-import { ClipboardList, Plus, Trash2Icon } from "lucide-react"
-import { useEffect, useState } from "react"
-import { Link, useFetcher, useNavigate } from "react-router"
+import { ClipboardList, Plus } from "lucide-react"
+import { useEffect } from "react"
+import { Link } from "react-router"
 import { toast } from "sonner"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
-import { Alert, AlertDescription } from "~/components/ui/alert"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogMedia,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "~/components/ui/alert-dialog"
+import { DeleteClassroomDialog } from "~/components/delete-classroom-dialog"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import {
@@ -34,11 +22,9 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "~/components/ui/empty"
-import { Spinner } from "~/components/ui/spinner"
-import type { MutationResult } from "~/lib/action-results"
 import { getClassrooms, getStudents } from "~/lib/api"
 import { tokenFromRequest } from "~/lib/auth"
-import type { Classroom } from "~/lib/schemas"
+import type { Classroom, Student } from "~/lib/schemas"
 import type { Route } from "./+types/classroom-home"
 
 export function meta({}: Route.MetaArgs) {
@@ -50,19 +36,29 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader(args: Route.LoaderArgs) {
   const token = await tokenFromRequest(args)
-  const [classrooms, students] = await Promise.all([
+  const [classrooms, studentsResult] = await Promise.all([
     getClassrooms(token),
-    getStudents(token),
+    // Student counts are supplementary to the classroom list itself — a
+    // failure here degrades to "—" counts + a toast rather than failing
+    // the whole page.
+    getStudents(token).then(
+      (students) => ({ students, failed: false }),
+      () => ({ students: [] as Student[], failed: true })
+    ),
   ])
   const studentCounts = new Map<string, number>()
-  for (const student of students) {
+  for (const student of studentsResult.students) {
     if (!student.classroom_id) continue
     studentCounts.set(
       student.classroom_id,
       (studentCounts.get(student.classroom_id) ?? 0) + 1
     )
   }
-  return { classrooms, studentCounts: Object.fromEntries(studentCounts) }
+  return {
+    classrooms,
+    studentCounts: Object.fromEntries(studentCounts),
+    studentsError: studentsResult.failed,
+  }
 }
 
 function EmptyClassrooms() {
@@ -93,33 +89,8 @@ function ClassroomSummary({
   studentCount,
 }: {
   classroom: Classroom
-  studentCount: number
+  studentCount: number | null
 }) {
-  const navigate = useNavigate()
-  const [deleteOpen, setDeleteOpen] = useState(false)
-
-  const deleteFetcher = useFetcher<MutationResult>()
-  const isDeleting = deleteFetcher.state !== "idle"
-  const deleteError =
-    deleteFetcher.data && !deleteFetcher.data.ok
-      ? deleteFetcher.data.error
-      : null
-
-  useEffect(() => {
-    if (deleteFetcher.state === "idle" && deleteFetcher.data?.ok) {
-      setDeleteOpen(false)
-      toast.success("Classroom deleted")
-      navigate("/classrooms")
-    }
-  }, [deleteFetcher.state, deleteFetcher.data])
-
-  function handleDelete() {
-    deleteFetcher.submit(null, {
-      method: "post",
-      action: `/classrooms/${classroom.id}/delete`,
-    })
-  }
-
   return (
     <Card className="w-full">
       <CardHeader>
@@ -128,7 +99,9 @@ function ClassroomSummary({
         </CardAction>
         <CardTitle>{classroom.subject}</CardTitle>
         <CardDescription>
-          {studentCount} {studentCount === 1 ? "student" : "students"}
+          {studentCount === null
+            ? "— students"
+            : `${studentCount} ${studentCount === 1 ? "student" : "students"}`}
         </CardDescription>
       </CardHeader>
       <CardFooter className="justify-end gap-2">
@@ -146,52 +119,28 @@ function ClassroomSummary({
             </Button>
           }
         />
-        <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-          <AlertDialogTrigger
-            render={
-              <Button size="sm" variant="destructive">
-                Delete
-              </Button>
-            }
-          />
-          <AlertDialogContent size="sm">
-            <AlertDialogHeader>
-              <AlertDialogMedia className="bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive">
-                <Trash2Icon />
-              </AlertDialogMedia>
-              <AlertDialogTitle>
-                Delete Period {classroom.period} - {classroom.subject}?
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                This will permanently delete the classroom and cannot be undone.
-                Are you sure you want to continue?
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            {deleteError && (
-              <Alert variant="destructive">
-                <AlertDescription>{deleteError}</AlertDescription>
-              </Alert>
-            )}
-            <AlertDialogFooter>
-              <AlertDialogCancel variant="outline">Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                variant="destructive"
-                disabled={isDeleting}
-                onClick={handleDelete}
-              >
-                {isDeleting && <Spinner />}
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <DeleteClassroomDialog
+          classroom={classroom}
+          trigger={
+            <Button size="sm" variant="destructive">
+              Delete
+            </Button>
+          }
+        />
       </CardFooter>
     </Card>
   )
 }
 
 export default function Component({ loaderData }: Route.ComponentProps) {
-  const { classrooms, studentCounts } = loaderData
+  const { classrooms, studentCounts, studentsError } = loaderData
+
+  useEffect(() => {
+    if (studentsError) {
+      toast.warning("Couldn't load student counts.")
+    }
+  }, [studentsError])
+
   return (
     <>
       {classrooms.length === 0 ? (
@@ -212,7 +161,9 @@ export default function Component({ loaderData }: Route.ComponentProps) {
               <div key={classroom.id} className="flex max-w-full flex-col">
                 <ClassroomSummary
                   classroom={classroom}
-                  studentCount={studentCounts[classroom.id] ?? 0}
+                  studentCount={
+                    studentsError ? null : (studentCounts[classroom.id] ?? 0)
+                  }
                 />
               </div>
             ))}

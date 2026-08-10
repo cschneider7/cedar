@@ -3,38 +3,18 @@ import {
   useTable,
   type RowSelectionState,
 } from "@tanstack/react-table"
-import {
-  LayoutGrid,
-  List,
-  Plus,
-  Search,
-  Trash2Icon,
-  UsersIcon,
-} from "lucide-react"
+import { LayoutGrid, List, Plus, Search, UsersIcon } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   Link,
-  useFetcher,
   useLocation,
   useNavigate,
   useNavigation,
 } from "react-router"
 import { toast } from "sonner"
+import { DeleteConfirmDialog } from "~/components/delete-confirm-dialog"
 import { StudentAvatar } from "~/components/student-avatar"
 import { StudentFormDialog } from "~/components/student-form-dialog"
-import { Alert, AlertDescription } from "~/components/ui/alert"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogMedia,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "~/components/ui/alert-dialog"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import {
@@ -68,7 +48,6 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "~/components/ui/pagination"
-import { Spinner } from "~/components/ui/spinner"
 import {
   Table,
   TableBody,
@@ -77,6 +56,7 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table"
+import { useDeleteResource } from "~/hooks/use-delete-resource"
 import {
   useStudentViewMode,
   type StudentViewMode,
@@ -84,6 +64,8 @@ import {
 import { getClassrooms, getStudentsPage } from "~/lib/api"
 import { tokenFromRequest } from "~/lib/auth"
 import type { Classroom, Student } from "~/lib/schemas"
+import { cn } from "~/lib/utils"
+import { parseViewModeCookie } from "~/lib/view-mode-cookie"
 import {
   getStudentColumns,
   studentTableFeatures,
@@ -98,8 +80,15 @@ export async function loader(args: Route.LoaderArgs) {
   const url = new URL(request.url)
   const page = Math.max(1, Number(url.searchParams.get("page")) || 1)
   const q = url.searchParams.get("q") ?? ""
+  const viewParam = url.searchParams.get("view")
+  // An explicit `?view=` always wins; otherwise fall back to the user's
+  // stored cookie preference instead of hardcoding grid, so a returning
+  // user whose preference is "list" gets it server-rendered on the very
+  // first paint rather than flashing grid before a client-side swap.
   const viewMode: StudentViewMode =
-    url.searchParams.get("view") === "list" ? "list" : "grid"
+    viewParam === "list" || viewParam === "grid"
+      ? viewParam
+      : parseViewModeCookie(request.headers.get("Cookie"))
   const pageSize = viewMode === "list" ? 20 : 24
   const sortByParam = url.searchParams.get("sort_by")
   const sortBy: StudentSortKey =
@@ -109,14 +98,29 @@ export async function loader(args: Route.LoaderArgs) {
   const sortDir: StudentSortDir =
     url.searchParams.get("sort_dir") === "desc" ? "desc" : "asc"
 
-  const [studentsPage, classrooms] = await Promise.all([
+  const [studentsPage, classroomsResult] = await Promise.all([
     getStudentsPage(
       { page, pageSize, q: q || undefined, sortBy, sortDir },
       token
     ),
-    getClassrooms(token),
+    // Classrooms here only back "assigned to <classroom>" badges — not
+    // load-bearing for the student list itself, so a failure here degrades
+    // to unlabeled badges + a toast rather than failing the whole page.
+    getClassrooms(token).then(
+      (classrooms) => ({ classrooms, failed: false }),
+      () => ({ classrooms: [] as Classroom[], failed: true })
+    ),
   ])
-  return { studentsPage, page, q, viewMode, classrooms, sortBy, sortDir }
+  return {
+    studentsPage,
+    page,
+    q,
+    viewMode,
+    classrooms: classroomsResult.classrooms,
+    classroomsError: classroomsResult.failed,
+    sortBy,
+    sortDir,
+  }
 }
 
 function SearchInput({
@@ -344,34 +348,47 @@ function PaginationControl({
 }
 
 export default function Component({ loaderData }: Route.ComponentProps) {
-  const { studentsPage, page, q, viewMode, classrooms, sortBy, sortDir } =
-    loaderData
+  const {
+    studentsPage,
+    page,
+    q,
+    viewMode,
+    classrooms,
+    classroomsError,
+    sortBy,
+    sortDir,
+  } = loaderData
   const navigate = useNavigate()
   const location = useLocation()
   const navigation = useNavigation()
-  const isLoading = navigation.state !== "idle"
-  const [storedViewMode, setStoredViewMode] = useStudentViewMode()
+  // Scoped to same-page param changes (search/sort/page/view) — cross-page
+  // navigation away from this list is now covered by the global
+  // `NavLoadingIndicator` instead, so this dimming shouldn't also fire then.
+  const isLoading =
+    navigation.state !== "idle" &&
+    navigation.location?.pathname === location.pathname
+  const [, setStoredViewMode] = useStudentViewMode()
   const [searchInput, setSearchInput] = useState(q)
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
-  const bulkDeleteFetcher = useFetcher<{ ok: boolean; error?: string }>()
-  const isBulkDeleting = bulkDeleteFetcher.state !== "idle"
-  const bulkDeleteError =
-    bulkDeleteFetcher.data && !bulkDeleteFetcher.data.ok
-      ? bulkDeleteFetcher.data.error
-      : null
+  const selectedCount = Object.keys(rowSelection).length
+  const {
+    isDeleting: isBulkDeleting,
+    error: bulkDeleteError,
+    submit: submitBulkDelete,
+  } = useDeleteResource({
+    successMessage: `${selectedCount} student${selectedCount === 1 ? "" : "s"} deleted`,
+    onDeleted: () => {
+      setBulkDeleteOpen(false)
+      setRowSelection({})
+    },
+  })
 
-  // A returning user's stored view-mode preference isn't visible to the SSR
-  // loader (no localStorage on the server), so sync it into the URL once on
-  // mount if the URL doesn't already specify a view.
   useEffect(() => {
-    const params = new URLSearchParams(location.search)
-    if (!params.has("view") && storedViewMode === "list") {
-      params.set("view", "list")
-      navigate(`?${params.toString()}`, { replace: true })
+    if (classroomsError) {
+      toast.warning("Couldn't load classrooms — classroom badges may be missing.")
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [classroomsError])
 
   // Row selection is per-page state; a page/sort/search/view change loads a
   // different set of students, so stale selections are cleared rather than
@@ -379,16 +396,6 @@ export default function Component({ loaderData }: Route.ComponentProps) {
   useEffect(() => {
     setRowSelection({})
   }, [location.search])
-
-  useEffect(() => {
-    if (bulkDeleteFetcher.state === "idle" && bulkDeleteFetcher.data?.ok) {
-      const count = Object.keys(rowSelection).length
-      setBulkDeleteOpen(false)
-      setRowSelection({})
-      toast.success(`${count} student${count === 1 ? "" : "s"} deleted`)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bulkDeleteFetcher.state, bulkDeleteFetcher.data])
 
   const classroomById = useMemo(
     () => new Map(classrooms.map((c) => [c.id, c])),
@@ -437,14 +444,11 @@ export default function Component({ loaderData }: Route.ComponentProps) {
   )
 
   function handleBulkDelete() {
-    bulkDeleteFetcher.submit(
-      JSON.stringify({ ids: Object.keys(rowSelection) }),
-      {
-        method: "post",
-        action: "/students/bulk-delete",
-        encType: "application/json",
-      }
-    )
+    submitBulkDelete(JSON.stringify({ ids: Object.keys(rowSelection) }), {
+      method: "post",
+      action: "/students/bulk-delete",
+      encType: "application/json",
+    })
   }
 
   // Debounced search: keystrokes update the URL via replace so they don't
@@ -482,8 +486,6 @@ export default function Component({ loaderData }: Route.ComponentProps) {
     getRowId: (row) => row.id,
     enableMultiRowSelection: true,
   })
-
-  const selectedCount = Object.keys(rowSelection).length
 
   return (
     <div className="w-full">
@@ -523,68 +525,40 @@ export default function Component({ loaderData }: Route.ComponentProps) {
             </ItemGroup>
           ) : (
             <>
-              {selectedCount > 0 && (
-                <div className="mb-2 flex items-center justify-between rounded-md border bg-muted/50 px-3 py-2">
-                  <span className="text-sm">{selectedCount} selected</span>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setRowSelection({})}
-                    >
-                      Clear
-                    </Button>
-                    <AlertDialog
-                      open={bulkDeleteOpen}
-                      onOpenChange={setBulkDeleteOpen}
-                    >
-                      <AlertDialogTrigger
-                        render={
-                          <Button variant="destructive" size="sm">
-                            Delete
-                          </Button>
-                        }
-                      />
-                      <AlertDialogContent size="sm">
-                        <AlertDialogHeader>
-                          <AlertDialogMedia className="bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive">
-                            <Trash2Icon />
-                          </AlertDialogMedia>
-                          <AlertDialogTitle>
-                            Delete {selectedCount} student
-                            {selectedCount === 1 ? "" : "s"}?
-                          </AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This will permanently delete the selected students
-                            and cannot be undone. Are you sure you want to
-                            continue?
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        {bulkDeleteError && (
-                          <Alert variant="destructive">
-                            <AlertDescription>
-                              {bulkDeleteError}
-                            </AlertDescription>
-                          </Alert>
-                        )}
-                        <AlertDialogFooter>
-                          <AlertDialogCancel variant="outline">
-                            Cancel
-                          </AlertDialogCancel>
-                          <AlertDialogAction
-                            variant="destructive"
-                            disabled={isBulkDeleting}
-                            onClick={handleBulkDelete}
-                          >
-                            {isBulkDeleting && <Spinner />}
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
+              {/* Fixed height + visibility (not conditional mount) so the
+                  table below never shifts when the selection count changes
+                  between zero and non-zero. */}
+              <div
+                className={cn(
+                  "mb-2 flex h-9 items-center justify-between rounded-md border bg-muted/50 px-3 py-2",
+                  selectedCount > 0 ? "visible" : "invisible"
+                )}
+              >
+                <span className="text-sm">{selectedCount} selected</span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setRowSelection({})}
+                  >
+                    Clear
+                  </Button>
+                  <DeleteConfirmDialog
+                    trigger={
+                      <Button variant="destructive" size="sm">
+                        Delete
+                      </Button>
+                    }
+                    open={bulkDeleteOpen}
+                    onOpenChange={setBulkDeleteOpen}
+                    title={`Delete ${selectedCount} student${selectedCount === 1 ? "" : "s"}?`}
+                    description="This will permanently delete the selected students and cannot be undone. Are you sure you want to continue?"
+                    isDeleting={isBulkDeleting}
+                    error={bulkDeleteError}
+                    onConfirm={handleBulkDelete}
+                  />
                 </div>
-              )}
+              </div>
               <Table>
                 <TableHeader>
                   {table.getHeaderGroups().map((headerGroup) => (
@@ -605,11 +579,14 @@ export default function Component({ loaderData }: Route.ComponentProps) {
                     <TableRow
                       key={row.id}
                       tabIndex={0}
+                      role="link"
+                      aria-label={`View ${row.original.name}`}
                       className="cursor-pointer"
                       data-state={row.getIsSelected() ? "selected" : undefined}
                       onClick={() => navigate(`/students/${row.original.id}`)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault()
                           navigate(`/students/${row.original.id}`)
                         }
                       }}

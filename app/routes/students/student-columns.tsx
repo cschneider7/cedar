@@ -11,23 +11,10 @@ import {
   PencilIcon,
   Trash2Icon,
 } from "lucide-react"
-import { useEffect, useState } from "react"
-import { useFetcher } from "react-router"
-import { toast } from "sonner"
+import { useState } from "react"
 import { StudentAvatar } from "~/components/student-avatar"
+import { DeleteStudentDialog } from "~/components/delete-student-dialog"
 import { StudentFormDialog } from "~/components/student-form-dialog"
-import { Alert, AlertDescription } from "~/components/ui/alert"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogMedia,
-  AlertDialogTitle,
-} from "~/components/ui/alert-dialog"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import { Checkbox } from "~/components/ui/checkbox"
@@ -37,8 +24,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"
-import { Spinner } from "~/components/ui/spinner"
-import type { MutationResult } from "~/lib/action-results"
 import type { Classroom, Student } from "~/lib/schemas"
 
 export type StudentSortKey = "name" | "student_id" | "classroom"
@@ -84,27 +69,6 @@ function ActionsCell({ student }: { student: Student }) {
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
 
-  const deleteFetcher = useFetcher<MutationResult>()
-  const isDeleting = deleteFetcher.state !== "idle"
-  const deleteError =
-    deleteFetcher.data && !deleteFetcher.data.ok
-      ? deleteFetcher.data.error
-      : null
-
-  useEffect(() => {
-    if (deleteFetcher.state === "idle" && deleteFetcher.data?.ok) {
-      setDeleteOpen(false)
-      toast.success("Student deleted")
-    }
-  }, [deleteFetcher.state, deleteFetcher.data])
-
-  function handleDelete() {
-    deleteFetcher.submit(null, {
-      method: "post",
-      action: `/students/${student.id}/delete`,
-    })
-  }
-
   return (
     <>
       <DropdownMenu>
@@ -141,36 +105,11 @@ function ActionsCell({ student }: { student: Student }) {
         onOpenChange={setEditOpen}
       />
 
-      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent size="sm">
-          <AlertDialogHeader>
-            <AlertDialogMedia className="bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive">
-              <Trash2Icon />
-            </AlertDialogMedia>
-            <AlertDialogTitle>Delete {student.name}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete the student and cannot be undone. Are
-              you sure you want to continue?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {deleteError && (
-            <Alert variant="destructive">
-              <AlertDescription>{deleteError}</AlertDescription>
-            </Alert>
-          )}
-          <AlertDialogFooter>
-            <AlertDialogCancel variant="outline">Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={isDeleting}
-              onClick={handleDelete}
-            >
-              {isDeleting && <Spinner />}
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteStudentDialog
+        student={student}
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+      />
     </>
   )
 }

@@ -1,5 +1,5 @@
 import { Show, useClerk, useUser } from "@clerk/react-router"
-import { LogOut, Monitor, Moon, Plus, Settings, Sun } from "lucide-react"
+import { LogOut, Plus, Settings } from "lucide-react"
 import { Fragment, useState } from "react"
 import { Link, useMatches } from "react-router"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
@@ -31,7 +31,8 @@ import {
 import { Input } from "~/components/ui/input"
 import { Separator } from "~/components/ui/separator"
 import { SidebarTrigger } from "~/components/ui/sidebar"
-import { useTheme, type Theme } from "~/components/ui/theme-provider"
+import { useTheme } from "~/components/ui/theme-provider"
+import { isTheme, themeIcons, ThemeToggle } from "~/components/ui/theme-toggle"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 
 function Breadcrumbs() {
@@ -115,16 +116,6 @@ function CreateDropdown() {
       />
     </>
   )
-}
-
-const themeIcons = {
-  light: Sun,
-  dark: Moon,
-  system: Monitor,
-} as const
-
-function isTheme(value: unknown): value is Theme {
-  return value === "light" || value === "dark" || value === "system"
 }
 
 function UserMenu() {
@@ -228,6 +219,7 @@ function AuthControl() {
   return (
     <>
       <Show when="signed-out">
+        <ThemeToggle />
         <Button
           variant="default"
           nativeButton={false}

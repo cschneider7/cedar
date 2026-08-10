@@ -124,6 +124,12 @@ function SeatingChartEditor({
 
   const fetcher = useFetcher<typeof classroomAction>()
   const saveError = fetcher.data && !fetcher.data.ok ? fetcher.data.error : null
+  const isSaving = fetcher.state !== "idle"
+  // Treat the canvas as non-interactive while a save is in flight, not just
+  // while `locked` — otherwise further drags during the in-flight PUT would
+  // be silently discarded (or stranded unsaved) once the request resolves
+  // and locks the canvas over now-stale state.
+  const isEditable = !locked && !isSaving
 
   // Handle locking/unlocking the canvas
   useEffect(() => {
@@ -502,21 +508,21 @@ function SeatingChartEditor({
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
                   <DropdownMenuItem
-                    disabled={locked}
+                    disabled={!isEditable}
                     onClick={handleAddTable}
                     aria-label="Add Table"
                   >
                     <TableIcon /> Add Table
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    disabled={locked}
+                    disabled={!isEditable}
                     onClick={() => setRandomChartOpen(true)}
                     aria-label="Randomize Seating Chart"
                   >
                     <ShuffleIcon /> Randomize
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    disabled={locked}
+                    disabled={!isEditable}
                     onClick={() => setBoundarySizeOpen(true)}
                     aria-label="Boundary Size"
                   >
@@ -529,7 +535,7 @@ function SeatingChartEditor({
                     <UsersIcon /> Manage Students
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    disabled={locked}
+                    disabled={!isEditable}
                     variant="destructive"
                     aria-label="Unassign All Students"
                     onClick={() => setUnassignAllOpen(true)}
@@ -574,9 +580,9 @@ function SeatingChartEditor({
         />
       </div>
       <div className="flex min-h-0 w-full flex-1 flex-col gap-2 md:flex-row">
-        <RosterPanel students={unassignedStudents} locked={locked} />
+        <RosterPanel students={unassignedStudents} locked={!isEditable} />
         <div className="relative min-h-0 w-full flex-1 overflow-hidden rounded-lg border-2">
-          <LockedContext value={locked}>
+          <LockedContext value={!isEditable}>
             <ReactFlow
               nodes={nodes}
               onNodesChange={onNodesChange}
@@ -586,8 +592,8 @@ function SeatingChartEditor({
               onNodeDragStop={onNodeDragStop}
               onDrop={onDrop}
               onDragOver={onDragOver}
-              nodesDraggable={!locked}
-              elementsSelectable={!locked}
+              nodesDraggable={isEditable}
+              elementsSelectable={isEditable}
               translateExtent={canvasArea}
               snapToGrid
               snapGrid={[GRID_STEP, GRID_STEP]}
@@ -598,6 +604,11 @@ function SeatingChartEditor({
             </ReactFlow>
             <Controls showInteractive={false} />
           </LockedContext>
+          {isSaving && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60">
+              <Spinner className="size-6" />
+            </div>
+          )}
         </div>
       </div>
     </div>

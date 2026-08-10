@@ -1,8 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Controller, useForm } from "react-hook-form"
-import { useEffect, useState } from "react"
-import { useFetcher, useNavigate } from "react-router"
-import { toast } from "sonner"
+import { useEffect, useRef, useState } from "react"
+import { useFetcher } from "react-router"
 import * as z from "zod"
 import {
   Dialog,
@@ -36,7 +35,7 @@ import {
   StudentPhotoField,
   type PhotoFieldValue,
 } from "~/components/student-photo-field"
-import type { MutationResult } from "~/lib/action-results"
+import { useResourceFormDialog } from "~/hooks/use-resource-form-dialog"
 import type { Classroom, Student } from "~/lib/schemas"
 import { CreateStudentSchema, UpdateStudentSchema } from "~/lib/schemas"
 
@@ -57,10 +56,6 @@ function defaultPhotoValue(props: StudentFormDialogProps): PhotoFieldValue {
 
 export function StudentFormDialog(props: StudentFormDialogProps) {
   const { mode, trigger } = props
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
-  const open = props.open ?? uncontrolledOpen
-  const setOpen = props.onOpenChange ?? setUncontrolledOpen
-  const navigate = useNavigate()
 
   const [photo, setPhoto] = useState<PhotoFieldValue>(() =>
     defaultPhotoValue(props)
@@ -70,19 +65,6 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
 
   const formPath =
     mode === "create" ? "/students/new" : `/students/${props.student.id}/edit`
-
-  const classroomsFetcher = useFetcher<{ classrooms: Classroom[] }>()
-  // Only fires on open, not on every classroomsFetcher re-render (it changes
-  // identity as load() progresses) - otherwise this would loop.
-  useEffect(() => {
-    if (open && classroomsFetcher.state === "idle" && !classroomsFetcher.data) {
-      classroomsFetcher.load(formPath)
-    }
-  }, [open])
-  const classrooms = classroomsFetcher.data?.classrooms ?? []
-
-  const submitFetcher = useFetcher<MutationResult>()
-  const isSubmitting = submitFetcher.state !== "idle"
 
   const schema = mode === "create" ? CreateStudentSchema : UpdateStudentSchema
 
@@ -100,29 +82,42 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
     defaultValues,
   })
 
-  // formState is a proxy; dirtyFields must be read here, not inside onSubmit.
-  const { dirtyFields } = form.formState
+  const { open, setOpen, isSubmitting, submitError, buildSubmitData, submit } =
+    useResourceFormDialog({
+      open: props.open,
+      onOpenChange: props.onOpenChange,
+      mode,
+      form,
+      defaultValues,
+      actionPath: formPath,
+      entityLabel: "Student",
+      onOpen: () => {
+        setPhoto(defaultPhotoValue(props))
+        setUploadError(null)
+      },
+    })
 
-  // The dialog stays mounted (see loop rendering it), so the form must be
-  // reset on each open or stale/dirty values from the last session persist.
+  const classroomsFetcher = useFetcher<{ classrooms: Classroom[] }>()
+  // Only fires on open, not on every classroomsFetcher re-render (it changes
+  // identity as load() progresses) - otherwise this would loop.
   useEffect(() => {
-    if (open) {
-      form.reset(defaultValues)
-      setPhoto(defaultPhotoValue(props))
-      setUploadError(null)
+    if (open && classroomsFetcher.state === "idle" && !classroomsFetcher.data) {
+      classroomsFetcher.load(formPath)
     }
   }, [open])
+  const classrooms = classroomsFetcher.data?.classrooms ?? []
+
+  const displayedError = uploadError || submitError
+  const errorRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (displayedError) {
+      errorRef.current?.focus()
+    }
+  }, [displayedError])
 
   const onSubmit = async (data: z.infer<typeof schema>) => {
     setUploadError(null)
-    const submitData: Record<string, unknown> =
-      mode === "create"
-        ? { ...data }
-        : Object.fromEntries(
-            Object.entries(data).filter(
-              ([key]) => dirtyFields[key as keyof typeof dirtyFields]
-            )
-          )
+    const submitData = buildSubmitData(data)
 
     if (photo.kind === "staged") {
       setIsUploading(true)
@@ -162,27 +157,10 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
       submitData.image_url = null
     }
 
-    submitFetcher.submit(submitData as z.infer<typeof schema>, {
-      method: "post",
-      action: formPath,
-      encType: "application/json",
-    })
+    submit(submitData)
   }
 
-  useEffect(() => {
-    const data = submitFetcher.data
-    if (submitFetcher.state === "idle" && data?.ok) {
-      setOpen(false)
-      toast.success(mode === "create" ? "Student created" : "Student updated", {
-        action: {
-          label: "View",
-          onClick: () => navigate(`/students/${data.id}`),
-        },
-      })
-    }
-  }, [submitFetcher.state, submitFetcher.data])
-
-  const classroomOptions: [{ label: string; value: string | null }] = [
+  const classroomOptions: { label: string; value: string | null }[] = [
     { label: "Unassigned", value: null },
   ]
   classrooms.forEach((classroom) => {
@@ -206,17 +184,9 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
               : "Enter student info here."}
           </DialogDescription>
         </DialogHeader>
-        {(uploadError ||
-          (submitFetcher.data &&
-            !submitFetcher.data.ok &&
-            submitFetcher.data.error)) && (
-          <Alert variant="destructive">
-            <AlertDescription>
-              {uploadError ||
-                (submitFetcher.data && !submitFetcher.data.ok
-                  ? submitFetcher.data.error
-                  : null)}
-            </AlertDescription>
+        {displayedError && (
+          <Alert variant="destructive" ref={errorRef} tabIndex={-1}>
+            <AlertDescription>{displayedError}</AlertDescription>
           </Alert>
         )}
         <form id="student-form" onSubmit={form.handleSubmit(onSubmit)}>

@@ -1,8 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Controller, useForm } from "react-hook-form"
-import { useEffect, useState } from "react"
-import { useFetcher, useNavigate } from "react-router"
-import { toast } from "sonner"
+import { useEffect, useRef } from "react"
 import * as z from "zod"
 import {
   Dialog,
@@ -32,13 +30,15 @@ import {
   SelectValue,
 } from "~/components/ui/select"
 import { Spinner } from "~/components/ui/spinner"
-import type { MutationResult } from "~/lib/action-results"
+import { useResourceFormDialog } from "~/hooks/use-resource-form-dialog"
 import type { Classroom } from "~/lib/schemas"
 import { CreateClassroomSchema, UpdateClassroomSchema } from "~/lib/schemas"
 
+// Periods are 1-indexed to match CreateClassroomSchema/UpdateClassroomSchema's
+// `.positive()` constraint on `period` — don't offer a "Period 0" option.
 const periodOptions = Array.from({ length: 9 }, (_, i) => ({
-  label: i.toString(),
-  value: i,
+  label: (i + 1).toString(),
+  value: i + 1,
 }))
 
 type ClassroomFormDialogProps = (
@@ -51,12 +51,6 @@ type ClassroomFormDialogProps = (
 
 export function ClassroomFormDialog(props: ClassroomFormDialogProps) {
   const { mode, trigger } = props
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
-  const open = props.open ?? uncontrolledOpen
-  const setOpen = props.onOpenChange ?? setUncontrolledOpen
-  const navigate = useNavigate()
-  const fetcher = useFetcher<MutationResult>()
-  const isSubmitting = fetcher.state !== "idle"
 
   const actionPath =
     mode === "create"
@@ -76,48 +70,27 @@ export function ClassroomFormDialog(props: ClassroomFormDialogProps) {
     defaultValues,
   })
 
-  // formState is a proxy; dirtyFields must be read here, not inside onSubmit.
-  const { dirtyFields } = form.formState
+  const { open, setOpen, isSubmitting, submitError, buildSubmitData, submit } =
+    useResourceFormDialog({
+      open: props.open,
+      onOpenChange: props.onOpenChange,
+      mode,
+      form,
+      defaultValues,
+      actionPath,
+      entityLabel: "Classroom",
+    })
 
-  // The dialog stays mounted (see loop rendering it), so the form must be
-  // reset on each open or stale/dirty values from the last session persist.
+  const errorRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (open) {
-      form.reset(defaultValues)
+    if (submitError) {
+      errorRef.current?.focus()
     }
-  }, [open])
+  }, [submitError])
 
   const onSubmit = (data: z.infer<typeof schema>) => {
-    const submitData =
-      mode === "create"
-        ? data
-        : Object.fromEntries(
-            Object.entries(data).filter(
-              ([key]) => dirtyFields[key as keyof typeof dirtyFields]
-            )
-          )
-    fetcher.submit(submitData, {
-      method: "post",
-      action: actionPath,
-      encType: "application/json",
-    })
+    submit(buildSubmitData(data))
   }
-
-  useEffect(() => {
-    const data = fetcher.data
-    if (fetcher.state === "idle" && data?.ok) {
-      setOpen(false)
-      toast.success(
-        mode === "create" ? "Classroom created" : "Classroom updated",
-        {
-          action: {
-            label: "View",
-            onClick: () => navigate(`/classrooms/${data.id}`),
-          },
-        }
-      )
-    }
-  }, [fetcher.state, fetcher.data])
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -133,9 +106,9 @@ export function ClassroomFormDialog(props: ClassroomFormDialogProps) {
               : "Enter classroom info here."}
           </DialogDescription>
         </DialogHeader>
-        {fetcher.data && !fetcher.data.ok && (
-          <Alert variant="destructive">
-            <AlertDescription>{fetcher.data.error}</AlertDescription>
+        {submitError && (
+          <Alert variant="destructive" ref={errorRef} tabIndex={-1}>
+            <AlertDescription>{submitError}</AlertDescription>
           </Alert>
         )}
         <form id="classroom-form" onSubmit={form.handleSubmit(onSubmit)}>

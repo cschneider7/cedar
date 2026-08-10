@@ -118,7 +118,7 @@ export function StudentPhotoField({
           <img
             ref={imgRef}
             src={cropSource.previewUrl}
-            alt=""
+            alt="Crop preview of uploaded photo"
             onLoad={handleImageLoad}
           />
         </ReactCrop>
@@ -152,7 +152,7 @@ export function StudentPhotoField({
       {previewUrl ? (
         <img
           src={previewUrl}
-          alt=""
+          alt="Student photo preview"
           className="size-16 rounded-full object-cover"
         />
       ) : null}

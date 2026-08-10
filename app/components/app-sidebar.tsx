@@ -7,9 +7,16 @@ import {
   UsersRound,
 } from "lucide-react"
 import { useState } from "react"
-import { Link, NavLink, useLocation, useRouteLoaderData } from "react-router"
+import {
+  Link,
+  NavLink,
+  useLocation,
+  useRevalidator,
+  useRouteLoaderData,
+} from "react-router"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
 import { DeleteClassroomDialog } from "~/components/delete-classroom-dialog"
+import { Button } from "~/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -97,11 +104,13 @@ function ClassroomRow({
 export function AppSidebar() {
   const rootData = useRouteLoaderData<typeof rootLoader>("root")
   const classrooms = rootData?.classrooms ?? []
+  const classroomsError = rootData?.classroomsError ?? false
   const [createOpen, setCreateOpen] = useState(false)
   const [deletingClassroom, setDeletingClassroom] = useState<Classroom | null>(
     null
   )
   const location = useLocation()
+  const revalidator = useRevalidator()
 
   return (
     <Sidebar className="top-(--header-height) h-[calc(100svh-var(--header-height))]!">
@@ -161,15 +170,30 @@ export function AppSidebar() {
             <Plus />
           </SidebarGroupAction>
           <SidebarGroupContent>
-            <SidebarMenu className="gap-1">
-              {classrooms.map((classroom) => (
-                <ClassroomRow
-                  key={classroom.id}
-                  classroom={classroom}
-                  onRequestDelete={() => setDeletingClassroom(classroom)}
-                />
-              ))}
-            </SidebarMenu>
+            {classroomsError ? (
+              <div className="flex flex-col gap-1 px-2 py-1 text-sm text-muted-foreground">
+                <span>Couldn&apos;t load classrooms.</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto w-fit px-1 py-0.5"
+                  disabled={revalidator.state !== "idle"}
+                  onClick={() => revalidator.revalidate()}
+                >
+                  Retry
+                </Button>
+              </div>
+            ) : (
+              <SidebarMenu className="gap-1">
+                {classrooms.map((classroom) => (
+                  <ClassroomRow
+                    key={classroom.id}
+                    classroom={classroom}
+                    onRequestDelete={() => setDeletingClassroom(classroom)}
+                  />
+                ))}
+              </SidebarMenu>
+            )}
           </SidebarGroupContent>
         </SidebarGroup>
 

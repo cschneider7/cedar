@@ -7,7 +7,7 @@ export const CreateStudentSchema = z.object({
   name: z
     .string()
     .trim()
-    .min(1, "Name must be at least 0 characters.")
+    .min(1, "Name must be at least 1 character.")
     .max(100, "Name must be at most 100 characters."),
   // Nullish (not just nullable): image_url isn't a react-hook-form-registered
   // field — StudentPhotoField's staged/removed state lives outside the form
@@ -49,7 +49,7 @@ export const UpdateStudentSchema = z.object({
     z
       .string()
       .trim()
-      .min(1, "Name must be at least 0 characters.")
+      .min(1, "Name must be at least 1 character.")
       .max(100, "Name must be at most 100 characters.")
   ),
   image_url: z.string().min(1).nullish(),
@@ -60,8 +60,8 @@ export const CreateClassroomSchema = z.object({
   subject: z
     .string()
     .trim()
-    .min(1, "Subject must be at least 0 characters.")
-    .max(50, "Subject must be at most 30 characters."),
+    .min(1, "Subject must be at least 1 character.")
+    .max(50, "Subject must be at most 50 characters."),
 })
 
 export const ClassroomSchema = CreateClassroomSchema.extend({
@@ -77,8 +77,8 @@ export const UpdateClassroomSchema = z.object({
     z
       .string()
       .trim()
-      .min(1, "Subject must be at least 0 characters.")
-      .max(50, "Subject must be at most 30 characters.")
+      .min(1, "Subject must be at least 1 character.")
+      .max(50, "Subject must be at most 50 characters.")
   ),
   boundary_width: z.optional(z.int().positive()),
   boundary_height: z.optional(z.int().positive()),

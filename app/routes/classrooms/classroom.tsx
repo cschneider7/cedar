@@ -4,11 +4,12 @@ import {
   getClassroom,
   getClassroomSeatingChart,
   getStudents,
+  toRouteError,
   updateClassroomSeatingChart,
 } from "~/lib/api"
 import { tokenFromRequest } from "~/lib/auth"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
-import type { SeatingChart } from "~/lib/schemas"
+import { SeatingChartSchema } from "~/lib/schemas"
 import type { Route } from "./+types/classroom"
 
 export const handle: BreadcrumbHandle = {
@@ -28,22 +29,36 @@ export function meta({}: Route.MetaArgs) {
 export async function loader(args: Route.LoaderArgs) {
   const token = await tokenFromRequest(args)
   const { params } = args
-  const [classroom, seatingChart, allStudents] = await Promise.all([
-    getClassroom(params.classroomId, token),
-    getClassroomSeatingChart(params.classroomId, token),
-    getStudents(token),
-  ])
-  const students = allStudents.filter((s) => s.classroom_id === classroom.id)
-  return { classroom, students, seatingChart }
+  // Unlike other loaders in this app, failures here are NOT degraded
+  // gracefully — a seating chart can't render meaningfully with a partial
+  // classroom/chart/roster, so this is the one place correctness wins over
+  // availability. We still preserve the real HTTP status via `toRouteError`
+  // rather than letting any endpoint's fake-404 mask a transient failure.
+  try {
+    const [classroom, seatingChart, allStudents] = await Promise.all([
+      getClassroom(params.classroomId, token),
+      getClassroomSeatingChart(params.classroomId, token),
+      getStudents(token),
+    ])
+    const students = allStudents.filter((s) => s.classroom_id === classroom.id)
+    return { classroom, students, seatingChart }
+  } catch (error) {
+    toRouteError(error)
+  }
 }
 
 export async function action(args: Route.ActionArgs) {
-  const chart: SeatingChart = await args.request.json()
+  const rawData = await args.request.json()
+  const result = SeatingChartSchema.safeParse(rawData)
+
+  if (!result.success) {
+    return { ok: false, error: "Please check the seating chart and try again." }
+  }
 
   try {
     await updateClassroomSeatingChart(
       args.params.classroomId,
-      chart,
+      result.data,
       await tokenFromRequest(args)
     )
   } catch (error) {

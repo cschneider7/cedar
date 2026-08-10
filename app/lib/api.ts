@@ -27,6 +27,40 @@ if (!API_URL) {
   throw new Error("VITE_API_URL is not set")
 }
 
+/** A failed API call, distinguishing a real HTTP error status from a
+ * network-level failure (offline, DNS, CORS) or an unparseable response —
+ * `status` is 0 for the latter two, never a guessed/fake HTTP status. */
+export class ApiError extends Error {
+  status: number
+  kind: "http" | "network" | "parse"
+
+  constructor(message: string, status: number, kind: "http" | "network" | "parse") {
+    super(message)
+    this.name = "ApiError"
+    this.status = status
+    this.kind = kind
+  }
+}
+
+/** Re-throws an `ApiError` as a route `Response` carrying its real status,
+ * for loaders that let failures propagate to the nearest `ErrorBoundary`.
+ * The message is set as `statusText` (not just the body) since that's what
+ * `root.tsx`/`route-error-card.tsx` read via `isRouteErrorResponse`.
+ * Anything else (a bug, not an API failure) is rethrown as-is. */
+export function toRouteError(error: unknown): never {
+  if (error instanceof ApiError) {
+    // statusText must be a valid HTTP reason phrase (no CR/LF); sanitize
+    // rather than let an unusual backend message throw while constructing
+    // this very error response.
+    const statusText = error.message.replace(/[\r\n]+/g, " ").slice(0, 200)
+    throw new Response(error.message, {
+      status: error.status || 503,
+      statusText,
+    })
+  }
+  throw error
+}
+
 async function getErrorMessage(
   res: Response,
   fallback: string
@@ -40,6 +74,11 @@ async function getErrorMessage(
   } catch {
     // Not JSON - fall through to using the raw text below.
   }
+  // A non-JSON body that looks like an HTML error page (e.g. from a proxy
+  // or load balancer) shouldn't be rendered verbatim inside a UI alert.
+  if (text.trim().startsWith("<")) {
+    return fallback
+  }
   return text || fallback
 }
 
@@ -51,31 +90,83 @@ function withAuth(token?: string | null): HeadersInit | undefined {
   return token ? { Authorization: `Bearer ${token}` } : undefined
 }
 
+type ApiFetchOptions = {
+  method?: string
+  token?: string | null
+  body?: unknown
+  signal?: AbortSignal
+}
+
+/** Shared low-level fetch wrapper for every function in this file: builds
+ * the request, never lets a raw network failure escape unguarded, preserves
+ * the real HTTP status on failure (see `ApiError`), and validates the
+ * response envelope's `data` against `schema`. Pass `undefined` for `schema`
+ * for endpoints whose success body isn't consumed (e.g. delete/update). */
+async function apiFetch<T>(
+  path: string,
+  schema: z.ZodType<T> | undefined,
+  opts: ApiFetchOptions = {}
+): Promise<T> {
+  let res: Response
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method: opts.method ?? "GET",
+      headers: {
+        ...(opts.body !== undefined
+          ? { "Content-Type": "application/json" }
+          : undefined),
+        ...withAuth(opts.token),
+      },
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      signal: opts.signal,
+    })
+  } catch {
+    throw new ApiError(
+      "Network error — check your connection and try again.",
+      0,
+      "network"
+    )
+  }
+
+  if (!res.ok) {
+    throw new ApiError(
+      await getErrorMessage(res, `Request failed (${res.status})`),
+      res.status,
+      "http"
+    )
+  }
+
+  if (!schema) {
+    return undefined as T
+  }
+
+  let json: unknown
+  try {
+    json = await res.json()
+  } catch {
+    throw new ApiError("Unexpected response from server.", res.status, "parse")
+  }
+
+  const parsed = z.safeParse(schema, (json as { data?: unknown })?.data ?? json)
+  if (!parsed.success) {
+    throw new ApiError(
+      "Received unexpected data from server.",
+      res.status,
+      "parse"
+    )
+  }
+  return parsed.data
+}
+
 export async function getStudent(
   studentId: string,
   token?: string | null
 ): Promise<Student> {
-  const res = await fetch(`${API_URL}/students/${studentId}`, {
-    headers: withAuth(token),
-  })
-  if (!res.ok) {
-    throw new Response("Student not found", { status: 404 })
-  }
-
-  const json = await res.json()
-  return z.parse(StudentSchema, json.data)
+  return apiFetch(`/students/${studentId}`, StudentSchema, { token })
 }
 
 export async function getStudents(token?: string | null): Promise<Student[]> {
-  const res = await fetch(`${API_URL}/students`, {
-    headers: withAuth(token),
-  })
-  if (!res.ok) {
-    throw new Error(`Error getting list of students: ", ${res.status}`)
-  }
-
-  const json = await res.json()
-  return z.parse(z.array(StudentSchema), json.data)
+  return apiFetch(`/students`, z.array(StudentSchema), { token })
 }
 
 export async function getStudentsPage(
@@ -88,51 +179,32 @@ export async function getStudentsPage(
   },
   token?: string | null
 ): Promise<StudentsPage> {
-  const url = new URL(`${API_URL}/students`)
-  url.searchParams.set("page", String(params.page))
-  url.searchParams.set("page_size", String(params.pageSize))
+  const searchParams = new URLSearchParams({
+    page: String(params.page),
+    page_size: String(params.pageSize),
+  })
   if (params.q) {
-    url.searchParams.set("q", params.q)
+    searchParams.set("q", params.q)
   }
   if (params.sortBy) {
-    url.searchParams.set("sort_by", params.sortBy)
+    searchParams.set("sort_by", params.sortBy)
   }
   if (params.sortDir) {
-    url.searchParams.set("sort_dir", params.sortDir)
+    searchParams.set("sort_dir", params.sortDir)
   }
 
-  const res = await fetch(url, {
-    headers: withAuth(token),
-  })
-  if (!res.ok) {
-    throw new Error(
-      `Error getting paginated list of students: ", ${res.status}`
-    )
-  }
-
-  const json = await res.json()
-  return z.parse(StudentsPageSchema, json.data)
+  return apiFetch(`/students?${searchParams}`, StudentsPageSchema, { token })
 }
 
 export async function createStudent(
   studentInfo: z.infer<typeof CreateStudentSchema>,
   token?: string | null
 ): Promise<Student> {
-  const response = await fetch(`${API_URL}/students`, {
+  return apiFetch(`/students`, StudentSchema, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...withAuth(token),
-    },
-    body: JSON.stringify(z.parse(CreateStudentSchema, studentInfo)),
+    token,
+    body: z.parse(CreateStudentSchema, studentInfo),
   })
-
-  if (!response.ok) {
-    throw new Error(await getErrorMessage(response, "Error creating student"))
-  }
-
-  const json = await response.json()
-  return z.parse(StudentSchema, json.data)
 }
 
 export async function updateStudent(
@@ -140,100 +212,53 @@ export async function updateStudent(
   updates: z.infer<typeof UpdateStudentSchema>,
   token?: string | null
 ) {
-  const response = await fetch(`${API_URL}/students/${studentId}`, {
+  await apiFetch(`/students/${studentId}`, undefined, {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      ...withAuth(token),
-    },
-    body: JSON.stringify(z.parse(UpdateStudentSchema, updates)),
+    token,
+    body: z.parse(UpdateStudentSchema, updates),
   })
-
-  if (!response.ok) {
-    throw new Error(await getErrorMessage(response, "Error updating student"))
-  }
 }
 
 export async function deleteStudent(studentId: string, token?: string | null) {
-  const response = await fetch(`${API_URL}/students/${studentId}`, {
+  await apiFetch(`/students/${studentId}`, undefined, {
     method: "DELETE",
-    headers: withAuth(token),
+    token,
   })
-
-  if (!response.ok) {
-    throw new Error(await getErrorMessage(response, "Error deleting student"))
-  }
 }
 
 export async function bulkDeleteStudents(
   ids: string[],
   token?: string | null
 ): Promise<BulkDeleteResult> {
-  const response = await fetch(`${API_URL}/students`, {
+  return apiFetch(`/students`, BulkDeleteResultSchema, {
     method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-      ...withAuth(token),
-    },
-    body: JSON.stringify({ ids }),
+    token,
+    body: { ids },
   })
-
-  if (!response.ok) {
-    throw new Error(await getErrorMessage(response, "Error deleting students"))
-  }
-
-  const json = await response.json()
-  return z.parse(BulkDeleteResultSchema, json.data)
 }
 
 export async function getClassroom(
   classroomId: string,
   token?: string | null
 ): Promise<Classroom> {
-  const res = await fetch(`${API_URL}/classrooms/${classroomId}`, {
-    headers: withAuth(token),
-  })
-  if (!res.ok) {
-    throw new Response("Classroom not found", { status: 404 })
-  }
-
-  const json = await res.json()
-  return z.parse(ClassroomSchema, json.data)
+  return apiFetch(`/classrooms/${classroomId}`, ClassroomSchema, { token })
 }
 
 export async function getClassrooms(
   token?: string | null
 ): Promise<Classroom[]> {
-  const res = await fetch(`${API_URL}/classrooms`, {
-    headers: withAuth(token),
-  })
-  if (!res.ok) {
-    throw new Error(`Error getting list of classrooms: ", ${res.status}`)
-  }
-
-  const json = await res.json()
-  return z.parse(z.array(ClassroomSchema), json.data)
+  return apiFetch(`/classrooms`, z.array(ClassroomSchema), { token })
 }
 
 export async function createClassroom(
   classroomInfo: z.infer<typeof CreateClassroomSchema>,
   token?: string | null
 ): Promise<Classroom> {
-  const response = await fetch(`${API_URL}/classrooms`, {
+  return apiFetch(`/classrooms`, ClassroomSchema, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...withAuth(token),
-    },
-    body: JSON.stringify(z.parse(CreateClassroomSchema, classroomInfo)),
+    token,
+    body: z.parse(CreateClassroomSchema, classroomInfo),
   })
-
-  if (!response.ok) {
-    throw new Error(await getErrorMessage(response, "Error creating classroom"))
-  }
-
-  const json = await response.json()
-  return z.parse(ClassroomSchema, json.data)
 }
 
 export async function updateClassroom(
@@ -241,50 +266,32 @@ export async function updateClassroom(
   updates: z.infer<typeof UpdateClassroomSchema>,
   token?: string | null
 ) {
-  const response = await fetch(`${API_URL}/classrooms/${classroomId}`, {
+  await apiFetch(`/classrooms/${classroomId}`, undefined, {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      ...withAuth(token),
-    },
-    body: JSON.stringify(z.parse(UpdateClassroomSchema, updates)),
+    token,
+    body: z.parse(UpdateClassroomSchema, updates),
   })
-
-  if (!response.ok) {
-    throw new Error(await getErrorMessage(response, "Error updating classroom"))
-  }
 }
 
 export async function deleteClassroom(
   classroomId: string,
   token?: string | null
 ) {
-  const response = await fetch(`${API_URL}/classrooms/${classroomId}`, {
+  await apiFetch(`/classrooms/${classroomId}`, undefined, {
     method: "DELETE",
-    headers: withAuth(token),
+    token,
   })
-
-  if (!response.ok) {
-    throw new Error(await getErrorMessage(response, "Error deleting classroom"))
-  }
 }
 
 export async function getClassroomSeatingChart(
   classroomId: string,
   token?: string | null
 ): Promise<SeatingChart> {
-  const res = await fetch(
-    `${API_URL}/classrooms/${classroomId}/seating-chart`,
-    { headers: withAuth(token) }
+  return apiFetch(
+    `/classrooms/${classroomId}/seating-chart`,
+    SeatingChartSchema,
+    { token }
   )
-  if (!res.ok) {
-    throw new Error(`Error getting seating chart assignments: ", ${res.status}`)
-  }
-
-  const json = await res.json()
-  const seatingChart = z.parse(SeatingChartSchema, json.data)
-
-  return seatingChart
 }
 
 export async function updateClassroomSeatingChart(
@@ -292,23 +299,11 @@ export async function updateClassroomSeatingChart(
   seatingChart: SeatingChart,
   token?: string | null
 ) {
-  const response = await fetch(
-    `${API_URL}/classrooms/${classroomId}/seating-chart`,
-    {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        ...withAuth(token),
-      },
-      body: JSON.stringify(z.parse(SeatingChartSchema, seatingChart)),
-    }
-  )
-
-  if (!response.ok) {
-    throw new Error(
-      await getErrorMessage(response, "Error updating seating chart")
-    )
-  }
+  await apiFetch(`/classrooms/${classroomId}/seating-chart`, undefined, {
+    method: "PUT",
+    token,
+    body: z.parse(SeatingChartSchema, seatingChart),
+  })
 }
 
 export async function generateRandomSeatingChart(
@@ -316,28 +311,15 @@ export async function generateRandomSeatingChart(
   options: RandomizeSeatingChartOptions,
   token?: string | null
 ): Promise<SeatingChart> {
-  const response = await fetch(
-    `${API_URL}/classrooms/${classroomId}/seating-chart/randomize`,
+  return apiFetch(
+    `/classrooms/${classroomId}/seating-chart/randomize`,
+    SeatingChartSchema,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...withAuth(token),
-      },
-      body: JSON.stringify(
-        z.parse(RandomizeSeatingChartOptionsSchema, options)
-      ),
+      token,
+      body: z.parse(RandomizeSeatingChartOptionsSchema, options),
     }
   )
-
-  if (!response.ok) {
-    throw new Error(
-      await getErrorMessage(response, "Error generating random seating chart")
-    )
-  }
-
-  const json = await response.json()
-  return z.parse(SeatingChartSchema, json.data)
 }
 
 export async function pickColdCallStudent(
@@ -345,22 +327,9 @@ export async function pickColdCallStudent(
   payload: ColdCall,
   token?: string | null
 ): Promise<ColdCallPick> {
-  const response = await fetch(
-    `${API_URL}/classrooms/${classroomId}/cold-call`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...withAuth(token),
-      },
-      body: JSON.stringify(z.parse(ColdCallSchema, payload)),
-    }
-  )
-
-  if (!response.ok) {
-    throw new Error(await getErrorMessage(response, "Error picking a student"))
-  }
-
-  const json = await response.json()
-  return z.parse(ColdCallPickSchema, json.data)
+  return apiFetch(`/classrooms/${classroomId}/cold-call`, ColdCallPickSchema, {
+    method: "POST",
+    token,
+    body: z.parse(ColdCallSchema, payload),
+  })
 }

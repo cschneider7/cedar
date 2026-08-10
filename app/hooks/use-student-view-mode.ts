@@ -1,19 +1,22 @@
 import { useState } from "react"
+import {
+  parseViewModeCookie,
+  serializeViewModeCookie,
+  type StudentViewMode,
+} from "~/lib/view-mode-cookie"
 
-export type StudentViewMode = "grid" | "list"
-
-const STORAGE_KEY = "students-view-mode"
+export type { StudentViewMode }
 
 export function useStudentViewMode() {
   const [viewMode, setViewModeState] = useState<StudentViewMode>(() => {
-    if (typeof window === "undefined") {
+    if (typeof document === "undefined") {
       return "grid"
     }
-    return localStorage.getItem(STORAGE_KEY) === "list" ? "list" : "grid"
+    return parseViewModeCookie(document.cookie)
   })
 
   function setViewMode(mode: StudentViewMode) {
-    localStorage.setItem(STORAGE_KEY, mode)
+    document.cookie = serializeViewModeCookie(mode)
     setViewModeState(mode)
   }
 

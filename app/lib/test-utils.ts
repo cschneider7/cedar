@@ -17,12 +17,14 @@ export function makeArgs(
     method?: string
     params?: Record<string, string>
     body?: unknown
+    headers?: Record<string, string>
   } = {}
 ) {
-  const { method = "GET", params = {}, body } = options
+  const { method = "GET", params = {}, body, headers } = options
   return {
     request: new Request(url, {
       method,
+      ...(headers ? { headers } : {}),
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     }),
     params,

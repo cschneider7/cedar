@@ -1,3 +1,4 @@
+import { Navigate } from "react-router"
 import type { MutationResult } from "~/lib/action-results"
 import { deleteClassroom } from "~/lib/api"
 import { tokenFromRequest } from "~/lib/auth"
@@ -10,4 +11,10 @@ export async function action(args: Route.ActionArgs): Promise<MutationResult> {
   } catch (error) {
     return { ok: false, error: (error as Error).message }
   }
+}
+
+// See create-classroom.tsx — this is a fetcher-only action target;
+// redirect direct navigation to the list instead of a blank content area.
+export default function Component() {
+  return <Navigate to="/classrooms" replace />
 }
