@@ -1,4 +1,8 @@
-import type { ColumnDef } from "@tanstack/react-table"
+import {
+  rowSelectionFeature,
+  tableFeatures,
+  type ColumnDef,
+} from "@tanstack/react-table"
 import {
   ArrowDown,
   ArrowUp,
@@ -39,6 +43,8 @@ import type { Classroom, Student } from "~/lib/schemas"
 
 export type StudentSortKey = "name" | "student_id" | "classroom"
 export type StudentSortDir = "asc" | "desc"
+
+export const studentTableFeatures = tableFeatures({ rowSelectionFeature })
 
 function SortableHeader({
   label,
@@ -179,7 +185,7 @@ export function getStudentColumns({
   sortBy: StudentSortKey
   sortDir: StudentSortDir
   onSortChange: (key: StudentSortKey) => void
-}): ColumnDef<Student>[] {
+}): ColumnDef<typeof studentTableFeatures, Student>[] {
   return [
     {
       id: "select",
@@ -205,7 +211,6 @@ export function getStudentColumns({
           aria-label={`Select ${row.original.name}`}
         />
       ),
-      enableSorting: false,
     },
     {
       id: "avatar",
@@ -213,7 +218,6 @@ export function getStudentColumns({
       cell: ({ row }) => (
         <StudentAvatar student={row.original} className="size-8 rounded-full" />
       ),
-      enableSorting: false,
     },
     {
       accessorKey: "name",
@@ -267,7 +271,6 @@ export function getStudentColumns({
       id: "actions",
       header: "",
       cell: ({ row }) => <ActionsCell student={row.original} />,
-      enableSorting: false,
     },
   ]
 }

@@ -1,7 +1,6 @@
 import {
   flexRender,
-  getCoreRowModel,
-  useReactTable,
+  useTable,
   type RowSelectionState,
 } from "@tanstack/react-table"
 import {
@@ -87,6 +86,7 @@ import { tokenFromRequest } from "~/lib/auth"
 import type { Classroom, Student } from "~/lib/schemas"
 import {
   getStudentColumns,
+  studentTableFeatures,
   type StudentSortDir,
   type StudentSortKey,
 } from "./student-columns"
@@ -473,14 +473,10 @@ export default function Component({ loaderData }: Route.ComponentProps) {
     [classroomById, sortBy, sortDir, handleSortChange]
   )
 
-  const table = useReactTable({
+  const table = useTable({
     data: studentsPage.students,
     columns,
-    getCoreRowModel: getCoreRowModel(),
-    manualPagination: true,
-    manualSorting: true,
-    manualFiltering: true,
-    pageCount: studentsPage.total_pages,
+    features: studentTableFeatures,
     state: { rowSelection },
     onRowSelectionChange: setRowSelection,
     getRowId: (row) => row.id,
@@ -618,7 +614,7 @@ export default function Component({ loaderData }: Route.ComponentProps) {
                         }
                       }}
                     >
-                      {row.getVisibleCells().map((cell) => (
+                      {row.getAllCells().map((cell) => (
                         <TableCell
                           key={cell.id}
                           onClick={

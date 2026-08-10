@@ -20,15 +20,12 @@ jobs:
     name: Run Test Suite
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    strategy:
-      matrix:
-        node-version: [22.x, 26.x]
     steps:
       - uses: actions/checkout@v4
-      - name: Use Node.js ${{ matrix.node-version }}
+      - name: Use Node.js 26.x
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 26.x
           cache: "npm"
       - run: npm ci
       - run: npm run typecheck

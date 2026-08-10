@@ -5,7 +5,9 @@ import { makeArgs } from "~/lib/test-utils"
 import { action } from "./student-image-upload"
 
 vi.mock("@aws-sdk/client-s3", () => ({
-  PutObjectCommand: vi.fn((input: unknown) => input),
+  PutObjectCommand: vi.fn(function (input: unknown) {
+    return input
+  }),
 }))
 vi.mock("@aws-sdk/s3-request-presigner", () => ({
   getSignedUrl: vi.fn(),

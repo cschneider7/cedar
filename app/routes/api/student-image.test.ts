@@ -5,7 +5,9 @@ import { s3Client } from "~/lib/s3.server"
 import { loader } from "./student-image"
 
 vi.mock("@aws-sdk/client-s3", () => ({
-  GetObjectCommand: vi.fn((input: unknown) => input),
+  GetObjectCommand: vi.fn(function (input: unknown) {
+    return input
+  }),
 }))
 vi.mock("~/lib/s3.server", () => ({
   s3Client: { send: vi.fn() },
