@@ -71,7 +71,7 @@ jobs:
 
       - name: Deploy Fly preview app
         id: deploy_fly
-        uses: superfly/fly-pr-review-apps@1.5.0
+        uses: superfly/fly-pr-review-apps@1.6.0
         with:
           name: ${{ env.FLY_APP }}
           config: fly.toml

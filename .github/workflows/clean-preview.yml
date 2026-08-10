@@ -23,7 +23,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-      - uses: superfly/fly-pr-review-apps@1.5.0
+      - uses: superfly/fly-pr-review-apps@1.6.0
         with:
           name: pr-${{ github.event.number }}-seating-chart-app
           config: fly.toml
