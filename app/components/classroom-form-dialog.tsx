@@ -6,7 +6,6 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -100,11 +99,6 @@ export function ClassroomFormDialog(props: ClassroomFormDialogProps) {
           <DialogTitle>
             {mode === "create" ? "Create new classroom" : "Edit classroom"}
           </DialogTitle>
-          <DialogDescription>
-            {mode === "create"
-              ? "Enter new classroom info here."
-              : "Enter classroom info here."}
-          </DialogDescription>
         </DialogHeader>
         {submitError && (
           <Alert variant="destructive" ref={errorRef} tabIndex={-1}>

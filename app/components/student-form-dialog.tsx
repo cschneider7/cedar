@@ -7,7 +7,6 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -15,13 +14,7 @@ import {
 } from "~/components/ui/dialog"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-} from "~/components/ui/field"
+import { Field, FieldError, FieldGroup, FieldLabel } from "~/components/ui/field"
 import { Input } from "~/components/ui/input"
 import {
   Select,
@@ -62,6 +55,11 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
   )
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  // While the crop-photo dialog (stacked on top of this one) is open, this
+  // dialog must stay put — no closing via Escape/outside-click/its own
+  // close button, and no interacting with the fields behind the crop
+  // dialog's backdrop.
+  const [isCropping, setIsCropping] = useState(false)
 
   const formPath =
     mode === "create" ? "/students/new" : `/students/${props.student.id}/edit`
@@ -171,18 +169,19 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
   })
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (isCropping) return
+        setOpen(next)
+      }}
+    >
       {trigger && <DialogTrigger render={trigger} />}
-      <DialogContent>
+      <DialogContent inert={isCropping || undefined}>
         <DialogHeader>
           <DialogTitle>
             {mode === "create" ? "Create new student" : "Edit student"}
           </DialogTitle>
-          <DialogDescription>
-            {mode === "create"
-              ? "Enter new student info here."
-              : "Enter student info here."}
-          </DialogDescription>
         </DialogHeader>
         {displayedError && (
           <Alert variant="destructive" ref={errorRef} tabIndex={-1}>
@@ -191,87 +190,91 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
         )}
         <form id="student-form" onSubmit={form.handleSubmit(onSubmit)}>
           <FieldGroup>
-            <Field>
-              <FieldLabel>Photo</FieldLabel>
-              <StudentPhotoField value={photo} onChange={setPhoto} />
-            </Field>
-            <Controller
-              name="name"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel>
-                    Name<span className="text-destructive">*</span>
-                  </FieldLabel>
-                  <Input
-                    {...field}
-                    aria-invalid={fieldState.invalid}
-                    placeholder="Bob Burger"
-                  />
-                  {fieldState.invalid && (
-                    <FieldError errors={[fieldState.error]} />
-                  )}
-                </Field>
-              )}
-            />
-            <Controller
-              name="student_id"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel>
-                    Student ID Number
-                    <span className="text-destructive">*</span>
-                  </FieldLabel>
-                  <Input
-                    {...field}
-                    aria-invalid={fieldState.invalid}
-                    placeholder="123456"
-                  />
-                  {fieldState.invalid && (
-                    <FieldError errors={[fieldState.error]} />
-                  )}
-                </Field>
-              )}
-            />
-            <Controller
-              name="classroom_id"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel>Classroom</FieldLabel>
-                  <FieldDescription>
-                    The classroom the student is enrolled in
-                  </FieldDescription>
-                  <Select
-                    name={field.name}
-                    value={field.value}
-                    onValueChange={field.onChange}
-                    items={classroomOptions}
-                  >
-                    <SelectTrigger
+            <div className="flex items-start gap-4">
+              <Field className="w-auto shrink-0">
+                <StudentPhotoField
+                  value={photo}
+                  onChange={setPhoto}
+                  onCropDialogOpenChange={setIsCropping}
+                />
+              </Field>
+              <Controller
+                name="name"
+                control={form.control}
+                render={({ field, fieldState }) => (
+                  <Field className="flex-1" data-invalid={fieldState.invalid}>
+                    <FieldLabel>
+                      Name<span className="text-destructive">*</span>
+                    </FieldLabel>
+                    <Input
+                      {...field}
                       aria-invalid={fieldState.invalid}
-                      className="w-full max-w-48"
+                      placeholder="Bob Burger"
+                    />
+                    {fieldState.invalid && (
+                      <FieldError errors={[fieldState.error]} />
+                    )}
+                  </Field>
+                )}
+              />
+            </div>
+            <div className="flex items-start gap-4">
+              <Controller
+                name="student_id"
+                control={form.control}
+                render={({ field, fieldState }) => (
+                  <Field className="flex-1" data-invalid={fieldState.invalid}>
+                    <FieldLabel>
+                      Student ID Number
+                      <span className="text-destructive">*</span>
+                    </FieldLabel>
+                    <Input
+                      {...field}
+                      aria-invalid={fieldState.invalid}
+                      placeholder="123456"
+                    />
+                    {fieldState.invalid && (
+                      <FieldError errors={[fieldState.error]} />
+                    )}
+                  </Field>
+                )}
+              />
+              <Controller
+                name="classroom_id"
+                control={form.control}
+                render={({ field, fieldState }) => (
+                  <Field className="flex-1" data-invalid={fieldState.invalid}>
+                    <FieldLabel>Classroom</FieldLabel>
+                    <Select
+                      name={field.name}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      items={classroomOptions}
                     >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {classroomOptions.map((classroom) => (
-                        <SelectItem
-                          key={classroom.value}
-                          value={classroom.value}
-                        >
-                          {classroom.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {fieldState.invalid && (
-                    <FieldError errors={[fieldState.error]} />
-                  )}
-                </Field>
-              )}
-            />
+                      <SelectTrigger
+                        aria-invalid={fieldState.invalid}
+                        className="w-full"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {classroomOptions.map((classroom) => (
+                          <SelectItem
+                            key={classroom.value}
+                            value={classroom.value}
+                          >
+                            {classroom.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {fieldState.invalid && (
+                      <FieldError errors={[fieldState.error]} />
+                    )}
+                  </Field>
+                )}
+              />
+            </div>
           </FieldGroup>
         </form>
         <DialogFooter>
