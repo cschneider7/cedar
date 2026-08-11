@@ -3,12 +3,10 @@ import { GetObjectCommand } from "@aws-sdk/client-s3"
 import { S3_BUCKET, s3Client } from "~/lib/s3.server"
 import type { Route } from "./+types/student-image"
 
-/** Streams a private student photo object to the browser after confirming the
- * requesting session owns it — the key's `students/{userId}/` prefix
- * (enforced at upload time in `student-image-upload.tsx`) is the ownership
- * check, so no extra round trip to the Rust API is needed. The bucket is
- * private (no directly-fetchable URL), so every `<img>` referencing a photo
- * must route through this proxy instead of `image_url` directly. */
+/**
+ * Streams a private student photo object after confirming the requesting
+ * session owns it — the key's `students/{userId}/` prefix is the check.
+ */
 export async function loader(args: Route.LoaderArgs) {
   const { isAuthenticated, userId } = await getAuth(args)
   if (!isAuthenticated) {

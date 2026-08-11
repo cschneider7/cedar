@@ -8,11 +8,10 @@ const ALLOWED_CONTENT_TYPE = "image/webp"
 const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024
 const PRESIGNED_URL_EXPIRES_IN_SECONDS = 60
 
-/** Issues a presigned S3 PUT URL for a student photo upload and otherwise
- * no-ops — the `image_url` itself is saved via the normal create/update
- * student API call, not this route. The client always converts to webp
- * before uploading (see image-utils.ts), so that's the only content type
- * signed here. */
+/**
+ * Issues a presigned S3 PUT URL for a student photo upload — `image_url`
+ * itself is saved separately, via the normal create/update student call.
+ */
 export async function action(args: Route.ActionArgs) {
   const { isAuthenticated, userId } = await getAuth(args)
   if (!isAuthenticated) {

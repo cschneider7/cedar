@@ -14,7 +14,12 @@ import {
 } from "~/components/ui/dialog"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
-import { Field, FieldError, FieldGroup, FieldLabel } from "~/components/ui/field"
+import {
+  Field,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "~/components/ui/field"
 import { Input } from "~/components/ui/input"
 import {
   Select,
@@ -40,6 +45,12 @@ type StudentFormDialogProps = (
   onOpenChange?: (open: boolean) => void
 }
 
+/**
+ * Derives the form's initial photo state: the existing photo in edit
+ * mode, or none for a new student.
+ * @param props - The dialog's props, used to check mode and any existing photo.
+ * @returns The initial photo field value.
+ */
 function defaultPhotoValue(props: StudentFormDialogProps): PhotoFieldValue {
   if (props.mode === "edit" && props.student.image_url) {
     return { kind: "existing", url: props.student.image_url }
@@ -47,6 +58,10 @@ function defaultPhotoValue(props: StudentFormDialogProps): PhotoFieldValue {
   return { kind: "none" }
 }
 
+/**
+ * Create/edit student dialog: photo, name, student ID, and classroom
+ * fields; the staged photo uploads only once the form is submitted.
+ */
 export function StudentFormDialog(props: StudentFormDialogProps) {
   const { mode, trigger } = props
 
@@ -55,10 +70,8 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
   )
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
-  // While the crop-photo dialog (stacked on top of this one) is open, this
-  // dialog must stay put — no closing via Escape/outside-click/its own
-  // close button, and no interacting with the fields behind the crop
-  // dialog's backdrop.
+  // While the crop-photo dialog (stacked on top) is open, this dialog must
+  // stay put — no closing, no interacting with fields behind its backdrop.
   const [isCropping, setIsCropping] = useState(false)
 
   const formPath =

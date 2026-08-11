@@ -9,11 +9,8 @@ export const CreateStudentSchema = z.object({
     .trim()
     .min(1, "Name must be at least 1 character.")
     .max(100, "Name must be at most 100 characters."),
-  // Nullish (not just nullable): image_url isn't a react-hook-form-registered
-  // field — StudentPhotoField's staged/removed state lives outside the form
-  // and is merged into the submit payload by hand in onSubmit — so the
-  // zodResolver-validated RHF values never contain this key at all.
-  // A plain string, not z.url(): this holds an S3 object key, not a URL.
+  // Nullish, not nullable: image_url is merged into the submit payload by
+  // hand (outside RHF); the string itself is an S3 object key, not a URL.
   image_url: z.string().min(1).nullish(),
 })
 

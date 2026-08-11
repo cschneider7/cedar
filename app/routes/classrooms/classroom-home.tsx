@@ -38,9 +38,8 @@ export async function loader(args: Route.LoaderArgs) {
   const token = await tokenFromRequest(args)
   const [classrooms, studentsResult] = await Promise.all([
     getClassrooms(token),
-    // Student counts are supplementary to the classroom list itself — a
-    // failure here degrades to "—" counts + a toast rather than failing
-    // the whole page.
+    // Student counts are supplementary — a failure here degrades to "—"
+    // counts + a toast rather than failing the whole page.
     getStudents(token).then(
       (students) => ({ students, failed: false }),
       () => ({ students: [] as Student[], failed: true })

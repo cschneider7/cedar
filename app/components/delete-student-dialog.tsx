@@ -3,6 +3,9 @@ import { DeleteConfirmDialog } from "~/components/delete-confirm-dialog"
 import { useDeleteResource } from "~/hooks/use-delete-resource"
 import type { Student } from "~/lib/schemas"
 
+/**
+ * Confirmation dialog that deletes a student via `useDeleteResource`.
+ */
 export function DeleteStudentDialog({
   student,
   trigger,

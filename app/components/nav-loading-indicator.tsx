@@ -4,9 +4,10 @@ import { Spinner } from "~/components/ui/spinner"
 
 const SHOW_DELAY_MS = 150
 
-/** Small fixed-position spinner shown during any client-side navigation,
- * delayed briefly so fast navigations don't flash it. Mounted once at the
- * app shell level — no per-route wiring needed. */
+/**
+ * Small fixed-position spinner shown during any client-side navigation,
+ * delayed briefly so fast navigations don't flash it.
+ */
 export function NavLoadingIndicator() {
   const navigation = useNavigation()
   const isNavigating = navigation.state !== "idle"

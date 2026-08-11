@@ -39,11 +39,8 @@ export async function loader(args: Route.LoaderArgs) {
     if (!isAuthenticated) {
       return { classrooms: [], classroomsError: false }
     }
-    // This loader runs on every navigation/revalidation, including after
-    // unrelated mutations elsewhere in the app. A transient failure here
-    // must not take down the whole shell (sidebar/topbar) — degrade to an
-    // empty list instead of throwing, per the app's availability-first
-    // priority.
+    // This loader runs on every navigation/revalidation — a transient
+    // failure here must not take down the whole shell, so degrade instead.
     try {
       const classrooms = await getClassrooms(await getToken())
       return { classrooms, classroomsError: false }

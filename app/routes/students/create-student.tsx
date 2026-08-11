@@ -11,11 +11,8 @@ export async function loader(args: Route.LoaderArgs) {
   return { classrooms: classrooms }
 }
 
-// This route is a loader/action target hit via useFetcher from
-// StudentFormDialog, which never navigates here directly (no component gets
-// rendered on a fetcher submit/load). A direct GET (bookmark, refresh
-// mid-flow, shared link) would otherwise render the students layout with a
-// blank content area — redirect to the list instead.
+// This is a fetcher-only action target — a direct GET (bookmark, refresh)
+// would otherwise render a blank content area, so redirect to the list.
 export default function Component() {
   return <Navigate to="/students" replace />
 }

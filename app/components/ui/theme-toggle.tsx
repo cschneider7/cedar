@@ -15,13 +15,19 @@ export const themeIcons = {
   system: Monitor,
 } as const
 
+/**
+ * Type guard for a valid `Theme` value.
+ * @param value - The value to check.
+ * @returns Whether `value` is a valid `Theme`.
+ */
 export function isTheme(value: unknown): value is Theme {
   return value === "light" || value === "dark" || value === "system"
 }
 
-/** Standalone theme switcher for contexts without a signed-in account menu
- * (e.g. signed-out visitors) — same options as the account menu's "Theme"
- * submenu, shared via `themeIcons`/`isTheme`. */
+/**
+ * Standalone theme switcher for contexts without a signed-in account menu
+ * (e.g. signed-out visitors).
+ */
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme()
   const ThemeIcon = themeIcons[theme]

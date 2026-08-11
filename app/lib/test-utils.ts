@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, vi } from "vitest"
 
-// Registers the fetch-stub lifecycle every action/loader test file needs.
+/**
+ * Registers the fetch-stub lifecycle every action/loader test file needs.
+ */
 export function stubFetch() {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn())
@@ -10,7 +12,12 @@ export function stubFetch() {
   })
 }
 
-// Builds a fake React Router Route.{Action,Loader}Args object
+/**
+ * Builds a fake React Router `Route.{Action,Loader}Args` object.
+ * @param url - The request URL.
+ * @param options - Method, route params, request body, and headers.
+ * @returns A fake `args` object shaped like a loader/action would receive.
+ */
 export function makeArgs(
   url: string,
   options: {

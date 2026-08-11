@@ -7,6 +7,11 @@ import {
 
 export type { StudentViewMode }
 
+/**
+ * Reads/writes the student list's grid-vs-list view preference, persisted
+ * as a cookie so the SSR loader can render the right layout on first paint.
+ * @returns A `[viewMode, setViewMode]` pair.
+ */
 export function useStudentViewMode() {
   const [viewMode, setViewModeState] = useState<StudentViewMode>(() => {
     if (typeof document === "undefined") {

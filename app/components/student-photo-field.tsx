@@ -27,15 +27,22 @@ import {
   validateImageFile,
 } from "~/lib/image-utils"
 
-/** The photo a student form is currently holding: an untouched existing
- * photo, a freshly cropped local file not yet uploaded, an explicit removal
- * (edit mode only), or nothing at all. */
+/**
+ * The photo a student form is currently holding: an untouched existing
+ * photo, a staged local file, an explicit removal, or nothing at all.
+ */
 export type PhotoFieldValue =
   | { kind: "existing"; url: string }
   | { kind: "staged"; file: File; previewUrl: string }
   | { kind: "removed" }
   | { kind: "none" }
 
+/**
+ * Centers a 1:1 aspect crop within the given image dimensions.
+ * @param width - The image's width.
+ * @param height - The image's height.
+ * @returns A centered, percentage-based square crop.
+ */
 function centeredSquareCrop(width: number, height: number) {
   return centerCrop(
     makeAspectCrop({ unit: "%", width: 100 }, 1, width, height),
@@ -44,14 +51,10 @@ function centeredSquareCrop(width: number, height: number) {
   )
 }
 
-/** Select/drag-drop → validate → resize → square-crop flow for a student
- * photo. Nothing is uploaded here — `onChange` only stages a local `File`,
- * consistent with this form's upload-at-submit design (see student photo
- * spec: `docs/student-images-spec.md`). The crop step opens in its own
- * dialog, stacked on top of the create/edit student dialog, so the choice
- * between "Use photo" and "Cancel" is unambiguous — and so the crop tool
- * gets a container sized/centered for itself instead of inheriting the
- * surrounding form row's width. */
+/**
+ * Select → validate → resize → crop flow for a student photo — stages a
+ * local `File` via `onChange`; nothing is uploaded until form submit.
+ */
 export function StudentPhotoField({
   value,
   onChange,
@@ -60,8 +63,7 @@ export function StudentPhotoField({
   value: PhotoFieldValue
   onChange: (value: PhotoFieldValue) => void
   /** Notified when the crop dialog opens/closes, so a caller nesting this
-   * field inside its own dialog can suspend that dialog (uninteractable,
-   * uncloseable) while the crop dialog is stacked on top of it. */
+   * field can suspend its own dialog while the crop dialog is stacked on top. */
   onCropDialogOpenChange?: (open: boolean) => void
 }) {
   const [error, setError] = useState<string | null>(null)
@@ -229,6 +231,13 @@ export function StudentPhotoField({
   )
 }
 
+/**
+ * Converts a percentage-based crop to pixel units.
+ * @param crop - The crop to convert; returned as-is if already in pixels.
+ * @param containerWidth - The width the crop's percentages are relative to.
+ * @param containerHeight - The height the crop's percentages are relative to.
+ * @returns The equivalent pixel-based crop.
+ */
 function convertToPixels(
   crop: Crop,
   containerWidth: number,

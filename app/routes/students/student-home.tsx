@@ -5,12 +5,7 @@ import {
 } from "@tanstack/react-table"
 import { LayoutGrid, List, Plus, Search, UsersIcon } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import {
-  Link,
-  useLocation,
-  useNavigate,
-  useNavigation,
-} from "react-router"
+import { Link, useLocation, useNavigate, useNavigation } from "react-router"
 import { toast } from "sonner"
 import { DeleteConfirmDialog } from "~/components/delete-confirm-dialog"
 import { StudentAvatar } from "~/components/student-avatar"
@@ -81,10 +76,8 @@ export async function loader(args: Route.LoaderArgs) {
   const page = Math.max(1, Number(url.searchParams.get("page")) || 1)
   const q = url.searchParams.get("q") ?? ""
   const viewParam = url.searchParams.get("view")
-  // An explicit `?view=` always wins; otherwise fall back to the user's
-  // stored cookie preference instead of hardcoding grid, so a returning
-  // user whose preference is "list" gets it server-rendered on the very
-  // first paint rather than flashing grid before a client-side swap.
+  // An explicit `?view=` always wins; otherwise fall back to the stored
+  // cookie preference so it's server-rendered on first paint, no flash.
   const viewMode: StudentViewMode =
     viewParam === "list" || viewParam === "grid"
       ? viewParam
@@ -103,9 +96,8 @@ export async function loader(args: Route.LoaderArgs) {
       { page, pageSize, q: q || undefined, sortBy, sortDir },
       token
     ),
-    // Classrooms here only back "assigned to <classroom>" badges — not
-    // load-bearing for the student list itself, so a failure here degrades
-    // to unlabeled badges + a toast rather than failing the whole page.
+    // Classrooms here only back badges, not load-bearing — a failure
+    // degrades to unlabeled badges + a toast, not the whole page failing.
     getClassrooms(token).then(
       (classrooms) => ({ classrooms, failed: false }),
       () => ({ classrooms: [] as Classroom[], failed: true })
@@ -361,9 +353,8 @@ export default function Component({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const navigation = useNavigation()
-  // Scoped to same-page param changes (search/sort/page/view) — cross-page
-  // navigation away from this list is now covered by the global
-  // `NavLoadingIndicator` instead, so this dimming shouldn't also fire then.
+  // Scoped to same-page param changes — cross-page navigation is already
+  // covered by the global `NavLoadingIndicator`.
   const isLoading =
     navigation.state !== "idle" &&
     navigation.location?.pathname === location.pathname
@@ -386,13 +377,14 @@ export default function Component({ loaderData }: Route.ComponentProps) {
 
   useEffect(() => {
     if (classroomsError) {
-      toast.warning("Couldn't load classrooms — classroom badges may be missing.")
+      toast.warning(
+        "Couldn't load classrooms — classroom badges may be missing."
+      )
     }
   }, [classroomsError])
 
-  // Row selection is per-page state; a page/sort/search/view change loads a
-  // different set of students, so stale selections are cleared rather than
-  // silently referring to rows no longer on screen.
+  // Row selection is per-page state — clear it on any param change so it
+  // doesn't silently refer to rows no longer on screen.
   useEffect(() => {
     setRowSelection({})
   }, [location.search])
@@ -526,8 +518,7 @@ export default function Component({ loaderData }: Route.ComponentProps) {
           ) : (
             <>
               {/* Fixed height + visibility (not conditional mount) so the
-                  table below never shifts when the selection count changes
-                  between zero and non-zero. */}
+                  table below never shifts as the selection count changes. */}
               <div
                 className={cn(
                   "mb-2 flex h-9 items-center justify-between rounded-md border bg-muted/50 px-3 py-2",

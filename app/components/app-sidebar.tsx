@@ -40,6 +40,9 @@ import {
 import type { Classroom } from "~/lib/schemas"
 import type { loader as rootLoader } from "~/root"
 
+/**
+ * One classroom's row in the sidebar, with a view/edit/delete actions menu.
+ */
 function ClassroomRow({
   classroom,
   onRequestDelete,
@@ -101,6 +104,9 @@ function ClassroomRow({
   )
 }
 
+/**
+ * Primary nav sidebar: Home/Students/Classrooms links, the classroom list, and their create/edit/delete dialogs.
+ */
 export function AppSidebar() {
   const rootData = useRouteLoaderData<typeof rootLoader>("root")
   const classrooms = rootData?.classrooms ?? []

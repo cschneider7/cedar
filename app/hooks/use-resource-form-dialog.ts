@@ -9,27 +9,27 @@ type UseResourceFormDialogOptions<TFieldValues extends FieldValues> = {
   onOpenChange?: (open: boolean) => void
   mode: "create" | "edit"
   /** The caller's own `useForm<...>()` instance — kept in the calling
-   * component (alongside its `zodResolver`) since threading zod's schema
-   * generics through this hook fights react-hook-form's own generics for
-   * little benefit; this hook only needs to reset/read it. */
+   * component since threading zod's generics through this hook isn't worth it. */
   form: UseFormReturn<TFieldValues>
   defaultValues: TFieldValues
   actionPath: string
   /** e.g. "Student" / "Classroom" — used for the success toast copy. */
   entityLabel: string
-  /** Extra reset logic to run alongside `form.reset` whenever the dialog
-   * opens — the dialog stays permanently mounted, so state from the last
-   * session (e.g. `StudentFormDialog`'s staged photo) must be cleared on
-   * each open. */
+  /**
+   * Extra reset logic to run alongside `form.reset` when the dialog opens —
+   * it stays permanently mounted, so stale state must be cleared each time.
+   */
   onOpen?: () => void
 }
 
-/** Shared state machine behind `StudentFormDialog`/`ClassroomFormDialog`:
- * controlled/uncontrolled open state, reset-on-open, a submit fetcher with
- * its pending/error state, and the success toast + close. Field markup,
- * the `useForm`/`zodResolver` setup, and any pre-submit async work (e.g.
- * photo upload) stay in the calling component — this only owns the parts
- * identical between the two dialogs. */
+/**
+ * Shared state machine behind `StudentFormDialog`/`ClassroomFormDialog`:
+ * open state, reset-on-open, a submit fetcher, and the success toast + close.
+ * @param options - Open state, the caller's form instance, and submit target,
+ * see `UseResourceFormDialogOptions`.
+ * @returns Open state, submit/error state, and helpers to build and submit
+ * the payload.
+ */
 export function useResourceFormDialog<TFieldValues extends FieldValues>({
   open: openProp,
   onOpenChange,
@@ -70,12 +70,12 @@ export function useResourceFormDialog<TFieldValues extends FieldValues>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher.state, fetcher.data])
 
-  /** Dirty-field-filtered (edit) or full (create) payload — callers extend
-   * this with their own fields (e.g. an uploaded photo key) before
-   * submitting. Typed as a real `Partial<TFieldValues>` (not a bare
-   * `Record<string, unknown>` cast to the full schema type) so a caller
-   * can't accidentally treat a dirty-only edit payload as if it had every
-   * field the create payload would. */
+  /**
+   * Dirty-field-filtered (edit) or full (create) payload — callers extend
+   * this with their own fields (e.g. an uploaded photo key) before submitting.
+   * @param data - The form's current values.
+   * @returns The payload to submit.
+   */
   function buildSubmitData(data: TFieldValues): Partial<TFieldValues> {
     if (mode === "create") {
       return { ...data }
@@ -88,11 +88,8 @@ export function useResourceFormDialog<TFieldValues extends FieldValues>({
   }
 
   function submit(payload: Partial<TFieldValues>) {
-    // react-router's fetcher.submit types a JSON body as `JsonValue`, which
-    // `Partial<TFieldValues>` (whose fields are already known JSON-safe
-    // primitives from a zod-validated form) doesn't structurally match
-    // inside this generic function body — the boundary cast is contained
-    // here rather than repeated, untyped, at every call site.
+    // fetcher.submit expects JsonValue, which our already JSON-safe payload
+    // doesn't structurally match — cast contained here, not at every call site.
     fetcher.submit(payload as Record<string, unknown> as never, {
       method: "post",
       action: actionPath,

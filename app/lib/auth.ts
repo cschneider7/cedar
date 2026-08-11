@@ -6,11 +6,13 @@ import type {
 } from "react-router"
 import { redirect } from "react-router"
 
-/** Route/layout middleware: redirects to `/login` if unauthenticated,
- * otherwise lets the request continue to the matched loader/action. Runs
- * for both loaders and actions under the route it's attached to, so a
- * single `middleware = [requireAuth]` on a layout gates its whole subtree
- * (including action-only routes) without each one needing its own guard. */
+/**
+ * Route/layout middleware: redirects to `/login` if unauthenticated. Gates
+ * the whole subtree it's attached to, including action-only routes.
+ * @param args - The loader/action args for the current request.
+ * @param next - Continues to the next middleware/handler in the chain.
+ * @returns Whatever `next()` resolves to.
+ */
 export const requireAuth: MiddlewareFunction<Response | void> = async (
   args,
   next
@@ -23,9 +25,12 @@ export const requireAuth: MiddlewareFunction<Response | void> = async (
   return next()
 }
 
-/** Action-only helper: no redirect, just best-effort token forwarding —
- * matches the backend's own 401 as the source of truth for these
- * mutation-only routes. */
+/**
+ * Action-only helper: no redirect, just best-effort token forwarding — the
+ * backend's own 401 is the source of truth for these mutation-only routes.
+ * @param args - The loader/action args for the current request.
+ * @returns The session token, or `undefined` if unauthenticated.
+ */
 export async function tokenFromRequest(
   args: LoaderFunctionArgs | ActionFunctionArgs
 ): Promise<string | undefined> {

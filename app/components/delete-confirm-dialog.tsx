@@ -15,10 +15,10 @@ import {
 } from "~/components/ui/alert-dialog"
 import { Spinner } from "~/components/ui/spinner"
 
-/** Shared destructive-confirmation dialog: a `Trash2Icon` header, title,
- * description, an inline error alert, and a spinner-gated Delete action.
- * `open`/`onOpenChange` are optional (uncontrolled fallback), same pattern
- * as `ClassroomFormDialog`/`StudentFormDialog`. */
+/**
+ * Shared destructive-confirmation dialog with an inline error alert and
+ * a spinner-gated Delete action. `open`/`onOpenChange` are optional (uncontrolled fallback).
+ */
 export function DeleteConfirmDialog({
   trigger,
   open,

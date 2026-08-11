@@ -3,10 +3,11 @@ import type { ClerkAppearanceTheme } from "@clerk/shared/types"
 import { useEffect, useState } from "react"
 import { useTheme } from "~/components/ui/theme-provider"
 
-/** Resolves the app's light/dark/system theme (useTheme) to Clerk's
- * appearance prop, client-side only to avoid a hydration mismatch — mirrors
- * the same resolution algorithm as root.tsx's pre-hydration <script> and
- * ThemeProvider's own useEffect; keep all three in sync by hand. */
+/**
+ * Resolves the app's light/dark/system theme to Clerk's appearance prop,
+ * client-side only to avoid a hydration mismatch.
+ * @returns A Clerk `appearance` theme matching the app's current theme.
+ */
 export function useClerkAppearance(): ClerkAppearanceTheme {
   const { theme } = useTheme()
   const [resolvedDark, setResolvedDark] = useState(false)

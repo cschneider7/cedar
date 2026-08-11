@@ -27,14 +27,19 @@ if (!API_URL) {
   throw new Error("VITE_API_URL is not set")
 }
 
-/** A failed API call, distinguishing a real HTTP error status from a
- * network-level failure (offline, DNS, CORS) or an unparseable response —
- * `status` is 0 for the latter two, never a guessed/fake HTTP status. */
+/**
+ * A failed API call — `kind` distinguishes a real HTTP error from a
+ * network/parse failure; `status` is 0 for the latter two.
+ */
 export class ApiError extends Error {
   status: number
   kind: "http" | "network" | "parse"
 
-  constructor(message: string, status: number, kind: "http" | "network" | "parse") {
+  constructor(
+    message: string,
+    status: number,
+    kind: "http" | "network" | "parse"
+  ) {
     super(message)
     this.name = "ApiError"
     this.status = status
@@ -42,16 +47,15 @@ export class ApiError extends Error {
   }
 }
 
-/** Re-throws an `ApiError` as a route `Response` carrying its real status,
+/**
+ * Re-throws an `ApiError` as a route `Response` carrying its real status,
  * for loaders that let failures propagate to the nearest `ErrorBoundary`.
- * The message is set as `statusText` (not just the body) since that's what
- * `root.tsx`/`route-error-card.tsx` read via `isRouteErrorResponse`.
- * Anything else (a bug, not an API failure) is rethrown as-is. */
+ * @param error - The caught value to convert.
+ */
 export function toRouteError(error: unknown): never {
   if (error instanceof ApiError) {
-    // statusText must be a valid HTTP reason phrase (no CR/LF); sanitize
-    // rather than let an unusual backend message throw while constructing
-    // this very error response.
+    // statusText must be a valid HTTP reason phrase (no CR/LF) — sanitize so
+    // an unusual backend message can't throw while building this response.
     const statusText = error.message.replace(/[\r\n]+/g, " ").slice(0, 200)
     throw new Response(error.message, {
       status: error.status || 503,
@@ -82,10 +86,12 @@ async function getErrorMessage(
   return text || fallback
 }
 
-/** Attaches the Clerk session token as a bearer `Authorization` header.
- * Both SSR (loader/action) and browser-originated calls go through this —
- * there's no ambient credential (unlike a cookie jar), so every caller must
- * pass its own token explicitly. */
+/**
+ * Attaches the Clerk session token as a bearer `Authorization` header —
+ * every caller passes its own token; there's no ambient shared credential.
+ * @param token - The session token, if any.
+ * @returns Headers with the bearer token, or `undefined` if no token.
+ */
 function withAuth(token?: string | null): HeadersInit | undefined {
   return token ? { Authorization: `Bearer ${token}` } : undefined
 }
@@ -97,11 +103,15 @@ type ApiFetchOptions = {
   signal?: AbortSignal
 }
 
-/** Shared low-level fetch wrapper for every function in this file: builds
- * the request, never lets a raw network failure escape unguarded, preserves
- * the real HTTP status on failure (see `ApiError`), and validates the
- * response envelope's `data` against `schema`. Pass `undefined` for `schema`
- * for endpoints whose success body isn't consumed (e.g. delete/update). */
+/**
+ * Shared low-level fetch wrapper for every function below — builds the
+ * request, maps failures to `ApiError`, and validates the response against `schema`.
+ * @param path - The API path, appended to `API_URL`.
+ * @param schema - Schema to validate/parse the response body against, or
+ * `undefined` for an endpoint with no response body.
+ * @param opts - Method, auth token, request body, and abort signal.
+ * @returns The parsed response body, or `undefined` if `schema` is omitted.
+ */
 async function apiFetch<T>(
   path: string,
   schema: z.ZodType<T> | undefined,
@@ -158,6 +168,12 @@ async function apiFetch<T>(
   return parsed.data
 }
 
+/**
+ * Fetches a single student by id.
+ * @param studentId - The student's public-facing UUID.
+ * @param token - The caller's session token, if any.
+ * @returns The matching student.
+ */
 export async function getStudent(
   studentId: string,
   token?: string | null
@@ -165,10 +181,21 @@ export async function getStudent(
   return apiFetch(`/students/${studentId}`, StudentSchema, { token })
 }
 
+/**
+ * Fetches every student.
+ * @param token - The caller's session token, if any.
+ * @returns All students.
+ */
 export async function getStudents(token?: string | null): Promise<Student[]> {
   return apiFetch(`/students`, z.array(StudentSchema), { token })
 }
 
+/**
+ * Fetches a paginated, searchable, sortable page of students.
+ * @param params - Page number/size, optional search query, and optional sort.
+ * @param token - The caller's session token, if any.
+ * @returns The matching page of students, plus paging metadata.
+ */
 export async function getStudentsPage(
   params: {
     page: number
@@ -196,6 +223,12 @@ export async function getStudentsPage(
   return apiFetch(`/students?${searchParams}`, StudentsPageSchema, { token })
 }
 
+/**
+ * Creates a new student.
+ * @param studentInfo - The new student's fields.
+ * @param token - The caller's session token, if any.
+ * @returns The created student.
+ */
 export async function createStudent(
   studentInfo: z.infer<typeof CreateStudentSchema>,
   token?: string | null
@@ -207,6 +240,12 @@ export async function createStudent(
   })
 }
 
+/**
+ * Partially updates a student.
+ * @param studentId - The student's public-facing UUID.
+ * @param updates - The fields to change.
+ * @param token - The caller's session token, if any.
+ */
 export async function updateStudent(
   studentId: string,
   updates: z.infer<typeof UpdateStudentSchema>,
@@ -219,6 +258,11 @@ export async function updateStudent(
   })
 }
 
+/**
+ * Deletes a student.
+ * @param studentId - The student's public-facing UUID.
+ * @param token - The caller's session token, if any.
+ */
 export async function deleteStudent(studentId: string, token?: string | null) {
   await apiFetch(`/students/${studentId}`, undefined, {
     method: "DELETE",
@@ -226,6 +270,12 @@ export async function deleteStudent(studentId: string, token?: string | null) {
   })
 }
 
+/**
+ * Deletes multiple students by id.
+ * @param ids - The public-facing UUIDs of the students to delete.
+ * @param token - The caller's session token, if any.
+ * @returns A count of how many students were deleted.
+ */
 export async function bulkDeleteStudents(
   ids: string[],
   token?: string | null
@@ -237,6 +287,12 @@ export async function bulkDeleteStudents(
   })
 }
 
+/**
+ * Fetches a single classroom by id.
+ * @param classroomId - The classroom's public-facing UUID.
+ * @param token - The caller's session token, if any.
+ * @returns The matching classroom.
+ */
 export async function getClassroom(
   classroomId: string,
   token?: string | null
@@ -244,12 +300,23 @@ export async function getClassroom(
   return apiFetch(`/classrooms/${classroomId}`, ClassroomSchema, { token })
 }
 
+/**
+ * Fetches every classroom.
+ * @param token - The caller's session token, if any.
+ * @returns All classrooms.
+ */
 export async function getClassrooms(
   token?: string | null
 ): Promise<Classroom[]> {
   return apiFetch(`/classrooms`, z.array(ClassroomSchema), { token })
 }
 
+/**
+ * Creates a new classroom.
+ * @param classroomInfo - The new classroom's fields.
+ * @param token - The caller's session token, if any.
+ * @returns The created classroom.
+ */
 export async function createClassroom(
   classroomInfo: z.infer<typeof CreateClassroomSchema>,
   token?: string | null
@@ -261,6 +328,12 @@ export async function createClassroom(
   })
 }
 
+/**
+ * Partially updates a classroom.
+ * @param classroomId - The classroom's public-facing UUID.
+ * @param updates - The fields to change.
+ * @param token - The caller's session token, if any.
+ */
 export async function updateClassroom(
   classroomId: string,
   updates: z.infer<typeof UpdateClassroomSchema>,
@@ -273,6 +346,11 @@ export async function updateClassroom(
   })
 }
 
+/**
+ * Deletes a classroom.
+ * @param classroomId - The classroom's public-facing UUID.
+ * @param token - The caller's session token, if any.
+ */
 export async function deleteClassroom(
   classroomId: string,
   token?: string | null
@@ -283,6 +361,12 @@ export async function deleteClassroom(
   })
 }
 
+/**
+ * Fetches a classroom's seating chart (tables, seats, boundary).
+ * @param classroomId - The classroom's public-facing UUID.
+ * @param token - The caller's session token, if any.
+ * @returns The classroom's current seating chart.
+ */
 export async function getClassroomSeatingChart(
   classroomId: string,
   token?: string | null
@@ -294,6 +378,12 @@ export async function getClassroomSeatingChart(
   )
 }
 
+/**
+ * Replaces a classroom's entire seating chart.
+ * @param classroomId - The classroom's public-facing UUID.
+ * @param seatingChart - The full chart (boundary + tables + seats) to persist.
+ * @param token - The caller's session token, if any.
+ */
 export async function updateClassroomSeatingChart(
   classroomId: string,
   seatingChart: SeatingChart,
@@ -306,6 +396,14 @@ export async function updateClassroomSeatingChart(
   })
 }
 
+/**
+ * Proposes a randomized seating chart without persisting it.
+ * @param classroomId - The classroom's public-facing UUID.
+ * @param options - The current (possibly unsaved) boundary/table geometry to
+ * randomize students into.
+ * @param token - The caller's session token, if any.
+ * @returns A proposed seating chart, not yet saved.
+ */
 export async function generateRandomSeatingChart(
   classroomId: string,
   options: RandomizeSeatingChartOptions,
@@ -322,6 +420,13 @@ export async function generateRandomSeatingChart(
   )
 }
 
+/**
+ * Picks a weighted-random student for cold call.
+ * @param classroomId - The classroom's public-facing UUID.
+ * @param payload - Weighting options for the pick.
+ * @param token - The caller's session token, if any.
+ * @returns The picked student.
+ */
 export async function pickColdCallStudent(
   classroomId: string,
   payload: ColdCall,

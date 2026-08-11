@@ -20,18 +20,17 @@ const initialState: ThemeProviderState = {
 
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
 
+/**
+ * Provides the app's light/dark/system theme, persisted to localStorage.
+ */
 export function ThemeProvider({
   children,
   defaultTheme = "light",
   storageKey = "vite-ui-theme",
   ...props
 }: ThemeProviderProps) {
-  // Always starts at `defaultTheme`, matching the SSR-rendered output —
-  // reading localStorage here (as this used to) makes the client's first
-  // render disagree with the server's for any descendant whose output
-  // depends on `theme` (e.g. a Sun/Moon icon), triggering a React hydration
-  // mismatch. The real stored value is synced in immediately after mount
-  // instead, once hydration has already completed.
+  // Starts at `defaultTheme` (matching SSR) to avoid a hydration mismatch —
+  // the real stored value is synced in below, once mounted.
   const [theme, setTheme] = useState<Theme>(defaultTheme)
 
   useEffect(() => {
@@ -87,6 +86,10 @@ export function ThemeProvider({
   )
 }
 
+/**
+ * Reads the current theme and setter from `ThemeProvider`'s context.
+ * @returns The current theme and a setter function.
+ */
 export const useTheme = () => {
   const context = useContext(ThemeProviderContext)
 

@@ -35,6 +35,9 @@ import { useTheme } from "~/components/ui/theme-provider"
 import { isTheme, themeIcons, ThemeToggle } from "~/components/ui/theme-toggle"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 
+/**
+ * Breadcrumb trail built from matched routes' `handle.breadcrumb`.
+ */
 function Breadcrumbs() {
   const matches = useMatches()
   const crumbs = matches
@@ -80,6 +83,9 @@ function Breadcrumbs() {
   )
 }
 
+/**
+ * Topbar "Create" dropdown, opening the new-student/new-classroom dialogs.
+ */
 function CreateDropdown() {
   const [studentOpen, setStudentOpen] = useState(false)
   const [classroomOpen, setClassroomOpen] = useState(false)
@@ -118,6 +124,9 @@ function CreateDropdown() {
   )
 }
 
+/**
+ * Signed-in account menu: profile, theme switcher, and sign out.
+ */
 function UserMenu() {
   const { user } = useUser()
   const { signOut, openUserProfile } = useClerk()
@@ -133,9 +142,7 @@ function UserMenu() {
     displayName.slice(0, 2).toUpperCase()
 
   // Avatar renders at size-8 (32px) — request a 2x-retina-sized crop
-  // instead of Clerk's full-size default image. imageUrl can be briefly
-  // empty right after a page refresh, before Clerk finishes loading the
-  // full user profile client-side.
+  // instead of Clerk's full-size default image.
   let avatarImageUrl: string | undefined
   if (user.imageUrl) {
     const url = new URL(user.imageUrl)
@@ -215,6 +222,9 @@ function UserMenu() {
   )
 }
 
+/**
+ * Signed-out (theme toggle + sign in) or signed-in (account menu) controls.
+ */
 function AuthControl() {
   return (
     <>
@@ -235,6 +245,9 @@ function AuthControl() {
   )
 }
 
+/**
+ * App-wide top bar: sidebar toggle, breadcrumbs, search, create menu, and auth controls.
+ */
 export function AppTopbar() {
   return (
     <header className="sticky top-0 z-40 flex h-(--header-height) w-full shrink-0 items-center gap-2 border-b border-border bg-background px-4">

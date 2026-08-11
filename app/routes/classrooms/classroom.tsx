@@ -29,11 +29,8 @@ export function meta({}: Route.MetaArgs) {
 export async function loader(args: Route.LoaderArgs) {
   const token = await tokenFromRequest(args)
   const { params } = args
-  // Unlike other loaders in this app, failures here are NOT degraded
-  // gracefully — a seating chart can't render meaningfully with a partial
-  // classroom/chart/roster, so this is the one place correctness wins over
-  // availability. We still preserve the real HTTP status via `toRouteError`
-  // rather than letting any endpoint's fake-404 mask a transient failure.
+  // Unlike other loaders here, failures are NOT degraded gracefully — a
+  // seating chart can't render meaningfully with a partial roster/chart.
   try {
     const [classroom, seatingChart, allStudents] = await Promise.all([
       getClassroom(params.classroomId, token),

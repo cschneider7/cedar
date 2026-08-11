@@ -125,13 +125,10 @@ function SeatingChartEditor({
   const fetcher = useFetcher<typeof classroomAction>()
   const saveError = fetcher.data && !fetcher.data.ok ? fetcher.data.error : null
   const isSaving = fetcher.state !== "idle"
-  // Treat the canvas as non-interactive while a save is in flight, not just
-  // while `locked` — otherwise further drags during the in-flight PUT would
-  // be silently discarded (or stranded unsaved) once the request resolves
-  // and locks the canvas over now-stale state.
+  // Also excludes an in-flight save — otherwise a drag mid-save would be
+  // silently discarded once the request resolves and re-locks over stale state.
   const isEditable = !locked && !isSaving
 
-  // Handle locking/unlocking the canvas
   useEffect(() => {
     if (fetcher.state !== "idle" || !fetcher.data) {
       return
@@ -146,7 +143,6 @@ function SeatingChartEditor({
     [students, nodes]
   )
 
-  // Fit the viewport to the boundary
   useEffect(() => {
     fitView({ nodes: [{ id: BOUNDARY_NODE_ID }] })
   }, [])
@@ -166,7 +162,6 @@ function SeatingChartEditor({
     setLocked(true)
   }
 
-  // Create a table node
   function handleAddTable() {
     const tableNumber = nodes.filter((n) => n.type === "table").length
     const position = findNewTablePosition(
@@ -210,20 +205,17 @@ function SeatingChartEditor({
     setNodes((nds) => reorderNodes([...nds, tableNode, ...seatNodes]))
   }
 
-  // Remove all student nodes from the canvas
   function handleUnassignAll() {
     setNodes((nds) => nds.filter((n) => n.type !== "student"))
     setUnassignAllOpen(false)
   }
 
-  // Construct a randomized seating chart
   function handleRandomize(chart: SeatingChart) {
     setNodes(buildInitialNodes(classroomId, chart, studentsById))
     fitView({ nodes: [{ id: BOUNDARY_NODE_ID }] })
     setRandomChartOpen(false)
   }
 
-  // Update the seating chart boundary
   function handleBoundarySave(boundary: { width: number; height: number }) {
     setNodes((nds) =>
       nds.map((n) =>
@@ -241,7 +233,6 @@ function SeatingChartEditor({
   // Captures a dragged student's parentId/position before a drag
   const dragStartState = useRef(new Map<string, DragSnapshot>())
 
-  // Clears any node highlighting
   const clearHighlights = useCallback(
     (nds: SeatingChartNode[]) =>
       nds.map((n) => (n.className ? { ...n, className: "" } : n)),

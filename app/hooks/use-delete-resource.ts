@@ -12,19 +12,20 @@ type UseDeleteResourceOptions = {
   onDeleted?: () => void
   /** Navigate here on success, if set. */
   navigateTo?: string
-  /** Restrict navigation to when the current location matches this prefix
-   * (typically the deleted resource's own detail page) — for a dialog used
-   * from multiple contexts, some of which aren't viewing what they delete.
-   * Omit when the caller is always viewing the resource being deleted. */
+  /**
+   * Restrict navigation to when the location matches this prefix (e.g. the
+   * resource's own page) — for a dialog usable from multiple contexts.
+   */
   onlyIfViewing?: string
 }
 
-/** Shared fetcher-backed delete flow: derives pending/error state, and on
+/**
+ * Shared fetcher-backed delete flow: derives pending/error state, and on
  * success shows a toast, runs `onDeleted`, and optionally navigates.
- * Callers submit via the returned `submit` (forwarded from `useFetcher`) so
- * both a single-id delete (`submit(null, { method: "post", action })`) and
- * a bulk delete (`submit(json, { ..., encType: "application/json" })`)
- * share the same success/error handling. */
+ * @param options - Success messaging/navigation behavior, see
+ * `UseDeleteResourceOptions`.
+ * @returns Pending/error state plus a `submit` function to trigger the delete.
+ */
 export function useDeleteResource({
   successMessage,
   onDeleted,

@@ -274,7 +274,7 @@ export function buildInitialNodes(
 /**
  * Reorders nodes into boundary -> table -> seat -> student order (parents before children).
  * @param nodes - Unordered list of seating chart nodes
- * @return List of nodes in the order boundary -> table -> seat -> student
+ * @returns List of nodes in the order boundary -> table -> seat -> student
  */
 export function reorderNodes(nodes: SeatingChartNode[]): SeatingChartNode[] {
   return [

@@ -2,12 +2,12 @@ export type StudentViewMode = "grid" | "list"
 
 export const VIEW_MODE_COOKIE_NAME = "students-view-mode"
 
-/** Reads the stored view-mode preference out of a `Cookie` header value —
- * the same `key1=val1; key2=val2` format used by both an HTTP request's
- * `Cookie` header (server-side, in a loader) and `document.cookie`
- * (client-side), so this one parser serves both call sites. Lets the
- * loader render the right layout on the very first paint instead of
- * always defaulting to grid and swapping to list after hydration. */
+/**
+ * Reads the stored view-mode preference out of a `Cookie` header value —
+ * the same format works for both a request's `Cookie` header and `document.cookie`.
+ * @param cookieHeader - The raw `Cookie` header (or `document.cookie`) value.
+ * @returns The stored view mode, defaulting to `"grid"` if unset.
+ */
 export function parseViewModeCookie(
   cookieHeader: string | null | undefined
 ): StudentViewMode {
@@ -23,6 +23,11 @@ export function parseViewModeCookie(
     : "grid"
 }
 
+/**
+ * Serializes a view-mode preference into a `Set-Cookie`-ready string.
+ * @param mode - The view mode to store.
+ * @returns The full `Set-Cookie` header value.
+ */
 export function serializeViewModeCookie(mode: StudentViewMode): string {
   return `${VIEW_MODE_COOKIE_NAME}=${mode}; Path=/; Max-Age=31536000; SameSite=Lax`
 }
