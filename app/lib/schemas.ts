@@ -53,7 +53,7 @@ export const UpdateStudentSchema = z.object({
 })
 
 export const CreateClassroomSchema = z.object({
-  period: z.coerce.number<number>().int().positive(),
+  period: z.coerce.number<number>().int().nonnegative(),
   subject: z
     .string()
     .trim()
@@ -69,7 +69,7 @@ export const ClassroomSchema = CreateClassroomSchema.extend({
 export type Classroom = z.infer<typeof ClassroomSchema>
 
 export const UpdateClassroomSchema = z.object({
-  period: z.optional(z.coerce.number<number>().int().positive()),
+  period: z.optional(z.coerce.number<number>().int().nonnegative()),
   subject: z.optional(
     z
       .string()

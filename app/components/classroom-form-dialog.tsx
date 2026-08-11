@@ -33,11 +33,9 @@ import { useResourceFormDialog } from "~/hooks/use-resource-form-dialog"
 import type { Classroom } from "~/lib/schemas"
 import { CreateClassroomSchema, UpdateClassroomSchema } from "~/lib/schemas"
 
-// Periods are 1-indexed to match CreateClassroomSchema/UpdateClassroomSchema's
-// `.positive()` constraint on `period` — don't offer a "Period 0" option.
 const periodOptions = Array.from({ length: 9 }, (_, i) => ({
-  label: (i + 1).toString(),
-  value: i + 1,
+  label: i.toString(),
+  value: i,
 }))
 
 type ClassroomFormDialogProps = (

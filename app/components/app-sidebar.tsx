@@ -3,7 +3,6 @@ import {
   Home,
   MoreHorizontal,
   Plus,
-  SheetIcon,
   UsersRound,
 } from "lucide-react"
 import { useState } from "react"
@@ -59,7 +58,6 @@ function ClassroomRow({
         isActive={location.pathname === `/classrooms/${classroom.id}`}
         render={<NavLink to={`/classrooms/${classroom.id}`} />}
       >
-        <SheetIcon />
         <span className="truncate">
           Period {classroom.period} — {classroom.subject}
         </span>
@@ -67,7 +65,7 @@ function ClassroomRow({
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
-            <SidebarMenuAction aria-label="Classroom actions">
+            <SidebarMenuAction aria-label="Classroom actions" showOnHover>
               <MoreHorizontal />
             </SidebarMenuAction>
           }
