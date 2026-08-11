@@ -1,5 +1,5 @@
 import { Show, useClerk, useUser } from "@clerk/react-router"
-import { LogOut, Plus, Settings } from "lucide-react"
+import { LogOut, Menu, Plus, Settings } from "lucide-react"
 import { Fragment, useState } from "react"
 import { Link, useMatches } from "react-router"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
@@ -30,17 +30,18 @@ import {
 } from "~/components/ui/dropdown-menu"
 import { Input } from "~/components/ui/input"
 import { Separator } from "~/components/ui/separator"
-import { SidebarTrigger } from "~/components/ui/sidebar"
+import { useSidebar } from "~/components/ui/sidebar"
 import { useTheme } from "~/components/ui/theme-provider"
 import { isTheme, themeIcons, ThemeToggle } from "~/components/ui/theme-toggle"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 
 /**
- * Breadcrumb trail built from matched routes' `handle.breadcrumb`.
+ * Breadcrumb trail entries built from matched routes' `handle.breadcrumb`.
+ * @returns The current route's breadcrumb entries, empty if none apply.
  */
-function Breadcrumbs() {
+function useBreadcrumbs() {
   const matches = useMatches()
-  const crumbs = matches
+  return matches
     .map((match) => {
       const handle = match.handle as BreadcrumbHandle | undefined
       if (typeof handle?.breadcrumb !== "function") return null
@@ -53,7 +54,17 @@ function Breadcrumbs() {
       return { id: match.id, to, label }
     })
     .filter((crumb) => crumb !== null)
+}
 
+/**
+ * Breadcrumb trail built from matched routes' `handle.breadcrumb`.
+ * @param crumbs - The breadcrumb entries to render, from `useBreadcrumbs`.
+ */
+function Breadcrumbs({
+  crumbs,
+}: {
+  crumbs: ReturnType<typeof useBreadcrumbs>
+}) {
   if (crumbs.length === 0) return null
 
   return (
@@ -249,17 +260,30 @@ function AuthControl() {
  * App-wide top bar: sidebar toggle, breadcrumbs, search, create menu, and auth controls.
  */
 export function AppTopbar() {
+  const { toggleSidebar } = useSidebar()
+  const crumbs = useBreadcrumbs()
+
   return (
     <header className="sticky top-0 z-40 flex h-(--header-height) w-full shrink-0 items-center gap-2 border-b border-border bg-background px-4">
-      <SidebarTrigger />
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className="md:hidden"
+        onClick={toggleSidebar}
+        aria-label="Toggle Sidebar"
+      >
+        <Menu />
+      </Button>
       <Link to="/" className="hidden items-center gap-2 font-medium md:flex">
         <span>Seating Chart</span>
       </Link>
-      <Separator
-        orientation="vertical"
-        className="hidden sm:block data-vertical:h-4 data-vertical:self-auto"
-      />
-      <Breadcrumbs />
+      {crumbs.length > 0 && (
+        <Separator
+          orientation="vertical"
+          className="hidden md:block data-vertical:h-4 data-vertical:self-auto"
+        />
+      )}
+      <Breadcrumbs crumbs={crumbs} />
       <div className="ml-auto flex items-center gap-2">
         <Input placeholder="Search..." className="max-w-48 min-w-25" />
         <CreateDropdown />
