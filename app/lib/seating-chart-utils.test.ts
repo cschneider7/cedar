@@ -6,6 +6,7 @@ import {
   buildBoundaryNode,
   buildInitialNodes,
   buildSeatingChartPayload,
+  canvasExtent,
   computeColdCallProbabilities,
   computeRandomizeTableCount,
   createCanvasTable,
@@ -148,6 +149,7 @@ describe("buildInitialNodes", () => {
       position: { x: 0, y: 0 },
       parentId: seatId,
       deletable: false,
+      extent: canvasExtent(DEFAULT_BOUNDARY),
       data: { student },
     })
     expect(nodes.findIndex((n) => n.id === seatId)).toBeLessThan(

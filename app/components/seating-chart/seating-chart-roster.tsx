@@ -1,30 +1,16 @@
+import { useDraggable } from "@dnd-kit/core"
+import { CSS } from "@dnd-kit/utilities"
 import { StudentAvatar } from "~/components/student-avatar"
 import { Empty, EmptyDescription } from "~/components/ui/empty"
 import { Item, ItemContent, ItemHeader, ItemTitle } from "~/components/ui/item"
 import { ScrollArea } from "~/components/ui/scroll-area"
+import { cn } from "~/lib/utils"
 import type { Student } from "~/lib/schemas"
 
-export const STUDENT_DATA_TRANSFER_TYPE = "application/x-student-id"
-
-/** Renders a single unassigned student as a card draggable onto the canvas. */
-function StudentChip({
-  student,
-  locked,
-}: {
-  student: Student
-  locked: boolean
-}) {
+/** Shared avatar/name markup for a student chip, live or in the drag overlay. */
+function StudentChipCard({ student }: { student: Student }) {
   return (
-    <Item
-      variant="outline"
-      size="xs"
-      draggable={!locked}
-      onDragStart={(e) => {
-        e.dataTransfer.setData(STUDENT_DATA_TRANSFER_TYPE, student.id)
-        e.dataTransfer.effectAllowed = "move"
-      }}
-      className="aspect-square w-24 shrink-0 overflow-hidden"
-    >
+    <>
       <ItemHeader>
         <StudentAvatar
           student={student}
@@ -34,6 +20,52 @@ function StudentChip({
       <ItemContent>
         <ItemTitle className="text-xs select-none">{student.name}</ItemTitle>
       </ItemContent>
+    </>
+  )
+}
+
+/** Renders a single unassigned student as a card draggable onto the canvas. */
+function StudentChip({
+  student,
+  locked,
+}: {
+  student: Student
+  locked: boolean
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({ id: student.id, disabled: locked })
+
+  return (
+    <Item
+      ref={setNodeRef}
+      variant="outline"
+      size="xs"
+      style={
+        transform ? { transform: CSS.Translate.toString(transform) } : undefined
+      }
+      className={cn(
+        "aspect-square w-24 shrink-0 touch-manipulation overflow-hidden select-none",
+        !locked && "cursor-grab active:cursor-grabbing",
+        isDragging && "opacity-30"
+      )}
+      {...attributes}
+      {...listeners}
+    >
+      <StudentChipCard student={student} />
+    </Item>
+  )
+}
+
+/** Visual-only copy of a chip, rendered inside DndContext's DragOverlay (portaled
+ * to document.body) so it isn't clipped by the roster's ScrollArea overflow. */
+export function StudentChipOverlay({ student }: { student: Student }) {
+  return (
+    <Item
+      variant="outline"
+      size="xs"
+      className="aspect-square w-24 shrink-0 cursor-grabbing overflow-hidden shadow-lg"
+    >
+      <StudentChipCard student={student} />
     </Item>
   )
 }

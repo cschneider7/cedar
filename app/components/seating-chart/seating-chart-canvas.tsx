@@ -1,4 +1,14 @@
 import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core"
+import {
   Background,
   Controls,
   ReactFlow,
@@ -18,7 +28,14 @@ import {
   UsersIcon,
   UserXIcon,
 } from "lucide-react"
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react"
 import { useFetcher } from "react-router"
 import { toast } from "sonner"
 import { BoundaryNode } from "~/components/seating-chart/boundary-node"
@@ -45,7 +62,7 @@ import {
   boundaryArea,
   buildInitialNodes,
   buildSeatingChartPayload,
-  CANVAS_PADDING,
+  canvasExtent,
   createCanvasTable,
   DEFAULT_TABLE_COLS,
   DEFAULT_TABLE_ROWS,
@@ -72,13 +89,37 @@ import {
   RandomSeatingChartDialog,
   UnassignAllDialog,
 } from "./seating-chart-dialogs"
-import { RosterPanel, STUDENT_DATA_TRANSFER_TYPE } from "./seating-chart-roster"
+import { RosterPanel, StudentChipOverlay } from "./seating-chart-roster"
 
 const nodeTypes = {
   table: TableNode,
   seat: SeatNode,
   student: StudentNode,
   boundary: BoundaryNode,
+}
+
+const CANVAS_DROPPABLE_ID = "seating-chart-canvas"
+
+/**
+ * Marks the canvas as a drop target for roster chips.
+ */
+function CanvasDropZone({
+  disabled,
+  className,
+  children,
+}: {
+  disabled: boolean
+  className?: string
+  children: ReactNode
+}) {
+  // Must be its own component, rendered as a DndContext descendant — calling
+  // useDroppable directly in SeatingChartEditor would register against nothing.
+  const { setNodeRef } = useDroppable({ id: CANVAS_DROPPABLE_ID, disabled })
+  return (
+    <div ref={setNodeRef} className={className}>
+      {children}
+    </div>
+  )
 }
 
 interface SeatingChartCanvasProps {
@@ -89,7 +130,9 @@ interface SeatingChartCanvasProps {
 
 type DragSnapshot = { parentId?: string; position: Point }
 
-/** The interactive seating chart editor: toolbar, dialogs, roster, and canvas. */
+/**
+ * The interactive seating chart editor: toolbar, dialogs, roster, and canvas.
+ */
 function SeatingChartEditor({
   classroomId,
   seatingChart,
@@ -101,6 +144,15 @@ function SeatingChartEditor({
     screenToFlowPosition,
     fitView,
   } = useReactFlow<SeatingChartNode>()
+
+  // A distance constraint can't tell a scroll-swipe from drag-intent on touch;
+  // delay+tolerance lets a quick swipe still scroll the roster's ScrollArea.
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { delay: 80, tolerance: 8 },
+    })
+  )
+  const [activeStudent, setActiveStudent] = useState<Student | null>(null)
 
   const studentsById = useMemo(
     () => new Map(students.map((s) => [s.id, s])),
@@ -137,6 +189,7 @@ function SeatingChartEditor({
   }, [fetcher.state, fetcher.data])
 
   const boundary = useMemo(() => getBoundary(nodes), [nodes])
+  const canvasArea = useMemo(() => canvasExtent(boundary), [boundary])
   const existingTables = useMemo(() => getTableGeometry(nodes), [nodes])
   const unassignedStudents = useMemo(
     () => getUnassignedStudents(students, nodes),
@@ -223,7 +276,9 @@ function SeatingChartEditor({
           ? { ...n, ...boundary, data: boundary }
           : n.type === "table"
             ? { ...n, extent: boundaryArea(boundary) }
-            : n
+            : n.type === "student"
+              ? { ...n, extent: canvasExtent(boundary) }
+              : n
       )
     )
     setBoundarySizeOpen(false)
@@ -349,34 +404,34 @@ function SeatingChartEditor({
     [nodes, getIntersectingNodes, getInternalNode, setNodes, clearHighlights]
   )
 
-  // Handle dragging a student from the unassigned list
-  const onDragOver = useCallback(
-    (event: React.DragEvent) => {
-      event.preventDefault()
-      if (!locked) {
-        event.dataTransfer.dropEffect = "move"
-      }
+  // Track which student is being dragged so DragOverlay can render its preview
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      setActiveStudent(studentsById.get(String(event.active.id)) ?? null)
     },
-    [locked]
+    [studentsById]
   )
 
-  // Handle dropping a student onto the canvas
-  const onDrop = useCallback(
-    (event: React.DragEvent) => {
-      event.preventDefault()
-      if (locked) {
+  // Handle dropping a student from the unassigned list onto the canvas
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      setActiveStudent(null)
+      if (locked || event.over?.id !== CANVAS_DROPPABLE_ID) {
         return
       }
 
-      const studentId = event.dataTransfer.getData(STUDENT_DATA_TRANSFER_TYPE)
+      const studentId = String(event.active.id)
       const student = studentsById.get(studentId)
       if (!student) {
         return
       }
 
+      // activatorEvent is the PointerEvent at drag start; delta is the total
+      // movement since then, together giving the drop's screen coordinates.
+      const activatorEvent = event.activatorEvent as PointerEvent
       const position = screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY,
+        x: activatorEvent.clientX + event.delta.x,
+        y: activatorEvent.clientY + event.delta.y,
       })
       const rectangle = {
         x: position.x - STUDENT_NODE_SIZE / 2,
@@ -402,6 +457,7 @@ function SeatingChartEditor({
               position: { x: 0, y: 0 },
               parentId: intersectingNodes.id,
               deletable: false,
+              extent: canvasArea,
               data: { student },
             }
           : {
@@ -409,6 +465,7 @@ function SeatingChartEditor({
               type: "student",
               position: { x: rectangle.x, y: rectangle.y },
               deletable: false,
+              extent: canvasArea,
               data: { student },
             }
 
@@ -417,19 +474,12 @@ function SeatingChartEditor({
     [
       locked,
       studentsById,
+      canvasArea,
       screenToFlowPosition,
       getIntersectingNodes,
       nodes,
       setNodes,
     ]
-  )
-
-  const canvasArea = useMemo<[[number, number], [number, number]]>(
-    () => [
-      [-CANVAS_PADDING, -CANVAS_PADDING],
-      [boundary.width + CANVAS_PADDING, boundary.height + CANVAS_PADDING],
-    ],
-    [boundary]
   )
 
   return (
@@ -570,43 +620,59 @@ function SeatingChartEditor({
           onWeightsChange={setColdCallWeights}
         />
       </div>
-      <div className="flex min-h-0 w-full flex-1 flex-col gap-2 md:flex-row">
-        <RosterPanel students={unassignedStudents} locked={!isEditable} />
-        <div className="relative min-h-0 w-full flex-1 overflow-hidden rounded-lg border-2">
-          <LockedContext value={!isEditable}>
-            <ReactFlow
-              nodes={nodes}
-              onNodesChange={onNodesChange}
-              nodeTypes={nodeTypes}
-              onNodeDragStart={onNodeDragStart}
-              onNodeDrag={onNodeDrag}
-              onNodeDragStop={onNodeDragStop}
-              onDrop={onDrop}
-              onDragOver={onDragOver}
-              nodesDraggable={isEditable}
-              elementsSelectable={isEditable}
-              translateExtent={canvasArea}
-              snapToGrid
-              snapGrid={[GRID_STEP, GRID_STEP]}
-              minZoom={0.25}
-              maxZoom={2}
-            >
-              <Background gap={GRID_STEP} size={2} />
-            </ReactFlow>
-            <Controls showInteractive={false} />
-          </LockedContext>
-          {isSaving && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60">
-              <Spinner className="size-6" />
-            </div>
-          )}
+      <DndContext
+        sensors={sensors}
+        // The chip drag starts inside the roster's small ScrollArea; dnd-kit's
+        // default auto-scroll otherwise tries to scroll that container toward
+        // the pointer as it moves onto the canvas, corrupting the drop delta.
+        autoScroll={false}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="flex min-h-0 w-full flex-1 flex-col gap-2 md:flex-row">
+          <RosterPanel students={unassignedStudents} locked={!isEditable} />
+          <CanvasDropZone
+            disabled={!isEditable}
+            className="relative min-h-0 w-full flex-1 overflow-hidden rounded-lg border-2"
+          >
+            <LockedContext value={!isEditable}>
+              <ReactFlow
+                nodes={nodes}
+                onNodesChange={onNodesChange}
+                nodeTypes={nodeTypes}
+                onNodeDragStart={onNodeDragStart}
+                onNodeDrag={onNodeDrag}
+                onNodeDragStop={onNodeDragStop}
+                nodesDraggable={isEditable}
+                elementsSelectable={isEditable}
+                translateExtent={canvasArea}
+                snapToGrid
+                snapGrid={[GRID_STEP, GRID_STEP]}
+                minZoom={0.25}
+                maxZoom={2}
+              >
+                <Background gap={GRID_STEP} size={2} />
+              </ReactFlow>
+              <Controls showInteractive={false} />
+            </LockedContext>
+            {isSaving && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60">
+                <Spinner className="size-6" />
+              </div>
+            )}
+          </CanvasDropZone>
         </div>
-      </div>
+        <DragOverlay>
+          {activeStudent && <StudentChipOverlay student={activeStudent} />}
+        </DragOverlay>
+      </DndContext>
     </div>
   )
 }
 
-/** Thin `ReactFlowProvider` wrapper around the seating chart editor. */
+/**
+ * Thin `ReactFlowProvider` wrapper around the seating chart editor.
+ */
 export function SeatingChartCanvas(props: SeatingChartCanvasProps) {
   return (
     <ReactFlowProvider>
