@@ -91,7 +91,7 @@ function ClassroomSummary({
   studentCount: number | null
 }) {
   return (
-    <Card className="w-full">
+    <Card className="w-full" size="sm">
       <CardHeader>
         <CardAction>
           <Badge variant="secondary">Period {classroom.period}</Badge>
@@ -155,7 +155,7 @@ export default function Component({ loaderData }: Route.ComponentProps) {
               </Button>
             }
           />
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
             {classrooms.map((classroom) => (
               <div key={classroom.id} className="flex max-w-full flex-col">
                 <ClassroomSummary

@@ -79,12 +79,14 @@ export default function Component({ loaderData }: Route.ComponentProps) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-3">
-        <h2 className="text-lg">Period {classroom.period}</h2>
+        <h2 className="font-heading text-lg">Period {classroom.period}</h2>
         <Separator
           orientation="vertical"
           className="hidden sm:block data-vertical:h-4 data-vertical:self-auto"
         />
-        <h3 className="text-lg font-light">{classroom.subject}</h3>
+        <h3 className="font-heading text-lg font-light">
+          {classroom.subject}
+        </h3>
       </div>
       <SeatingChartCanvas
         classroomId={classroom.id}

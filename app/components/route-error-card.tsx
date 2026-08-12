@@ -38,7 +38,7 @@ export function RouteErrorCard({
 
   return (
     <div className="mx-auto w-full max-w-md">
-      <Card className="relative mx-auto w-full sm:max-w-md">
+      <Card className="relative mx-auto w-full sm:max-w-md" size="sm">
         <CardHeader>
           <CardTitle>{title}</CardTitle>
           <CardDescription>{details}</CardDescription>
