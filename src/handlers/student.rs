@@ -20,6 +20,26 @@ use crate::{
     },
 };
 
+/// Cost/infra protection ceiling: a flat cap on students per user account,
+/// counted across all of their classrooms (including unassigned students).
+const MAX_STUDENTS_PER_USER: i64 = 850;
+
+/// Rejects a new student if `user_id` is already at `MAX_STUDENTS_PER_USER`.
+async fn check_student_limit(db: &sqlx::PgPool, user_id: &str) -> Result<(), AppError> {
+    let count = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) as "count!" FROM students WHERE user_id = $1"#,
+        user_id
+    )
+    .fetch_one(db)
+    .await?;
+    if count >= MAX_STUDENTS_PER_USER {
+        return Err(AppError::BadRequest(
+            "Student limit reached (850 students per account).".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// Confirms `classroom_id` (if present) is owned by `user_id`, so a student
 /// can't be assigned into another user's classroom.
 async fn check_classroom_ownership(
@@ -228,6 +248,7 @@ pub async fn create_student_handler(
     State(data): State<Arc<AppState>>,
     Json(body): Json<StudentSchema>,
 ) -> Result<impl IntoResponse, AppError> {
+    check_student_limit(&data.db, &user_id).await?;
     check_classroom_ownership(&data.db, body.classroom_id, &user_id).await?;
 
     let student = sqlx::query_as!(
@@ -251,6 +272,26 @@ pub async fn create_student_handler(
     .await?;
 
     Ok((StatusCode::CREATED, Json(json!({"data": student}))))
+}
+
+/// Returns the current user's total student count alongside the account cap
+/// (`MAX_STUDENTS_PER_USER`), so the frontend can warn/block near the limit
+/// ahead of a create actually failing.
+pub async fn count_students_handler(
+    CurrentUserId(user_id): CurrentUserId,
+    State(data): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, AppError> {
+    let count = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) as "count!" FROM students WHERE user_id = $1"#,
+        user_id
+    )
+    .fetch_one(&data.db)
+    .await?;
+
+    Ok((
+        StatusCode::OK,
+        Json(json!({"data": {"count": count, "limit": MAX_STUDENTS_PER_USER}})),
+    ))
 }
 
 /// Partially updates a student, merging provided fields over its existing
@@ -427,6 +468,18 @@ mod tests {
             .unwrap()
     }
 
+    async fn seed_students(pool: &sqlx::PgPool, user_id: &str, count: i64) {
+        sqlx::query!(
+            r#"INSERT INTO students (user_id, student_id, name)
+            SELECT $1, gs, 'Student ' || gs FROM generate_series(1, $2::int) AS gs"#,
+            user_id,
+            count as i32
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
     #[sqlx::test]
     async fn create_student_success(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
@@ -453,6 +506,97 @@ mod tests {
         assert_eq!(json["data"]["student_id"], 1);
         assert_eq!(json["data"]["name"], "Bob Burger");
         assert!(json["data"]["classroom_id"].is_null());
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn create_student_rejects_at_limit(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        seed_students(&pool, &user_id, 850).await;
+
+        let body = json!({"student_id": 851, "name": "One Too Many", "classroom_id": null});
+        let response = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/students",
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn create_student_allows_up_to_limit(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        seed_students(&pool, &user_id, 849).await;
+
+        let body = json!({"student_id": 850, "name": "Last One", "classroom_id": null});
+        let response = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/students",
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn create_student_limit_is_per_user(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_a = test_user_id();
+        let user_b = test_user_id();
+        seed_students(&pool, &user_a, 850).await;
+
+        let body = json!({"student_id": 1, "name": "New For B", "classroom_id": null});
+        let response = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/students",
+                body,
+                &user_b,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn count_students_handler_returns_count_and_limit(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let other_user_id = test_user_id();
+        seed_students(&pool, &user_id, 3).await;
+        seed_students(&pool, &other_user_id, 5).await;
+
+        let response = app
+            .oneshot(authenticated_request(
+                "GET",
+                "/api/v1/students/count",
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        assert_eq!(json["data"]["count"], 3);
+        assert_eq!(json["data"]["limit"], 850);
 
         Ok(())
     }

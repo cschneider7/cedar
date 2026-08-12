@@ -21,10 +21,10 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card"
-import { Toaster } from "~/components/ui/sonner"
+import { Toaster } from "~/components/ui/toast"
 import { ThemeProvider } from "~/components/ui/theme-provider"
 import { TooltipProvider } from "~/components/ui/tooltip"
-import { getClassrooms } from "~/lib/api"
+import { getClassrooms, getStudentLimitStatus } from "~/lib/api"
 import type { Route } from "./+types/root"
 import "./app.css"
 
@@ -40,15 +40,37 @@ export async function loader(args: Route.LoaderArgs) {
     // Anonymous visitors (public pages like `/`) have no session to scope a
     // classroom list to, and `/api/v1/classrooms` now 401s without one.
     if (!isAuthenticated) {
-      return { classrooms: [], classroomsError: false }
+      return {
+        classrooms: [],
+        classroomsError: false,
+        studentCount: null,
+        studentLimit: null,
+      }
     }
     // This loader runs on every navigation/revalidation — a transient
     // failure here must not take down the whole shell, so degrade instead.
+    // The student-limit fetch fails open (see student-limit.ts) on the same
+    // failure, since either fetch failing means the account's limit status
+    // can't be trusted.
     try {
-      const classrooms = await getClassrooms(await getToken())
-      return { classrooms, classroomsError: false }
+      const token = await getToken()
+      const [classrooms, limitStatus] = await Promise.all([
+        getClassrooms(token),
+        getStudentLimitStatus(token),
+      ])
+      return {
+        classrooms,
+        classroomsError: false,
+        studentCount: limitStatus.count,
+        studentLimit: limitStatus.limit,
+      }
     } catch {
-      return { classrooms: [], classroomsError: true }
+      return {
+        classrooms: [],
+        classroomsError: true,
+        studentCount: null,
+        studentLimit: null,
+      }
     }
   })
 }

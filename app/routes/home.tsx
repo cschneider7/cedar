@@ -2,7 +2,6 @@ import { getAuth } from "@clerk/react-router/server"
 import { ArrowUpRightIcon, ClipboardList, UsersRound } from "lucide-react"
 import { useEffect } from "react"
 import { Link } from "react-router"
-import { toast } from "sonner"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
 import { Button } from "~/components/ui/button"
 import {
@@ -22,6 +21,7 @@ import {
   ItemMedia,
   ItemTitle,
 } from "~/components/ui/item"
+import { toast } from "~/components/ui/toast"
 import { getClassrooms, getStudents } from "~/lib/api"
 import type { Classroom } from "~/lib/schemas"
 import type { Route } from "./+types/home"
@@ -157,10 +157,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     loaderData
 
   useEffect(() => {
-    if (classroomsError) toast.warning("Couldn't load classrooms.")
+    if (classroomsError)
+      toast.add({ title: "Couldn't load classrooms.", type: "warning" })
   }, [classroomsError])
   useEffect(() => {
-    if (studentsError) toast.warning("Couldn't load students.")
+    if (studentsError)
+      toast.add({ title: "Couldn't load students.", type: "warning" })
   }, [studentsError])
 
   return (

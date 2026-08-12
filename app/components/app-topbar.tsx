@@ -1,7 +1,7 @@
 import { Show, useClerk, useUser } from "@clerk/react-router"
 import { LogOut, Menu, Plus, Settings } from "lucide-react"
 import { Fragment, useState } from "react"
-import { Link, useMatches } from "react-router"
+import { Link, useMatches, useRouteLoaderData } from "react-router"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
 import { StudentFormDialog } from "~/components/student-form-dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar"
@@ -33,9 +33,12 @@ import { Separator } from "~/components/ui/separator"
 import { useSidebar } from "~/components/ui/sidebar"
 import { useTheme } from "~/components/ui/theme-provider"
 import { isTheme, themeIcons, ThemeToggle } from "~/components/ui/theme-toggle"
+import { toast } from "~/components/ui/toast"
 import { TopbarSearch } from "~/components/topbar-search"
 import { Wordmark } from "~/components/wordmark"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
+import { isAtStudentLimit } from "~/lib/student-limit"
+import type { loader as rootLoader } from "~/root"
 
 /**
  * Breadcrumb trail entries built from matched routes' `handle.breadcrumb`.
@@ -102,6 +105,20 @@ function Breadcrumbs({
 function CreateDropdown() {
   const [studentOpen, setStudentOpen] = useState(false)
   const [classroomOpen, setClassroomOpen] = useState(false)
+  const rootData = useRouteLoaderData<typeof rootLoader>("root")
+
+  function handleNewStudent() {
+    if (
+      isAtStudentLimit(
+        rootData?.studentCount ?? null,
+        rootData?.studentLimit ?? null
+      )
+    ) {
+      toast.add({ title: "Student maximum reached", type: "error" })
+      return
+    }
+    setStudentOpen(true)
+  }
 
   return (
     <>
@@ -115,7 +132,7 @@ function CreateDropdown() {
           }
         />
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => setStudentOpen(true)}>
+          <DropdownMenuItem onClick={handleNewStudent}>
             New student
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setClassroomOpen(true)}>

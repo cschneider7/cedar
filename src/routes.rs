@@ -57,6 +57,10 @@ pub fn create_router(
             delete(handlers::student::bulk_delete_students_handler),
         )
         .route(
+            "/api/v1/students/count",
+            get(handlers::student::count_students_handler),
+        )
+        .route(
             "/api/v1/students/{student_id}",
             get(handlers::student::get_student_handler),
         )

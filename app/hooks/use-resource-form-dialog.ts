@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import type { FieldValues, UseFormReturn } from "react-hook-form"
 import { useFetcher } from "react-router"
-import { toast } from "sonner"
+import { toast } from "~/components/ui/toast"
 import type { MutationResult } from "~/lib/action-results"
 
 type UseResourceFormDialogOptions<TFieldValues extends FieldValues> = {
@@ -63,9 +63,10 @@ export function useResourceFormDialog<TFieldValues extends FieldValues>({
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.ok) {
       setOpen(false)
-      toast.success(
-        `${entityLabel} ${mode === "create" ? "created" : "updated"}`
-      )
+      toast.add({
+        title: `${entityLabel} ${mode === "create" ? "created" : "updated"}`,
+        type: "success",
+      })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher.state, fetcher.data])

@@ -1,6 +1,6 @@
 import { useEffect } from "react"
 import { useFetcher, useLocation, useNavigate } from "react-router"
-import { toast } from "sonner"
+import { toast } from "~/components/ui/toast"
 
 type DeleteResult = { ok: boolean; error?: string }
 
@@ -42,7 +42,7 @@ export function useDeleteResource({
     if (fetcher.state !== "idle" || !fetcher.data?.ok) {
       return
     }
-    toast.success(successMessage)
+    toast.add({ title: successMessage, type: "success" })
     onDeleted?.()
     if (
       navigateTo &&

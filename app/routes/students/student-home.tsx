@@ -5,11 +5,17 @@ import {
 } from "@tanstack/react-table"
 import { LayoutGrid, List, Plus, Search, UsersIcon } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Link, useLocation, useNavigate, useNavigation } from "react-router"
-import { toast } from "sonner"
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useNavigation,
+  useRouteLoaderData,
+} from "react-router"
 import { DeleteConfirmDialog } from "~/components/delete-confirm-dialog"
 import { StudentAvatar } from "~/components/student-avatar"
 import { StudentFormDialog } from "~/components/student-form-dialog"
+import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import {
@@ -51,6 +57,7 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table"
+import { toast } from "~/components/ui/toast"
 import { useDeleteResource } from "~/hooks/use-delete-resource"
 import {
   useStudentViewMode,
@@ -59,8 +66,10 @@ import {
 import { getClassrooms, getStudentsPage } from "~/lib/api"
 import { tokenFromRequest } from "~/lib/auth"
 import type { Classroom, Student } from "~/lib/schemas"
+import { isAtStudentLimit } from "~/lib/student-limit"
 import { cn } from "~/lib/utils"
 import { parseViewModeCookie } from "~/lib/view-mode-cookie"
+import type { loader as rootLoader } from "~/root"
 import {
   getStudentColumns,
   studentTableFeatures,
@@ -196,7 +205,7 @@ function StudentCard({
   )
 }
 
-function EmptyNoStudents() {
+function EmptyNoStudents({ onAddStudent }: { onAddStudent: () => void }) {
   return (
     <Empty>
       <EmptyHeader>
@@ -209,10 +218,7 @@ function EmptyNoStudents() {
         </EmptyDescription>
       </EmptyHeader>
       <EmptyContent className="flex-row justify-center gap-2">
-        <StudentFormDialog
-          mode="create"
-          trigger={<Button>Add Student</Button>}
-        />
+        <Button onClick={onAddStudent}>Add Student</Button>
       </EmptyContent>
     </Empty>
   )
@@ -353,6 +359,9 @@ export default function Component({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const navigation = useNavigation()
+  const rootData = useRouteLoaderData<typeof rootLoader>("root")
+  const studentCount = rootData?.studentCount ?? null
+  const studentLimit = rootData?.studentLimit ?? null
   // Scoped to same-page param changes — cross-page navigation is already
   // covered by the global `NavLoadingIndicator`.
   const isLoading =
@@ -362,6 +371,7 @@ export default function Component({ loaderData }: Route.ComponentProps) {
   const [searchInput, setSearchInput] = useState(q)
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
   const selectedCount = Object.keys(rowSelection).length
   const {
     isDeleting: isBulkDeleting,
@@ -377,9 +387,10 @@ export default function Component({ loaderData }: Route.ComponentProps) {
 
   useEffect(() => {
     if (classroomsError) {
-      toast.warning(
-        "Couldn't load classrooms — classroom badges may be missing."
-      )
+      toast.add({
+        title: "Couldn't load classrooms — classroom badges may be missing.",
+        type: "warning",
+      })
     }
   }, [classroomsError])
 
@@ -418,6 +429,14 @@ export default function Component({ loaderData }: Route.ComponentProps) {
       p.delete("q")
       p.set("page", "1")
     }, true)
+  }
+
+  function handleOpenCreate() {
+    if (isAtStudentLimit(studentCount, studentLimit)) {
+      toast.add({ title: "Student maximum reached", type: "error" })
+      return
+    }
+    setCreateOpen(true)
   }
 
   const handleSortChange = useCallback(
@@ -481,22 +500,32 @@ export default function Component({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="w-full">
+      {studentCount !== null &&
+        studentLimit !== null &&
+        studentCount >= Math.ceil(studentLimit * 0.95) && (
+          <Alert className="mb-4">
+            <AlertDescription>
+              You're approaching the maximum number of students - {studentCount}
+              /{studentLimit}
+            </AlertDescription>
+          </Alert>
+        )}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <SearchInput value={searchInput} onChange={setSearchInput} />
         <ViewToggle value={viewMode} onChange={handleViewModeChange} />
-        <StudentFormDialog
-          mode="create"
-          trigger={
-            <Button className="ml-auto">
-              <Plus />
-              <span>Add Student</span>
-            </Button>
-          }
-        />
+        <Button className="ml-auto" onClick={handleOpenCreate}>
+          <Plus />
+          <span>Add Student</span>
+        </Button>
       </div>
+      <StudentFormDialog
+        mode="create"
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+      />
 
       {studentsPage.total_count === 0 && !q ? (
-        <EmptyNoStudents />
+        <EmptyNoStudents onAddStudent={handleOpenCreate} />
       ) : studentsPage.total_count === 0 && q ? (
         <EmptySearchNoResults onClear={handleClearSearch} />
       ) : (

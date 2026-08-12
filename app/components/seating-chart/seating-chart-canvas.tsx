@@ -37,7 +37,6 @@ import {
   type ReactNode,
 } from "react"
 import { useFetcher } from "react-router"
-import { toast } from "sonner"
 import { BoundaryNode } from "~/components/seating-chart/boundary-node"
 import { LockedContext } from "~/components/seating-chart/context"
 import { SeatNode } from "~/components/seating-chart/seat-node"
@@ -56,6 +55,7 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"
 import { Spinner } from "~/components/ui/spinner"
+import { toast } from "~/components/ui/toast"
 import type { SeatingChart, Student } from "~/lib/schemas"
 import {
   BOUNDARY_NODE_ID,
@@ -224,7 +224,7 @@ function SeatingChartEditor({
       DEFAULT_TABLE_COLS
     )
     if (!position) {
-      toast.error("Not enough room for a new table")
+      toast.add({ title: "Not enough room for a new table", type: "error" })
       return
     }
     const table = createCanvasTable(position)
