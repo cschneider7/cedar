@@ -25,7 +25,7 @@ import {
 } from "~/components/ui/item"
 import { useRecentClassrooms } from "~/hooks/use-recent-classrooms"
 import { getClassrooms, getStudents } from "~/lib/api"
-import type { Classroom, Student } from "~/lib/schemas"
+import type { Classroom } from "~/lib/schemas"
 import type { Route } from "./+types/home"
 
 export function meta({}: Route.MetaArgs) {
@@ -46,29 +46,27 @@ export async function loader(args: Route.LoaderArgs) {
       isAuthenticated: false as const,
       classrooms: [],
       classroomsError: false,
-      studentCount: 0,
       studentsError: false,
     }
   }
   const token = await getToken()
-  const [classroomsResult, studentsResult] = await Promise.all([
+  const [classroomsResult, studentsFailed] = await Promise.all([
     getClassrooms(token).then(
       (classrooms) => ({ classrooms, failed: false }),
       () => ({ classrooms: [] as Classroom[], failed: true })
     ),
-    // Student count is supplementary — a failure here degrades to "—" plus
-    // a toast rather than failing the whole dashboard.
+    // Students are only fetched to detect a reachability failure for the
+    // toast below — the dashboard doesn't display student data itself.
     getStudents(token).then(
-      (students) => ({ students, failed: false }),
-      () => ({ students: [] as Student[], failed: true })
+      () => false,
+      () => true
     ),
   ])
   return {
     isAuthenticated: true as const,
     classrooms: classroomsResult.classrooms,
     classroomsError: classroomsResult.failed,
-    studentCount: studentsResult.students.length,
-    studentsError: studentsResult.failed,
+    studentsError: studentsFailed,
   }
 }
 
@@ -137,12 +135,10 @@ function EmptyDashboard() {
 function StatTile({
   icon,
   label,
-  value,
   to,
 }: {
   icon: React.ReactNode
   label: string
-  value: number | null
   to: string
 }) {
   return (
@@ -150,9 +146,6 @@ function StatTile({
       <ItemMedia variant="image">{icon}</ItemMedia>
       <ItemContent>
         <ItemTitle>Manage {label}</ItemTitle>
-        <ItemDescription>
-          {label}: {value === null ? "—" : value}
-        </ItemDescription>
       </ItemContent>
       <ItemActions>
         <ArrowUpRightIcon className="size-4 text-muted-foreground" />
@@ -178,20 +171,15 @@ function RecentClassroomItem({ classroom }: { classroom: Classroom }) {
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const {
-    isAuthenticated,
-    classrooms,
-    classroomsError,
-    studentCount,
-    studentsError,
-  } = loaderData
+  const { isAuthenticated, classrooms, classroomsError, studentsError } =
+    loaderData
   const [recentIds] = useRecentClassrooms()
 
   useEffect(() => {
-    if (classroomsError) toast.warning("Couldn't load classroom count.")
+    if (classroomsError) toast.warning("Couldn't load classrooms.")
   }, [classroomsError])
   useEffect(() => {
-    if (studentsError) toast.warning("Couldn't load student count.")
+    if (studentsError) toast.warning("Couldn't load students.")
   }, [studentsError])
 
   const classroomById = new Map(classrooms.map((c) => [c.id, c]))
@@ -217,13 +205,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <StatTile
               icon={<ClipboardList className="size-7" />}
               label="Classrooms"
-              value={classroomsError ? null : classrooms.length}
               to="/classrooms"
             />
             <StatTile
               icon={<UsersRound className="size-7" />}
               label="Students"
-              value={studentsError ? null : studentCount}
               to="/students"
             />
           </ItemGroup>

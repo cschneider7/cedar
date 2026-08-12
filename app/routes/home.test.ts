@@ -24,7 +24,7 @@ const students: Student[] = [
 stubFetch()
 
 describe("home loader", () => {
-  it("skips the API calls and returns zeros for an anonymous visitor", async () => {
+  it("skips the API calls and returns empty defaults for an anonymous visitor", async () => {
     vi.mocked(getAuth).mockResolvedValueOnce({
       isAuthenticated: false,
       getToken: async () => null,
@@ -37,12 +37,11 @@ describe("home loader", () => {
       isAuthenticated: false,
       classrooms: [],
       classroomsError: false,
-      studentCount: 0,
       studentsError: false,
     })
   })
 
-  it("returns classrooms and a student count when both calls succeed", async () => {
+  it("returns classrooms when both calls succeed", async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(jsonResponse(classrooms))
       .mockResolvedValueOnce(jsonResponse(students))
@@ -53,7 +52,6 @@ describe("home loader", () => {
       isAuthenticated: true,
       classrooms,
       classroomsError: false,
-      studentCount: 3,
       studentsError: false,
     })
   })
@@ -67,11 +65,10 @@ describe("home loader", () => {
 
     expect(result.classrooms).toEqual([])
     expect(result.classroomsError).toBe(true)
-    expect(result.studentCount).toBe(3)
     expect(result.studentsError).toBe(false)
   })
 
-  it("degrades to a zero student count and an error flag when getStudents fails", async () => {
+  it("sets an error flag when getStudents fails", async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(jsonResponse(classrooms))
       .mockResolvedValueOnce(new Response(null, { status: 500 }))
@@ -80,7 +77,6 @@ describe("home loader", () => {
 
     expect(result.classrooms).toEqual(classrooms)
     expect(result.classroomsError).toBe(false)
-    expect(result.studentCount).toBe(0)
     expect(result.studentsError).toBe(true)
   })
 })
