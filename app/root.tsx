@@ -31,6 +31,10 @@ import "./app.css"
 
 export const middleware: Route.MiddlewareFunction[] = [clerkMiddleware()]
 
+export const links: Route.LinksFunction = () => [
+  { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+]
+
 export async function loader(args: Route.LoaderArgs) {
   return rootAuthLoader(args, async ({ request }) => {
     const { isAuthenticated, getToken } = request.auth

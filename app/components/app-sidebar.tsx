@@ -16,6 +16,7 @@ import {
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
 import { DeleteClassroomDialog } from "~/components/delete-classroom-dialog"
 import { Button } from "~/components/ui/button"
+import { Wordmark } from "~/components/wordmark"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -80,13 +81,6 @@ function ClassroomRow({
             Edit
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem disabled className="text-muted-foreground">
-            Move up
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled className="text-muted-foreground">
-            Move down
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onClick={onRequestDelete}>
             Delete
           </DropdownMenuItem>
@@ -119,11 +113,8 @@ export function AppSidebar() {
   return (
     <Sidebar className="top-(--header-height) h-[calc(100svh-var(--header-height))]!">
       <SidebarHeader>
-        <Link
-          to="/"
-          className="flex items-center gap-2 px-3 pt-4 text-lg font-medium md:hidden"
-        >
-          <span>Seating Chart</span>
+        <Link to="/" className="px-3 pt-4 md:hidden">
+          <Wordmark textClassName="text-lg font-medium" />
         </Link>
       </SidebarHeader>
       <SidebarContent>

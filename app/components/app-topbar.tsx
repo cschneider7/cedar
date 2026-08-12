@@ -33,6 +33,7 @@ import { Separator } from "~/components/ui/separator"
 import { useSidebar } from "~/components/ui/sidebar"
 import { useTheme } from "~/components/ui/theme-provider"
 import { isTheme, themeIcons, ThemeToggle } from "~/components/ui/theme-toggle"
+import { Wordmark } from "~/components/wordmark"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 
 /**
@@ -274,8 +275,8 @@ export function AppTopbar() {
       >
         <Menu />
       </Button>
-      <Link to="/" className="hidden items-center gap-2 font-medium md:flex">
-        <span>Seating Chart</span>
+      <Link to="/" className="hidden md:flex">
+        <Wordmark textClassName="font-medium" />
       </Link>
       {crumbs.length > 0 && (
         <Separator
