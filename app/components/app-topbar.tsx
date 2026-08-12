@@ -28,6 +28,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"
+import { NavLoadingIndicator } from "~/components/nav-loading-indicator"
 import { Separator } from "~/components/ui/separator"
 import { useSidebar } from "~/components/ui/sidebar"
 import { useTheme } from "~/components/ui/theme-provider"
@@ -286,6 +287,7 @@ export function AppTopbar() {
       )}
       <Breadcrumbs crumbs={crumbs} />
       <div className="ml-auto flex items-center gap-2">
+        <NavLoadingIndicator />
         <TopbarSearch />
         <CreateDropdown />
         <AuthControl />

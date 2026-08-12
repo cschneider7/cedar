@@ -10,7 +10,6 @@ import {
   isRouteErrorResponse,
   useRevalidator,
 } from "react-router"
-import { NavLoadingIndicator } from "~/components/nav-loading-indicator"
 import { Spinner } from "~/components/ui/spinner"
 
 import { Button } from "~/components/ui/button"
@@ -91,7 +90,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <ThemeProvider>
-          <NavLoadingIndicator />
           {children}
           <Toaster />
         </ThemeProvider>

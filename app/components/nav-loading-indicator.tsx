@@ -5,8 +5,9 @@ import { Spinner } from "~/components/ui/spinner"
 const SHOW_DELAY_MS = 150
 
 /**
- * Small fixed-position spinner shown during any client-side navigation,
- * delayed briefly so fast navigations don't flash it.
+ * Small spinner shown during any client-side navigation, delayed briefly
+ * so fast navigations don't flash it. Rendered inline in the topbar, to
+ * the left of the search bar.
  */
 export function NavLoadingIndicator() {
   const navigation = useNavigation()
@@ -27,7 +28,7 @@ export function NavLoadingIndicator() {
   }
 
   return (
-    <div className="pointer-events-none fixed top-3 right-3 z-50">
+    <div className="pointer-events-none">
       <Spinner className="size-5" />
     </div>
   )
