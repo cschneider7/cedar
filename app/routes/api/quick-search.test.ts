@@ -13,7 +13,13 @@ function jsonResponse(data: unknown) {
 }
 
 const students: Student[] = [
-  { id: "s1", student_id: 1, name: "Alice", classroom_id: "c1", image_url: null },
+  {
+    id: "s1",
+    student_id: 1,
+    name: "Alice",
+    classroom_id: "c1",
+    image_url: null,
+  },
 ]
 
 stubFetch()

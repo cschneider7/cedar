@@ -3,7 +3,11 @@ import { Search } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useFetcher, useRouteLoaderData } from "react-router"
 import { Badge } from "~/components/ui/badge"
-import { InputGroup, InputGroupAddon, InputGroupInput } from "~/components/ui/input-group"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "~/components/ui/input-group"
 import { Item, ItemContent, ItemTitle } from "~/components/ui/item"
 import { Popover, PopoverContent } from "~/components/ui/popover"
 import type { loader as quickSearchLoader } from "~/routes/api/quick-search"
@@ -42,7 +46,10 @@ function SearchDropdown() {
   }, [open])
 
   useEffect(() => {
-    const timeout = setTimeout(() => setDebouncedQuery(query.trim()), SEARCH_DEBOUNCE_MS)
+    const timeout = setTimeout(
+      () => setDebouncedQuery(query.trim()),
+      SEARCH_DEBOUNCE_MS
+    )
     return () => clearTimeout(timeout)
   }, [query])
 
@@ -134,7 +141,10 @@ function SearchDropdown() {
                 key={student.id}
                 size="sm"
                 render={
-                  <Link to={`/students/${student.id}`} onClick={closeAndClear} />
+                  <Link
+                    to={`/students/${student.id}`}
+                    onClick={closeAndClear}
+                  />
                 }
               >
                 <ItemContent>

@@ -13,7 +13,10 @@ export async function loader(args: Route.LoaderArgs) {
   if (!q) return { students: [] }
 
   try {
-    const { students } = await getStudentsPage({ page: 1, pageSize: 5, q }, token)
+    const { students } = await getStudentsPage(
+      { page: 1, pageSize: 5, q },
+      token
+    )
     return { students }
   } catch {
     return { students: [] }

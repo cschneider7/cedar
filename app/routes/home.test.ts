@@ -11,14 +11,38 @@ function jsonResponse(data: unknown) {
 }
 
 const classrooms: Classroom[] = [
-  { id: "c1", period: 1, subject: "Math", boundary_width: 1080, boundary_height: 820 },
-  { id: "c2", period: 2, subject: "Science", boundary_width: 1080, boundary_height: 820 },
+  {
+    id: "c1",
+    period: 1,
+    subject: "Math",
+    boundary_width: 1080,
+    boundary_height: 820,
+  },
+  {
+    id: "c2",
+    period: 2,
+    subject: "Science",
+    boundary_width: 1080,
+    boundary_height: 820,
+  },
 ]
 
 const students: Student[] = [
-  { id: "s1", student_id: 1, name: "Alice", classroom_id: "c1", image_url: null },
+  {
+    id: "s1",
+    student_id: 1,
+    name: "Alice",
+    classroom_id: "c1",
+    image_url: null,
+  },
   { id: "s2", student_id: 2, name: "Bob", classroom_id: "c1", image_url: null },
-  { id: "s3", student_id: 3, name: "Carol", classroom_id: null, image_url: null },
+  {
+    id: "s3",
+    student_id: 3,
+    name: "Carol",
+    classroom_id: null,
+    image_url: null,
+  },
 ]
 
 stubFetch()
