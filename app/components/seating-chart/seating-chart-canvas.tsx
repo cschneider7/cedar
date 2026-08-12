@@ -653,7 +653,10 @@ function SeatingChartEditor({
               >
                 <Background gap={GRID_STEP} size={2} />
               </ReactFlow>
-              <Controls showInteractive={false} />
+              <Controls
+                showInteractive={false}
+                className="overflow-hidden rounded-lg border bg-card shadow-sm"
+              />
             </LockedContext>
             {isSaving && (
               <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60">

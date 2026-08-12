@@ -170,3 +170,18 @@
     @apply font-sans;
   }
 }
+
+/* @xyflow/react/dist/style.css's own border-bottom on Controls buttons gets
+   zeroed out somewhere in this build; placed after @layer base to win back. */
+.react-flow__controls-button {
+  border-bottom: 1px solid var(--border);
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+
+/* Same zeroing-out as above applies to the default hover background. */
+.react-flow__controls-button:hover {
+  background-color: var(--muted);
+}
