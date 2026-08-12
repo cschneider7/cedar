@@ -1,5 +1,7 @@
+import { useEffect } from "react"
 import { SeatingChartCanvas } from "~/components/seating-chart/seating-chart-canvas"
 import { Separator } from "~/components/ui/separator"
+import { useRecentClassrooms } from "~/hooks/use-recent-classrooms"
 import {
   getClassroom,
   getClassroomSeatingChart,
@@ -67,6 +69,12 @@ export async function action(args: Route.ActionArgs) {
 
 export default function Component({ loaderData }: Route.ComponentProps) {
   const { classroom, students, seatingChart } = loaderData
+  const [, addRecent] = useRecentClassrooms()
+
+  useEffect(() => {
+    addRecent(classroom.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classroom.id])
 
   return (
     <div className="flex h-full flex-col">

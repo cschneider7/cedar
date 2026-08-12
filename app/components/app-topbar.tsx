@@ -28,11 +28,11 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"
-import { Input } from "~/components/ui/input"
 import { Separator } from "~/components/ui/separator"
 import { useSidebar } from "~/components/ui/sidebar"
 import { useTheme } from "~/components/ui/theme-provider"
 import { isTheme, themeIcons, ThemeToggle } from "~/components/ui/theme-toggle"
+import { TopbarSearch } from "~/components/topbar-search"
 import { Wordmark } from "~/components/wordmark"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 
@@ -286,7 +286,7 @@ export function AppTopbar() {
       )}
       <Breadcrumbs crumbs={crumbs} />
       <div className="ml-auto flex items-center gap-2">
-        <Input placeholder="Search..." className="max-w-48 min-w-25" />
+        <TopbarSearch />
         <CreateDropdown />
         <AuthControl />
       </div>
