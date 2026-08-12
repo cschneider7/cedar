@@ -1,4 +1,4 @@
-import { Link, isRouteErrorResponse } from "react-router"
+import { Link, isRouteErrorResponse, useRevalidator } from "react-router"
 import { Button } from "~/components/ui/button"
 import {
   Card,
@@ -16,15 +16,18 @@ export function RouteErrorCard({
   fallbackDetails,
   backTo,
   backLabel,
+  showRetry = true,
 }: {
   error: unknown
   title: string
   fallbackDetails: string
   backTo: string
   backLabel: string
+  showRetry?: boolean
 }) {
   let details = fallbackDetails
   let stack: string | undefined
+  const revalidator = useRevalidator()
 
   if (isRouteErrorResponse(error)) {
     details = error.statusText || details
@@ -35,12 +38,20 @@ export function RouteErrorCard({
 
   return (
     <div className="mx-auto w-full max-w-md">
-      <Card className="relative mx-auto w-full sm:max-w-md">
+      <Card className="relative mx-auto w-full sm:max-w-md" size="sm">
         <CardHeader>
           <CardTitle>{title}</CardTitle>
           <CardDescription>{details}</CardDescription>
         </CardHeader>
-        <CardFooter>
+        <CardFooter className="gap-2">
+          {showRetry && (
+            <Button
+              disabled={revalidator.state !== "idle"}
+              onClick={() => revalidator.revalidate()}
+            >
+              Try again
+            </Button>
+          )}
           <Button
             variant="outline"
             render={<Link to={backTo}>{backLabel}</Link>}

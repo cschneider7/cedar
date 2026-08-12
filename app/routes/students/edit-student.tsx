@@ -1,3 +1,4 @@
+import { Navigate } from "react-router"
 import type { MutationResult } from "~/lib/action-results"
 import { getClassrooms, updateStudent } from "~/lib/api"
 import { tokenFromRequest } from "~/lib/auth"
@@ -8,6 +9,12 @@ export async function loader(args: Route.LoaderArgs) {
   const token = await tokenFromRequest(args)
   const classrooms = await getClassrooms(token)
   return { classrooms: classrooms }
+}
+
+// See create-student.tsx — this is a fetcher-only loader/action target;
+// redirect direct navigation to the list instead of a blank content area.
+export default function Component() {
+  return <Navigate to="/students" replace />
 }
 
 export async function action(args: Route.ActionArgs): Promise<MutationResult> {

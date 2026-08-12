@@ -1,16 +1,3 @@
-import { Alert, AlertDescription } from "~/components/ui/alert"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogMedia,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "~/components/ui/alert-dialog"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import {
@@ -27,14 +14,12 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip"
 
-import { ArrowLeft, Trash2Icon } from "lucide-react"
-import { useEffect, useState } from "react"
-import { Link, useFetcher, useNavigate } from "react-router"
+import { ArrowLeft } from "lucide-react"
+import { Link } from "react-router"
+import { DeleteStudentDialog } from "~/components/delete-student-dialog"
 import { StudentAvatar } from "~/components/student-avatar"
 import { StudentFormDialog } from "~/components/student-form-dialog"
-import { Spinner } from "~/components/ui/spinner"
-import type { MutationResult } from "~/lib/action-results"
-import { getClassroom, getStudent } from "~/lib/api"
+import { getClassroom, getStudent, toRouteError } from "~/lib/api"
 import { tokenFromRequest } from "~/lib/auth"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 import type { Route } from "./+types/student"
@@ -49,41 +34,23 @@ export const handle: BreadcrumbHandle = {
 export async function loader(args: Route.LoaderArgs) {
   const token = await tokenFromRequest(args)
   const { params } = args
-  const student = await getStudent(params.studentId, token)
-  const classroom = student.classroom_id
-    ? await getClassroom(student.classroom_id, token)
-    : null
+  try {
+    const student = await getStudent(params.studentId, token)
+    const classroom = student.classroom_id
+      ? await getClassroom(student.classroom_id, token)
+      : null
 
-  return {
-    student: student,
-    classroom: classroom,
+    return {
+      student: student,
+      classroom: classroom,
+    }
+  } catch (error) {
+    toRouteError(error)
   }
 }
 
 export default function Component({ loaderData }: Route.ComponentProps) {
   const { student, classroom } = loaderData
-  const navigate = useNavigate()
-  const [deleteOpen, setDeleteOpen] = useState(false)
-
-  const deleteFetcher = useFetcher<MutationResult>()
-  const isDeleting = deleteFetcher.state !== "idle"
-  const deleteError =
-    deleteFetcher.data && !deleteFetcher.data.ok
-      ? deleteFetcher.data.error
-      : null
-
-  useEffect(() => {
-    if (deleteFetcher.state === "idle" && deleteFetcher.data?.ok) {
-      navigate("/students")
-    }
-  }, [deleteFetcher.state, deleteFetcher.data])
-
-  function handleDelete() {
-    deleteFetcher.submit(null, {
-      method: "post",
-      action: `/students/${student.id}/delete`,
-    })
-  }
 
   return (
     <div className="justify-center">
@@ -127,39 +94,11 @@ export default function Component({ loaderData }: Route.ComponentProps) {
             student={student}
             trigger={<Button variant="outline">Edit</Button>}
           />
-          <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-            <AlertDialogTrigger
-              render={<Button variant="destructive">Delete</Button>}
-            />
-            <AlertDialogContent size="sm">
-              <AlertDialogHeader>
-                <AlertDialogMedia className="bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive">
-                  <Trash2Icon />
-                </AlertDialogMedia>
-                <AlertDialogTitle>Delete {student.name}?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will permanently delete the student and cannot be undone.
-                  Are you sure you want to continue?
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              {deleteError && (
-                <Alert variant="destructive">
-                  <AlertDescription>{deleteError}</AlertDescription>
-                </Alert>
-              )}
-              <AlertDialogFooter>
-                <AlertDialogCancel variant="outline">Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  variant="destructive"
-                  disabled={isDeleting}
-                  onClick={handleDelete}
-                >
-                  {isDeleting && <Spinner />}
-                  Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          <DeleteStudentDialog
+            student={student}
+            navigateOnDelete
+            trigger={<Button variant="destructive">Delete</Button>}
+          />
         </CardFooter>
       </Card>
     </div>

@@ -8,6 +8,7 @@ import {
   Scripts,
   ScrollRestoration,
   isRouteErrorResponse,
+  useRevalidator,
 } from "react-router"
 import { Spinner } from "~/components/ui/spinner"
 
@@ -29,15 +30,26 @@ import "./app.css"
 
 export const middleware: Route.MiddlewareFunction[] = [clerkMiddleware()]
 
+export const links: Route.LinksFunction = () => [
+  { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+]
+
 export async function loader(args: Route.LoaderArgs) {
   return rootAuthLoader(args, async ({ request }) => {
     const { isAuthenticated, getToken } = request.auth
     // Anonymous visitors (public pages like `/`) have no session to scope a
     // classroom list to, and `/api/v1/classrooms` now 401s without one.
-    const classrooms = isAuthenticated
-      ? await getClassrooms(await getToken())
-      : []
-    return { classrooms }
+    if (!isAuthenticated) {
+      return { classrooms: [], classroomsError: false }
+    }
+    // This loader runs on every navigation/revalidation — a transient
+    // failure here must not take down the whole shell, so degrade instead.
+    try {
+      const classrooms = await getClassrooms(await getToken())
+      return { classrooms, classroomsError: false }
+    } catch {
+      return { classrooms: [], classroomsError: true }
+    }
   })
 }
 
@@ -104,13 +116,14 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   let message = "Oops!"
   let details = "An unexpected error occurred."
   let stack: string | undefined
+  const isNotFound = isRouteErrorResponse(error) && error.status === 404
+  const revalidator = useRevalidator()
 
   if (isRouteErrorResponse(error)) {
-    message = error.status === 404 ? "404" : "Error"
-    details =
-      error.status === 404
-        ? "The requested page could not be found."
-        : error.statusText || details
+    message = isNotFound ? "404" : "Error"
+    details = isNotFound
+      ? "The requested page could not be found."
+      : error.statusText || details
   } else if (import.meta.env.DEV && error && error instanceof Error) {
     details = error.message
     stack = error.stack
@@ -123,7 +136,15 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
           <CardTitle>{message}</CardTitle>
           <CardDescription>{details}</CardDescription>
         </CardHeader>
-        <CardFooter>
+        <CardFooter className="gap-2">
+          {!isNotFound && (
+            <Button
+              disabled={revalidator.state !== "idle"}
+              onClick={() => revalidator.revalidate()}
+            >
+              Try again
+            </Button>
+          )}
           <Button variant="outline" render={<Link to="/">Back to home</Link>} />
         </CardFooter>
         {stack && (

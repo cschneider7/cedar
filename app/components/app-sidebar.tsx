@@ -3,13 +3,20 @@ import {
   Home,
   MoreHorizontal,
   Plus,
-  SheetIcon,
   UsersRound,
 } from "lucide-react"
 import { useState } from "react"
-import { Link, NavLink, useLocation, useRouteLoaderData } from "react-router"
+import {
+  Link,
+  NavLink,
+  useLocation,
+  useRevalidator,
+  useRouteLoaderData,
+} from "react-router"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
 import { DeleteClassroomDialog } from "~/components/delete-classroom-dialog"
+import { Button } from "~/components/ui/button"
+import { Wordmark } from "~/components/wordmark"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,6 +40,9 @@ import {
 import type { Classroom } from "~/lib/schemas"
 import type { loader as rootLoader } from "~/root"
 
+/**
+ * One classroom's row in the sidebar, with a view/edit/delete actions menu.
+ */
 function ClassroomRow({
   classroom,
   onRequestDelete,
@@ -49,7 +59,6 @@ function ClassroomRow({
         isActive={location.pathname === `/classrooms/${classroom.id}`}
         render={<NavLink to={`/classrooms/${classroom.id}`} />}
       >
-        <SheetIcon />
         <span className="truncate">
           Period {classroom.period} — {classroom.subject}
         </span>
@@ -57,7 +66,7 @@ function ClassroomRow({
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
-            <SidebarMenuAction aria-label="Classroom actions">
+            <SidebarMenuAction aria-label="Classroom actions" showOnHover>
               <MoreHorizontal />
             </SidebarMenuAction>
           }
@@ -70,13 +79,6 @@ function ClassroomRow({
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setEditOpen(true)}>
             Edit
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem disabled className="text-muted-foreground">
-            Move up
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled className="text-muted-foreground">
-            Move down
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onClick={onRequestDelete}>
@@ -94,23 +96,25 @@ function ClassroomRow({
   )
 }
 
+/**
+ * Primary nav sidebar: Home/Students/Classrooms links, the classroom list, and their create/edit/delete dialogs.
+ */
 export function AppSidebar() {
   const rootData = useRouteLoaderData<typeof rootLoader>("root")
   const classrooms = rootData?.classrooms ?? []
+  const classroomsError = rootData?.classroomsError ?? false
   const [createOpen, setCreateOpen] = useState(false)
   const [deletingClassroom, setDeletingClassroom] = useState<Classroom | null>(
     null
   )
   const location = useLocation()
+  const revalidator = useRevalidator()
 
   return (
     <Sidebar className="top-(--header-height) h-[calc(100svh-var(--header-height))]!">
       <SidebarHeader>
-        <Link
-          to="/"
-          className="flex items-center gap-2 px-3 pt-4 text-lg font-medium md:hidden"
-        >
-          <span>Seating Chart</span>
+        <Link to="/" className="px-3 pt-4 md:hidden">
+          <Wordmark textClassName="text-lg font-medium" />
         </Link>
       </SidebarHeader>
       <SidebarContent>
@@ -161,15 +165,30 @@ export function AppSidebar() {
             <Plus />
           </SidebarGroupAction>
           <SidebarGroupContent>
-            <SidebarMenu className="gap-1">
-              {classrooms.map((classroom) => (
-                <ClassroomRow
-                  key={classroom.id}
-                  classroom={classroom}
-                  onRequestDelete={() => setDeletingClassroom(classroom)}
-                />
-              ))}
-            </SidebarMenu>
+            {classroomsError ? (
+              <div className="flex flex-col gap-1 px-2 py-1 text-sm text-muted-foreground">
+                <span>Couldn&apos;t load classrooms.</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto w-fit px-1 py-0.5"
+                  disabled={revalidator.state !== "idle"}
+                  onClick={() => revalidator.revalidate()}
+                >
+                  Retry
+                </Button>
+              </div>
+            ) : (
+              <SidebarMenu className="gap-1">
+                {classrooms.map((classroom) => (
+                  <ClassroomRow
+                    key={classroom.id}
+                    classroom={classroom}
+                    onRequestDelete={() => setDeletingClassroom(classroom)}
+                  />
+                ))}
+              </SidebarMenu>
+            )}
           </SidebarGroupContent>
         </SidebarGroup>
 

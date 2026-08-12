@@ -9,8 +9,7 @@ export const OUTPUT_IMAGE_QUALITY = 0.85
 
 /**
  * Builds the URL a student's private photo must be fetched through, since
- * the S3-compatible bucket is private (see the "api/student-image" resource
- * route, which authenticates the request and streams the object).
+ * the S3-compatible bucket is private (see the "api/student-image" route).
  * @param imageKey - The student's stored `image_url` (an S3 object key)
  * @returns The proxy URL to use as an `<img>` `src`
  */
@@ -44,9 +43,8 @@ export function computeResizedDimensions(
 }
 
 /**
- * Draws an image onto a canvas at its resized dimensions and exports it as a
- * `OUTPUT_IMAGE_TYPE` blob, downscaling so its longer edge is at most
- * `MAX_IMAGE_EDGE_PX`, regardless of the source image's original format.
+ * Draws an image onto a canvas at its resized dimensions and exports it as
+ * an `OUTPUT_IMAGE_TYPE` blob, downscaled to at most `MAX_IMAGE_EDGE_PX`.
  * @param image - Source image to resize
  * @returns The resized image as a `Blob`
  */

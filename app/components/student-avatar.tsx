@@ -16,6 +16,12 @@ const AVATAR_PALETTE = [
   "bg-pink-500",
 ]
 
+/**
+ * Deterministically maps a string id to an index in `[0, length)`.
+ * @param id - The string to hash.
+ * @param length - The exclusive upper bound of the returned index.
+ * @returns An index in `[0, length)`.
+ */
 function hashToIndex(id: string, length: number): number {
   let hash = 0
   for (let i = 0; i < id.length; i++) {
@@ -24,6 +30,11 @@ function hashToIndex(id: string, length: number): number {
   return Math.abs(hash) % length
 }
 
+/**
+ * Extracts up to two uppercase initials from a name.
+ * @param name - The full name to abbreviate.
+ * @returns Up to two uppercase initials.
+ */
 function getInitials(name: string): string {
   return name
     .trim()
@@ -35,9 +46,8 @@ function getInitials(name: string): string {
 }
 
 /**
- * Renders a student's uploaded photo, or a deterministic initials badge when
- * no photo is set. Callers control sizing/aspect ratio/rounding via
- * `className`, applied to whichever element actually renders.
+ * Renders a student's uploaded photo, or a deterministic initials badge
+ * when no photo is set.
  */
 export function StudentAvatar({
   student,

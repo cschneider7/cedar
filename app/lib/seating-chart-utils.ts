@@ -70,6 +70,7 @@ export type SeatingChartStudentNode = {
   deletable: false
   selected?: boolean
   className?: string
+  extent?: [[number, number], [number, number]] // clamped to canvasExtent(boundary), kept in sync at construction/update time
   data: StudentNodeData
 }
 export type SeatingChartNode =
@@ -172,6 +173,23 @@ export function boundaryArea(boundary: {
 }
 
 /**
+ * Computes the `extent` that clamps a student node to the boundary plus a
+ * CANVAS_PADDING margin, allowing a student to float near but not indefinitely
+ * far from the boundary.
+ * @param boundary - Boundary dimensions to clamp against
+ * @returns A React Flow node `extent` tuple
+ */
+export function canvasExtent(boundary: {
+  width: number
+  height: number
+}): [[number, number], [number, number]] {
+  return [
+    [-CANVAS_PADDING, -CANVAS_PADDING],
+    [boundary.width + CANVAS_PADDING, boundary.height + CANVAS_PADDING],
+  ]
+}
+
+/**
  * Reads the current boundary dimensions from a node list.
  * @param nodes - List of seating chart nodes
  * @returns The boundary node's dimensions
@@ -261,6 +279,7 @@ export function buildInitialNodes(
           position: { x: 0, y: 0 },
           parentId: seatId,
           deletable: false,
+          extent: canvasExtent(boundary),
           data: { student },
         }
         nodes.push(studentNode)
@@ -274,7 +293,7 @@ export function buildInitialNodes(
 /**
  * Reorders nodes into boundary -> table -> seat -> student order (parents before children).
  * @param nodes - Unordered list of seating chart nodes
- * @return List of nodes in the order boundary -> table -> seat -> student
+ * @returns List of nodes in the order boundary -> table -> seat -> student
  */
 export function reorderNodes(nodes: SeatingChartNode[]): SeatingChartNode[] {
   return [

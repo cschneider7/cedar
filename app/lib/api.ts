@@ -27,6 +27,44 @@ if (!API_URL) {
   throw new Error("VITE_API_URL is not set")
 }
 
+/**
+ * A failed API call — `kind` distinguishes a real HTTP error from a
+ * network/parse failure; `status` is 0 for the latter two.
+ */
+export class ApiError extends Error {
+  status: number
+  kind: "http" | "network" | "parse"
+
+  constructor(
+    message: string,
+    status: number,
+    kind: "http" | "network" | "parse"
+  ) {
+    super(message)
+    this.name = "ApiError"
+    this.status = status
+    this.kind = kind
+  }
+}
+
+/**
+ * Re-throws an `ApiError` as a route `Response` carrying its real status,
+ * for loaders that let failures propagate to the nearest `ErrorBoundary`.
+ * @param error - The caught value to convert.
+ */
+export function toRouteError(error: unknown): never {
+  if (error instanceof ApiError) {
+    // statusText must be a valid HTTP reason phrase (no CR/LF) — sanitize so
+    // an unusual backend message can't throw while building this response.
+    const statusText = error.message.replace(/[\r\n]+/g, " ").slice(0, 200)
+    throw new Response(error.message, {
+      status: error.status || 503,
+      statusText,
+    })
+  }
+  throw error
+}
+
 async function getErrorMessage(
   res: Response,
   fallback: string
@@ -40,44 +78,124 @@ async function getErrorMessage(
   } catch {
     // Not JSON - fall through to using the raw text below.
   }
+  // A non-JSON body that looks like an HTML error page (e.g. from a proxy
+  // or load balancer) shouldn't be rendered verbatim inside a UI alert.
+  if (text.trim().startsWith("<")) {
+    return fallback
+  }
   return text || fallback
 }
 
-/** Attaches the Clerk session token as a bearer `Authorization` header.
- * Both SSR (loader/action) and browser-originated calls go through this —
- * there's no ambient credential (unlike a cookie jar), so every caller must
- * pass its own token explicitly. */
+/**
+ * Attaches the Clerk session token as a bearer `Authorization` header —
+ * every caller passes its own token; there's no ambient shared credential.
+ * @param token - The session token, if any.
+ * @returns Headers with the bearer token, or `undefined` if no token.
+ */
 function withAuth(token?: string | null): HeadersInit | undefined {
   return token ? { Authorization: `Bearer ${token}` } : undefined
 }
 
+type ApiFetchOptions = {
+  method?: string
+  token?: string | null
+  body?: unknown
+  signal?: AbortSignal
+}
+
+/**
+ * Shared low-level fetch wrapper for every function below — builds the
+ * request, maps failures to `ApiError`, and validates the response against `schema`.
+ * @param path - The API path, appended to `API_URL`.
+ * @param schema - Schema to validate/parse the response body against, or
+ * `undefined` for an endpoint with no response body.
+ * @param opts - Method, auth token, request body, and abort signal.
+ * @returns The parsed response body, or `undefined` if `schema` is omitted.
+ */
+async function apiFetch<T>(
+  path: string,
+  schema: z.ZodType<T> | undefined,
+  opts: ApiFetchOptions = {}
+): Promise<T> {
+  let res: Response
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method: opts.method ?? "GET",
+      headers: {
+        ...(opts.body !== undefined
+          ? { "Content-Type": "application/json" }
+          : undefined),
+        ...withAuth(opts.token),
+      },
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      signal: opts.signal,
+    })
+  } catch {
+    throw new ApiError(
+      "Network error — check your connection and try again.",
+      0,
+      "network"
+    )
+  }
+
+  if (!res.ok) {
+    throw new ApiError(
+      await getErrorMessage(res, `Request failed (${res.status})`),
+      res.status,
+      "http"
+    )
+  }
+
+  if (!schema) {
+    return undefined as T
+  }
+
+  let json: unknown
+  try {
+    json = await res.json()
+  } catch {
+    throw new ApiError("Unexpected response from server.", res.status, "parse")
+  }
+
+  const parsed = z.safeParse(schema, (json as { data?: unknown })?.data ?? json)
+  if (!parsed.success) {
+    throw new ApiError(
+      "Received unexpected data from server.",
+      res.status,
+      "parse"
+    )
+  }
+  return parsed.data
+}
+
+/**
+ * Fetches a single student by id.
+ * @param studentId - The student's public-facing UUID.
+ * @param token - The caller's session token, if any.
+ * @returns The matching student.
+ */
 export async function getStudent(
   studentId: string,
   token?: string | null
 ): Promise<Student> {
-  const res = await fetch(`${API_URL}/students/${studentId}`, {
-    headers: withAuth(token),
-  })
-  if (!res.ok) {
-    throw new Response("Student not found", { status: 404 })
-  }
-
-  const json = await res.json()
-  return z.parse(StudentSchema, json.data)
+  return apiFetch(`/students/${studentId}`, StudentSchema, { token })
 }
 
+/**
+ * Fetches every student.
+ * @param token - The caller's session token, if any.
+ * @returns All students.
+ */
 export async function getStudents(token?: string | null): Promise<Student[]> {
-  const res = await fetch(`${API_URL}/students`, {
-    headers: withAuth(token),
-  })
-  if (!res.ok) {
-    throw new Error(`Error getting list of students: ", ${res.status}`)
-  }
-
-  const json = await res.json()
-  return z.parse(z.array(StudentSchema), json.data)
+  return apiFetch(`/students`, z.array(StudentSchema), { token })
 }
 
+/**
+ * Fetches a paginated, searchable, sortable page of students.
+ * @param params - Page number/size, optional search query, and optional sort.
+ * @param token - The caller's session token, if any.
+ * @returns The matching page of students, plus paging metadata.
+ */
 export async function getStudentsPage(
   params: {
     page: number
@@ -88,279 +206,235 @@ export async function getStudentsPage(
   },
   token?: string | null
 ): Promise<StudentsPage> {
-  const url = new URL(`${API_URL}/students`)
-  url.searchParams.set("page", String(params.page))
-  url.searchParams.set("page_size", String(params.pageSize))
+  const searchParams = new URLSearchParams({
+    page: String(params.page),
+    page_size: String(params.pageSize),
+  })
   if (params.q) {
-    url.searchParams.set("q", params.q)
+    searchParams.set("q", params.q)
   }
   if (params.sortBy) {
-    url.searchParams.set("sort_by", params.sortBy)
+    searchParams.set("sort_by", params.sortBy)
   }
   if (params.sortDir) {
-    url.searchParams.set("sort_dir", params.sortDir)
+    searchParams.set("sort_dir", params.sortDir)
   }
 
-  const res = await fetch(url, {
-    headers: withAuth(token),
-  })
-  if (!res.ok) {
-    throw new Error(
-      `Error getting paginated list of students: ", ${res.status}`
-    )
-  }
-
-  const json = await res.json()
-  return z.parse(StudentsPageSchema, json.data)
+  return apiFetch(`/students?${searchParams}`, StudentsPageSchema, { token })
 }
 
+/**
+ * Creates a new student.
+ * @param studentInfo - The new student's fields.
+ * @param token - The caller's session token, if any.
+ * @returns The created student.
+ */
 export async function createStudent(
   studentInfo: z.infer<typeof CreateStudentSchema>,
   token?: string | null
 ): Promise<Student> {
-  const response = await fetch(`${API_URL}/students`, {
+  return apiFetch(`/students`, StudentSchema, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...withAuth(token),
-    },
-    body: JSON.stringify(z.parse(CreateStudentSchema, studentInfo)),
+    token,
+    body: z.parse(CreateStudentSchema, studentInfo),
   })
-
-  if (!response.ok) {
-    throw new Error(await getErrorMessage(response, "Error creating student"))
-  }
-
-  const json = await response.json()
-  return z.parse(StudentSchema, json.data)
 }
 
+/**
+ * Partially updates a student.
+ * @param studentId - The student's public-facing UUID.
+ * @param updates - The fields to change.
+ * @param token - The caller's session token, if any.
+ */
 export async function updateStudent(
   studentId: string,
   updates: z.infer<typeof UpdateStudentSchema>,
   token?: string | null
 ) {
-  const response = await fetch(`${API_URL}/students/${studentId}`, {
+  await apiFetch(`/students/${studentId}`, undefined, {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      ...withAuth(token),
-    },
-    body: JSON.stringify(z.parse(UpdateStudentSchema, updates)),
+    token,
+    body: z.parse(UpdateStudentSchema, updates),
   })
-
-  if (!response.ok) {
-    throw new Error(await getErrorMessage(response, "Error updating student"))
-  }
 }
 
+/**
+ * Deletes a student.
+ * @param studentId - The student's public-facing UUID.
+ * @param token - The caller's session token, if any.
+ */
 export async function deleteStudent(studentId: string, token?: string | null) {
-  const response = await fetch(`${API_URL}/students/${studentId}`, {
+  await apiFetch(`/students/${studentId}`, undefined, {
     method: "DELETE",
-    headers: withAuth(token),
+    token,
   })
-
-  if (!response.ok) {
-    throw new Error(await getErrorMessage(response, "Error deleting student"))
-  }
 }
 
+/**
+ * Deletes multiple students by id.
+ * @param ids - The public-facing UUIDs of the students to delete.
+ * @param token - The caller's session token, if any.
+ * @returns A count of how many students were deleted.
+ */
 export async function bulkDeleteStudents(
   ids: string[],
   token?: string | null
 ): Promise<BulkDeleteResult> {
-  const response = await fetch(`${API_URL}/students`, {
+  return apiFetch(`/students`, BulkDeleteResultSchema, {
     method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-      ...withAuth(token),
-    },
-    body: JSON.stringify({ ids }),
+    token,
+    body: { ids },
   })
-
-  if (!response.ok) {
-    throw new Error(await getErrorMessage(response, "Error deleting students"))
-  }
-
-  const json = await response.json()
-  return z.parse(BulkDeleteResultSchema, json.data)
 }
 
+/**
+ * Fetches a single classroom by id.
+ * @param classroomId - The classroom's public-facing UUID.
+ * @param token - The caller's session token, if any.
+ * @returns The matching classroom.
+ */
 export async function getClassroom(
   classroomId: string,
   token?: string | null
 ): Promise<Classroom> {
-  const res = await fetch(`${API_URL}/classrooms/${classroomId}`, {
-    headers: withAuth(token),
-  })
-  if (!res.ok) {
-    throw new Response("Classroom not found", { status: 404 })
-  }
-
-  const json = await res.json()
-  return z.parse(ClassroomSchema, json.data)
+  return apiFetch(`/classrooms/${classroomId}`, ClassroomSchema, { token })
 }
 
+/**
+ * Fetches every classroom.
+ * @param token - The caller's session token, if any.
+ * @returns All classrooms.
+ */
 export async function getClassrooms(
   token?: string | null
 ): Promise<Classroom[]> {
-  const res = await fetch(`${API_URL}/classrooms`, {
-    headers: withAuth(token),
-  })
-  if (!res.ok) {
-    throw new Error(`Error getting list of classrooms: ", ${res.status}`)
-  }
-
-  const json = await res.json()
-  return z.parse(z.array(ClassroomSchema), json.data)
+  return apiFetch(`/classrooms`, z.array(ClassroomSchema), { token })
 }
 
+/**
+ * Creates a new classroom.
+ * @param classroomInfo - The new classroom's fields.
+ * @param token - The caller's session token, if any.
+ * @returns The created classroom.
+ */
 export async function createClassroom(
   classroomInfo: z.infer<typeof CreateClassroomSchema>,
   token?: string | null
 ): Promise<Classroom> {
-  const response = await fetch(`${API_URL}/classrooms`, {
+  return apiFetch(`/classrooms`, ClassroomSchema, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...withAuth(token),
-    },
-    body: JSON.stringify(z.parse(CreateClassroomSchema, classroomInfo)),
+    token,
+    body: z.parse(CreateClassroomSchema, classroomInfo),
   })
-
-  if (!response.ok) {
-    throw new Error(await getErrorMessage(response, "Error creating classroom"))
-  }
-
-  const json = await response.json()
-  return z.parse(ClassroomSchema, json.data)
 }
 
+/**
+ * Partially updates a classroom.
+ * @param classroomId - The classroom's public-facing UUID.
+ * @param updates - The fields to change.
+ * @param token - The caller's session token, if any.
+ */
 export async function updateClassroom(
   classroomId: string,
   updates: z.infer<typeof UpdateClassroomSchema>,
   token?: string | null
 ) {
-  const response = await fetch(`${API_URL}/classrooms/${classroomId}`, {
+  await apiFetch(`/classrooms/${classroomId}`, undefined, {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      ...withAuth(token),
-    },
-    body: JSON.stringify(z.parse(UpdateClassroomSchema, updates)),
+    token,
+    body: z.parse(UpdateClassroomSchema, updates),
   })
-
-  if (!response.ok) {
-    throw new Error(await getErrorMessage(response, "Error updating classroom"))
-  }
 }
 
+/**
+ * Deletes a classroom.
+ * @param classroomId - The classroom's public-facing UUID.
+ * @param token - The caller's session token, if any.
+ */
 export async function deleteClassroom(
   classroomId: string,
   token?: string | null
 ) {
-  const response = await fetch(`${API_URL}/classrooms/${classroomId}`, {
+  await apiFetch(`/classrooms/${classroomId}`, undefined, {
     method: "DELETE",
-    headers: withAuth(token),
+    token,
   })
-
-  if (!response.ok) {
-    throw new Error(await getErrorMessage(response, "Error deleting classroom"))
-  }
 }
 
+/**
+ * Fetches a classroom's seating chart (tables, seats, boundary).
+ * @param classroomId - The classroom's public-facing UUID.
+ * @param token - The caller's session token, if any.
+ * @returns The classroom's current seating chart.
+ */
 export async function getClassroomSeatingChart(
   classroomId: string,
   token?: string | null
 ): Promise<SeatingChart> {
-  const res = await fetch(
-    `${API_URL}/classrooms/${classroomId}/seating-chart`,
-    { headers: withAuth(token) }
+  return apiFetch(
+    `/classrooms/${classroomId}/seating-chart`,
+    SeatingChartSchema,
+    { token }
   )
-  if (!res.ok) {
-    throw new Error(`Error getting seating chart assignments: ", ${res.status}`)
-  }
-
-  const json = await res.json()
-  const seatingChart = z.parse(SeatingChartSchema, json.data)
-
-  return seatingChart
 }
 
+/**
+ * Replaces a classroom's entire seating chart.
+ * @param classroomId - The classroom's public-facing UUID.
+ * @param seatingChart - The full chart (boundary + tables + seats) to persist.
+ * @param token - The caller's session token, if any.
+ */
 export async function updateClassroomSeatingChart(
   classroomId: string,
   seatingChart: SeatingChart,
   token?: string | null
 ) {
-  const response = await fetch(
-    `${API_URL}/classrooms/${classroomId}/seating-chart`,
-    {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        ...withAuth(token),
-      },
-      body: JSON.stringify(z.parse(SeatingChartSchema, seatingChart)),
-    }
-  )
-
-  if (!response.ok) {
-    throw new Error(
-      await getErrorMessage(response, "Error updating seating chart")
-    )
-  }
+  await apiFetch(`/classrooms/${classroomId}/seating-chart`, undefined, {
+    method: "PUT",
+    token,
+    body: z.parse(SeatingChartSchema, seatingChart),
+  })
 }
 
+/**
+ * Proposes a randomized seating chart without persisting it.
+ * @param classroomId - The classroom's public-facing UUID.
+ * @param options - The current (possibly unsaved) boundary/table geometry to
+ * randomize students into.
+ * @param token - The caller's session token, if any.
+ * @returns A proposed seating chart, not yet saved.
+ */
 export async function generateRandomSeatingChart(
   classroomId: string,
   options: RandomizeSeatingChartOptions,
   token?: string | null
 ): Promise<SeatingChart> {
-  const response = await fetch(
-    `${API_URL}/classrooms/${classroomId}/seating-chart/randomize`,
+  return apiFetch(
+    `/classrooms/${classroomId}/seating-chart/randomize`,
+    SeatingChartSchema,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...withAuth(token),
-      },
-      body: JSON.stringify(
-        z.parse(RandomizeSeatingChartOptionsSchema, options)
-      ),
+      token,
+      body: z.parse(RandomizeSeatingChartOptionsSchema, options),
     }
   )
-
-  if (!response.ok) {
-    throw new Error(
-      await getErrorMessage(response, "Error generating random seating chart")
-    )
-  }
-
-  const json = await response.json()
-  return z.parse(SeatingChartSchema, json.data)
 }
 
+/**
+ * Picks a weighted-random student for cold call.
+ * @param classroomId - The classroom's public-facing UUID.
+ * @param payload - Weighting options for the pick.
+ * @param token - The caller's session token, if any.
+ * @returns The picked student.
+ */
 export async function pickColdCallStudent(
   classroomId: string,
   payload: ColdCall,
   token?: string | null
 ): Promise<ColdCallPick> {
-  const response = await fetch(
-    `${API_URL}/classrooms/${classroomId}/cold-call`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...withAuth(token),
-      },
-      body: JSON.stringify(z.parse(ColdCallSchema, payload)),
-    }
-  )
-
-  if (!response.ok) {
-    throw new Error(await getErrorMessage(response, "Error picking a student"))
-  }
-
-  const json = await response.json()
-  return z.parse(ColdCallPickSchema, json.data)
+  return apiFetch(`/classrooms/${classroomId}/cold-call`, ColdCallPickSchema, {
+    method: "POST",
+    token,
+    body: z.parse(ColdCallSchema, payload),
+  })
 }

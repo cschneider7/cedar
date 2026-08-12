@@ -1,14 +1,12 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Controller, useForm } from "react-hook-form"
-import { useEffect, useState } from "react"
-import { useFetcher, useNavigate } from "react-router"
-import { toast } from "sonner"
+import { useEffect, useRef, useState } from "react"
+import { useFetcher } from "react-router"
 import * as z from "zod"
 import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -18,7 +16,6 @@ import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
 import {
   Field,
-  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -36,7 +33,7 @@ import {
   StudentPhotoField,
   type PhotoFieldValue,
 } from "~/components/student-photo-field"
-import type { MutationResult } from "~/lib/action-results"
+import { useResourceFormDialog } from "~/hooks/use-resource-form-dialog"
 import type { Classroom, Student } from "~/lib/schemas"
 import { CreateStudentSchema, UpdateStudentSchema } from "~/lib/schemas"
 
@@ -48,6 +45,12 @@ type StudentFormDialogProps = (
   onOpenChange?: (open: boolean) => void
 }
 
+/**
+ * Derives the form's initial photo state: the existing photo in edit
+ * mode, or none for a new student.
+ * @param props - The dialog's props, used to check mode and any existing photo.
+ * @returns The initial photo field value.
+ */
 function defaultPhotoValue(props: StudentFormDialogProps): PhotoFieldValue {
   if (props.mode === "edit" && props.student.image_url) {
     return { kind: "existing", url: props.student.image_url }
@@ -55,34 +58,24 @@ function defaultPhotoValue(props: StudentFormDialogProps): PhotoFieldValue {
   return { kind: "none" }
 }
 
+/**
+ * Create/edit student dialog: photo, name, student ID, and classroom
+ * fields; the staged photo uploads only once the form is submitted.
+ */
 export function StudentFormDialog(props: StudentFormDialogProps) {
   const { mode, trigger } = props
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
-  const open = props.open ?? uncontrolledOpen
-  const setOpen = props.onOpenChange ?? setUncontrolledOpen
-  const navigate = useNavigate()
 
   const [photo, setPhoto] = useState<PhotoFieldValue>(() =>
     defaultPhotoValue(props)
   )
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  // While the crop-photo dialog (stacked on top) is open, this dialog must
+  // stay put — no closing, no interacting with fields behind its backdrop.
+  const [isCropping, setIsCropping] = useState(false)
 
   const formPath =
     mode === "create" ? "/students/new" : `/students/${props.student.id}/edit`
-
-  const classroomsFetcher = useFetcher<{ classrooms: Classroom[] }>()
-  // Only fires on open, not on every classroomsFetcher re-render (it changes
-  // identity as load() progresses) - otherwise this would loop.
-  useEffect(() => {
-    if (open && classroomsFetcher.state === "idle" && !classroomsFetcher.data) {
-      classroomsFetcher.load(formPath)
-    }
-  }, [open])
-  const classrooms = classroomsFetcher.data?.classrooms ?? []
-
-  const submitFetcher = useFetcher<MutationResult>()
-  const isSubmitting = submitFetcher.state !== "idle"
 
   const schema = mode === "create" ? CreateStudentSchema : UpdateStudentSchema
 
@@ -100,29 +93,42 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
     defaultValues,
   })
 
-  // formState is a proxy; dirtyFields must be read here, not inside onSubmit.
-  const { dirtyFields } = form.formState
+  const { open, setOpen, isSubmitting, submitError, buildSubmitData, submit } =
+    useResourceFormDialog({
+      open: props.open,
+      onOpenChange: props.onOpenChange,
+      mode,
+      form,
+      defaultValues,
+      actionPath: formPath,
+      entityLabel: "Student",
+      onOpen: () => {
+        setPhoto(defaultPhotoValue(props))
+        setUploadError(null)
+      },
+    })
 
-  // The dialog stays mounted (see loop rendering it), so the form must be
-  // reset on each open or stale/dirty values from the last session persist.
+  const classroomsFetcher = useFetcher<{ classrooms: Classroom[] }>()
+  // Only fires on open, not on every classroomsFetcher re-render (it changes
+  // identity as load() progresses) - otherwise this would loop.
   useEffect(() => {
-    if (open) {
-      form.reset(defaultValues)
-      setPhoto(defaultPhotoValue(props))
-      setUploadError(null)
+    if (open && classroomsFetcher.state === "idle" && !classroomsFetcher.data) {
+      classroomsFetcher.load(formPath)
     }
   }, [open])
+  const classrooms = classroomsFetcher.data?.classrooms ?? []
+
+  const displayedError = uploadError || submitError
+  const errorRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (displayedError) {
+      errorRef.current?.focus()
+    }
+  }, [displayedError])
 
   const onSubmit = async (data: z.infer<typeof schema>) => {
     setUploadError(null)
-    const submitData: Record<string, unknown> =
-      mode === "create"
-        ? { ...data }
-        : Object.fromEntries(
-            Object.entries(data).filter(
-              ([key]) => dirtyFields[key as keyof typeof dirtyFields]
-            )
-          )
+    const submitData = buildSubmitData(data)
 
     if (photo.kind === "staged") {
       setIsUploading(true)
@@ -162,27 +168,10 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
       submitData.image_url = null
     }
 
-    submitFetcher.submit(submitData as z.infer<typeof schema>, {
-      method: "post",
-      action: formPath,
-      encType: "application/json",
-    })
+    submit(submitData)
   }
 
-  useEffect(() => {
-    const data = submitFetcher.data
-    if (submitFetcher.state === "idle" && data?.ok) {
-      setOpen(false)
-      toast.success(mode === "create" ? "Student created" : "Student updated", {
-        action: {
-          label: "View",
-          onClick: () => navigate(`/students/${data.id}`),
-        },
-      })
-    }
-  }, [submitFetcher.state, submitFetcher.data])
-
-  const classroomOptions: [{ label: string; value: string | null }] = [
+  const classroomOptions: { label: string; value: string | null }[] = [
     { label: "Unassigned", value: null },
   ]
   classrooms.forEach((classroom) => {
@@ -193,115 +182,112 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
   })
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (isCropping) return
+        setOpen(next)
+      }}
+    >
       {trigger && <DialogTrigger render={trigger} />}
-      <DialogContent>
+      <DialogContent inert={isCropping || undefined}>
         <DialogHeader>
           <DialogTitle>
             {mode === "create" ? "Create new student" : "Edit student"}
           </DialogTitle>
-          <DialogDescription>
-            {mode === "create"
-              ? "Enter new student info here."
-              : "Enter student info here."}
-          </DialogDescription>
         </DialogHeader>
-        {(uploadError ||
-          (submitFetcher.data &&
-            !submitFetcher.data.ok &&
-            submitFetcher.data.error)) && (
-          <Alert variant="destructive">
-            <AlertDescription>
-              {uploadError ||
-                (submitFetcher.data && !submitFetcher.data.ok
-                  ? submitFetcher.data.error
-                  : null)}
-            </AlertDescription>
+        {displayedError && (
+          <Alert variant="destructive" ref={errorRef} tabIndex={-1}>
+            <AlertDescription>{displayedError}</AlertDescription>
           </Alert>
         )}
         <form id="student-form" onSubmit={form.handleSubmit(onSubmit)}>
           <FieldGroup>
-            <Field>
-              <FieldLabel>Photo</FieldLabel>
-              <StudentPhotoField value={photo} onChange={setPhoto} />
-            </Field>
-            <Controller
-              name="name"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel>
-                    Name<span className="text-destructive">*</span>
-                  </FieldLabel>
-                  <Input
-                    {...field}
-                    aria-invalid={fieldState.invalid}
-                    placeholder="Bob Burger"
-                  />
-                  {fieldState.invalid && (
-                    <FieldError errors={[fieldState.error]} />
-                  )}
-                </Field>
-              )}
-            />
-            <Controller
-              name="student_id"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel>
-                    Student ID Number
-                    <span className="text-destructive">*</span>
-                  </FieldLabel>
-                  <Input
-                    {...field}
-                    aria-invalid={fieldState.invalid}
-                    placeholder="123456"
-                  />
-                  {fieldState.invalid && (
-                    <FieldError errors={[fieldState.error]} />
-                  )}
-                </Field>
-              )}
-            />
-            <Controller
-              name="classroom_id"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel>Classroom</FieldLabel>
-                  <FieldDescription>
-                    The classroom the student is enrolled in
-                  </FieldDescription>
-                  <Select
-                    name={field.name}
-                    value={field.value}
-                    onValueChange={field.onChange}
-                    items={classroomOptions}
-                  >
-                    <SelectTrigger
+            <div className="flex items-start gap-4">
+              <Field className="w-auto shrink-0">
+                <StudentPhotoField
+                  value={photo}
+                  onChange={setPhoto}
+                  onCropDialogOpenChange={setIsCropping}
+                />
+              </Field>
+              <Controller
+                name="name"
+                control={form.control}
+                render={({ field, fieldState }) => (
+                  <Field className="flex-1" data-invalid={fieldState.invalid}>
+                    <FieldLabel>
+                      Name<span className="text-destructive">*</span>
+                    </FieldLabel>
+                    <Input
+                      {...field}
                       aria-invalid={fieldState.invalid}
-                      className="w-full max-w-48"
+                      placeholder="Bob Burger"
+                    />
+                    {fieldState.invalid && (
+                      <FieldError errors={[fieldState.error]} />
+                    )}
+                  </Field>
+                )}
+              />
+            </div>
+            <div className="flex items-start gap-4">
+              <Controller
+                name="student_id"
+                control={form.control}
+                render={({ field, fieldState }) => (
+                  <Field className="flex-1" data-invalid={fieldState.invalid}>
+                    <FieldLabel>
+                      Student ID Number
+                      <span className="text-destructive">*</span>
+                    </FieldLabel>
+                    <Input
+                      {...field}
+                      aria-invalid={fieldState.invalid}
+                      placeholder="123456"
+                    />
+                    {fieldState.invalid && (
+                      <FieldError errors={[fieldState.error]} />
+                    )}
+                  </Field>
+                )}
+              />
+              <Controller
+                name="classroom_id"
+                control={form.control}
+                render={({ field, fieldState }) => (
+                  <Field className="flex-1" data-invalid={fieldState.invalid}>
+                    <FieldLabel>Classroom</FieldLabel>
+                    <Select
+                      name={field.name}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      items={classroomOptions}
                     >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {classroomOptions.map((classroom) => (
-                        <SelectItem
-                          key={classroom.value}
-                          value={classroom.value}
-                        >
-                          {classroom.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {fieldState.invalid && (
-                    <FieldError errors={[fieldState.error]} />
-                  )}
-                </Field>
-              )}
-            />
+                      <SelectTrigger
+                        aria-invalid={fieldState.invalid}
+                        className="w-full"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {classroomOptions.map((classroom) => (
+                          <SelectItem
+                            key={classroom.value}
+                            value={classroom.value}
+                          >
+                            {classroom.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {fieldState.invalid && (
+                      <FieldError errors={[fieldState.error]} />
+                    )}
+                  </Field>
+                )}
+              />
+            </div>
           </FieldGroup>
         </form>
         <DialogFooter>

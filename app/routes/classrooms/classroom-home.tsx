@@ -1,31 +1,10 @@
-import { ClipboardList, Plus, Trash2Icon } from "lucide-react"
-import { useEffect, useState } from "react"
-import { Link, useFetcher, useNavigate } from "react-router"
+import { flexRender, useTable } from "@tanstack/react-table"
+import { ClipboardList, Plus, Search } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { useNavigate } from "react-router"
 import { toast } from "sonner"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
-import { Alert, AlertDescription } from "~/components/ui/alert"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogMedia,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "~/components/ui/alert-dialog"
-import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
-import {
-  Card,
-  CardAction,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "~/components/ui/card"
 import {
   Empty,
   EmptyContent,
@@ -34,12 +13,38 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "~/components/ui/empty"
-import { Spinner } from "~/components/ui/spinner"
-import type { MutationResult } from "~/lib/action-results"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "~/components/ui/input-group"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "~/components/ui/pagination"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "~/components/ui/table"
 import { getClassrooms, getStudents } from "~/lib/api"
 import { tokenFromRequest } from "~/lib/auth"
-import type { Classroom } from "~/lib/schemas"
+import type { Student } from "~/lib/schemas"
+import {
+  classroomTableFeatures,
+  getClassroomColumns,
+} from "./classroom-columns"
 import type { Route } from "./+types/classroom-home"
+
+const CLASSROOMS_PAGE_SIZE = 10
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -50,19 +55,28 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader(args: Route.LoaderArgs) {
   const token = await tokenFromRequest(args)
-  const [classrooms, students] = await Promise.all([
+  const [classrooms, studentsResult] = await Promise.all([
     getClassrooms(token),
-    getStudents(token),
+    // Student counts are supplementary — a failure here degrades to "—"
+    // counts + a toast rather than failing the whole page.
+    getStudents(token).then(
+      (students) => ({ students, failed: false }),
+      () => ({ students: [] as Student[], failed: true })
+    ),
   ])
   const studentCounts = new Map<string, number>()
-  for (const student of students) {
+  for (const student of studentsResult.students) {
     if (!student.classroom_id) continue
     studentCounts.set(
       student.classroom_id,
       (studentCounts.get(student.classroom_id) ?? 0) + 1
     )
   }
-  return { classrooms, studentCounts: Object.fromEntries(studentCounts) }
+  return {
+    classrooms,
+    studentCounts: Object.fromEntries(studentCounts),
+    studentsError: studentsResult.failed,
+  }
 }
 
 function EmptyClassrooms() {
@@ -88,135 +102,267 @@ function EmptyClassrooms() {
   )
 }
 
-function ClassroomSummary({
-  classroom,
-  studentCount,
+function SearchInput({
+  value,
+  onChange,
 }: {
-  classroom: Classroom
-  studentCount: number
+  value: string
+  onChange: (value: string) => void
 }) {
-  const navigate = useNavigate()
-  const [deleteOpen, setDeleteOpen] = useState(false)
+  return (
+    <InputGroup className="max-w-xs">
+      <InputGroupInput
+        aria-label="Search classrooms"
+        placeholder="Search classrooms..."
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <InputGroupAddon>
+        <Search />
+      </InputGroupAddon>
+    </InputGroup>
+  )
+}
 
-  const deleteFetcher = useFetcher<MutationResult>()
-  const isDeleting = deleteFetcher.state !== "idle"
-  const deleteError =
-    deleteFetcher.data && !deleteFetcher.data.ok
-      ? deleteFetcher.data.error
-      : null
+function EmptySearchNoResults({ onClear }: { onClear: () => void }) {
+  return (
+    <Empty>
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <Search />
+        </EmptyMedia>
+        <EmptyTitle>No classrooms found</EmptyTitle>
+        <EmptyDescription>No classrooms match your search.</EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <Button variant="ghost" onClick={onClear}>
+          Clear search
+        </Button>
+      </EmptyContent>
+    </Empty>
+  )
+}
 
-  useEffect(() => {
-    if (deleteFetcher.state === "idle" && deleteFetcher.data?.ok) {
-      setDeleteOpen(false)
-      toast.success("Classroom deleted")
-      navigate("/classrooms")
-    }
-  }, [deleteFetcher.state, deleteFetcher.data])
-
-  function handleDelete() {
-    deleteFetcher.submit(null, {
-      method: "post",
-      action: `/classrooms/${classroom.id}/delete`,
-    })
+function getPageNumbers(
+  current: number,
+  total: number
+): (number | "ellipsis")[] {
+  if (total <= 1) return [1]
+  const delta = 1
+  const range: number[] = []
+  for (
+    let i = Math.max(2, current - delta);
+    i <= Math.min(total - 1, current + delta);
+    i++
+  ) {
+    range.push(i)
   }
 
+  const pages: (number | "ellipsis")[] = [1]
+  if (range[0] > 2) pages.push("ellipsis")
+  pages.push(...range)
+  if (range.length > 0 && range[range.length - 1] < total - 1) {
+    pages.push("ellipsis")
+  } else if (range.length === 0 && total > 2) {
+    pages.push("ellipsis")
+  }
+  pages.push(total)
+  return pages
+}
+
+function ClassroomPaginationControl({
+  page,
+  totalPages,
+  totalCount,
+  pageSize,
+  onPageChange,
+}: {
+  page: number
+  totalPages: number
+  totalCount: number
+  pageSize: number
+  onPageChange: (page: number) => void
+}) {
+  const rangeStart = (page - 1) * pageSize + 1
+  const rangeEnd = Math.min(page * pageSize, totalCount)
+
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardAction>
-          <Badge variant="secondary">Period {classroom.period}</Badge>
-        </CardAction>
-        <CardTitle>{classroom.subject}</CardTitle>
-        <CardDescription>
-          {studentCount} {studentCount === 1 ? "student" : "students"}
-        </CardDescription>
-      </CardHeader>
-      <CardFooter className="justify-end gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          render={<Link to={`/classrooms/${classroom.id}`}>View</Link>}
-        />
-        <ClassroomFormDialog
-          mode="edit"
-          classroom={classroom}
-          trigger={
-            <Button size="sm" variant="outline">
-              Edit
-            </Button>
-          }
-        />
-        <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-          <AlertDialogTrigger
-            render={
-              <Button size="sm" variant="destructive">
-                Delete
-              </Button>
-            }
-          />
-          <AlertDialogContent size="sm">
-            <AlertDialogHeader>
-              <AlertDialogMedia className="bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive">
-                <Trash2Icon />
-              </AlertDialogMedia>
-              <AlertDialogTitle>
-                Delete Period {classroom.period} - {classroom.subject}?
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                This will permanently delete the classroom and cannot be undone.
-                Are you sure you want to continue?
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            {deleteError && (
-              <Alert variant="destructive">
-                <AlertDescription>{deleteError}</AlertDescription>
-              </Alert>
+    <div className="mt-4 flex flex-col items-center gap-2">
+      <p className="text-sm text-muted-foreground">
+        Showing {rangeStart}–{rangeEnd} of {totalCount} classrooms
+      </p>
+      {totalPages > 1 && (
+        <Pagination>
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                href="#"
+                aria-disabled={page <= 1}
+                className={page <= 1 ? "pointer-events-none opacity-50" : ""}
+                onClick={(e) => {
+                  e.preventDefault()
+                  if (page > 1) onPageChange(page - 1)
+                }}
+              />
+            </PaginationItem>
+            {getPageNumbers(page, totalPages).map((p, i) =>
+              p === "ellipsis" ? (
+                <PaginationItem key={`ellipsis-${i}`}>
+                  <PaginationEllipsis />
+                </PaginationItem>
+              ) : (
+                <PaginationItem key={p}>
+                  <PaginationLink
+                    href="#"
+                    isActive={p === page}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      onPageChange(p)
+                    }}
+                  >
+                    {p}
+                  </PaginationLink>
+                </PaginationItem>
+              )
             )}
-            <AlertDialogFooter>
-              <AlertDialogCancel variant="outline">Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                variant="destructive"
-                disabled={isDeleting}
-                onClick={handleDelete}
-              >
-                {isDeleting && <Spinner />}
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </CardFooter>
-    </Card>
+            <PaginationItem>
+              <PaginationNext
+                href="#"
+                aria-disabled={page >= totalPages}
+                className={
+                  page >= totalPages ? "pointer-events-none opacity-50" : ""
+                }
+                onClick={(e) => {
+                  e.preventDefault()
+                  if (page < totalPages) onPageChange(page + 1)
+                }}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      )}
+    </div>
   )
 }
 
 export default function Component({ loaderData }: Route.ComponentProps) {
-  const { classrooms, studentCounts } = loaderData
+  const { classrooms, studentCounts, studentsError } = loaderData
+  const navigate = useNavigate()
+  const [searchInput, setSearchInput] = useState("")
+
+  useEffect(() => {
+    if (studentsError) {
+      toast.warning("Couldn't load student counts.")
+    }
+  }, [studentsError])
+
+  const filteredClassrooms = useMemo(() => {
+    const q = searchInput.trim().toLowerCase()
+    if (!q) return classrooms
+    return classrooms.filter((classroom) =>
+      classroom.subject.toLowerCase().includes(q)
+    )
+  }, [classrooms, searchInput])
+
+  const columns = useMemo(
+    () => getClassroomColumns({ studentCounts, studentsError }),
+    [studentCounts, studentsError]
+  )
+
+  const table = useTable({
+    data: filteredClassrooms,
+    columns,
+    features: classroomTableFeatures,
+    getRowId: (row) => row.id,
+    initialState: {
+      pagination: { pageIndex: 0, pageSize: CLASSROOMS_PAGE_SIZE },
+    },
+  })
+
+  const { pageIndex, pageSize } = table.state.pagination
+
   return (
     <>
       {classrooms.length === 0 ? (
         <EmptyClassrooms />
       ) : (
         <div>
-          <ClassroomFormDialog
-            mode="create"
-            trigger={
-              <Button className="mb-4">
-                <Plus />
-                <span>Create classroom</span>
-              </Button>
-            }
-          />
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
-            {classrooms.map((classroom) => (
-              <div key={classroom.id} className="flex max-w-full flex-col">
-                <ClassroomSummary
-                  classroom={classroom}
-                  studentCount={studentCounts[classroom.id] ?? 0}
-                />
-              </div>
-            ))}
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <SearchInput value={searchInput} onChange={setSearchInput} />
+            <ClassroomFormDialog
+              mode="create"
+              trigger={
+                <Button className="ml-auto">
+                  <Plus />
+                  <span>Create classroom</span>
+                </Button>
+              }
+            />
           </div>
+
+          {filteredClassrooms.length === 0 ? (
+            <EmptySearchNoResults onClear={() => setSearchInput("")} />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id}>
+                      {headerGroup.headers.map((header) => (
+                        <TableHead key={header.id}>
+                          {flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableHeader>
+                <TableBody>
+                  {table.getRowModel().rows.map((row) => (
+                    <TableRow
+                      key={row.id}
+                      tabIndex={0}
+                      role="link"
+                      aria-label={`View ${row.original.subject}`}
+                      className="cursor-pointer"
+                      onClick={() => navigate(`/classrooms/${row.original.id}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault()
+                          navigate(`/classrooms/${row.original.id}`)
+                        }
+                      }}
+                    >
+                      {row.getAllCells().map((cell) => (
+                        <TableCell
+                          key={cell.id}
+                          onClick={
+                            cell.column.id === "actions"
+                              ? (e) => e.stopPropagation()
+                              : undefined
+                          }
+                        >
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext()
+                          )}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <ClassroomPaginationControl
+                page={pageIndex + 1}
+                totalPages={table.getPageCount()}
+                totalCount={filteredClassrooms.length}
+                pageSize={pageSize}
+                onPageChange={(p) => table.setPageIndex(p - 1)}
+              />
+            </>
+          )}
         </div>
       )}
     </>

@@ -20,35 +20,55 @@ const initialState: ThemeProviderState = {
 
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
 
+/**
+ * Provides the app's light/dark/system theme, persisted to localStorage.
+ */
 export function ThemeProvider({
   children,
   defaultTheme = "light",
   storageKey = "vite-ui-theme",
   ...props
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window === "undefined") {
-      return defaultTheme
+  // Starts at `defaultTheme` (matching SSR) to avoid a hydration mismatch —
+  // the real stored value is synced in below, once mounted.
+  const [theme, setTheme] = useState<Theme>(defaultTheme)
+
+  useEffect(() => {
+    const stored = localStorage.getItem(storageKey) as Theme | null
+    if (stored && stored !== theme) {
+      setTheme(stored)
     }
-    return (localStorage.getItem(storageKey) as Theme) || defaultTheme
-  })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     const root = window.document.documentElement
 
-    root.classList.remove("light", "dark")
+    function applyTheme(t: Theme) {
+      root.classList.remove("light", "dark")
+      if (t === "system") {
+        const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
+          .matches
+          ? "dark"
+          : "light"
+        root.classList.add(systemTheme)
+        return
+      }
+      root.classList.add(t)
+    }
 
-    if (theme === "system") {
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-        .matches
-        ? "dark"
-        : "light"
+    applyTheme(theme)
 
-      root.classList.add(systemTheme)
+    if (theme !== "system") {
       return
     }
 
-    root.classList.add(theme)
+    // Keep a "system" selection live: reflect an OS theme change made while
+    // the tab stays open, not just at the next mount/reload.
+    const media = window.matchMedia("(prefers-color-scheme: dark)")
+    const onChange = () => applyTheme("system")
+    media.addEventListener("change", onChange)
+    return () => media.removeEventListener("change", onChange)
   }, [theme])
 
   const value = {
@@ -66,6 +86,10 @@ export function ThemeProvider({
   )
 }
 
+/**
+ * Reads the current theme and setter from `ThemeProvider`'s context.
+ * @returns The current theme and a setter function.
+ */
 export const useTheme = () => {
   const context = useContext(ThemeProviderContext)
 

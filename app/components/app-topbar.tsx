@@ -1,5 +1,5 @@
 import { Show, useClerk, useUser } from "@clerk/react-router"
-import { LogOut, Monitor, Moon, Plus, Settings, Sun } from "lucide-react"
+import { LogOut, Menu, Plus, Settings } from "lucide-react"
 import { Fragment, useState } from "react"
 import { Link, useMatches } from "react-router"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
@@ -28,15 +28,22 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"
-import { Input } from "~/components/ui/input"
+import { NavLoadingIndicator } from "~/components/nav-loading-indicator"
 import { Separator } from "~/components/ui/separator"
-import { SidebarTrigger } from "~/components/ui/sidebar"
-import { useTheme, type Theme } from "~/components/ui/theme-provider"
+import { useSidebar } from "~/components/ui/sidebar"
+import { useTheme } from "~/components/ui/theme-provider"
+import { isTheme, themeIcons, ThemeToggle } from "~/components/ui/theme-toggle"
+import { TopbarSearch } from "~/components/topbar-search"
+import { Wordmark } from "~/components/wordmark"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 
-function Breadcrumbs() {
+/**
+ * Breadcrumb trail entries built from matched routes' `handle.breadcrumb`.
+ * @returns The current route's breadcrumb entries, empty if none apply.
+ */
+function useBreadcrumbs() {
   const matches = useMatches()
-  const crumbs = matches
+  return matches
     .map((match) => {
       const handle = match.handle as BreadcrumbHandle | undefined
       if (typeof handle?.breadcrumb !== "function") return null
@@ -49,7 +56,17 @@ function Breadcrumbs() {
       return { id: match.id, to, label }
     })
     .filter((crumb) => crumb !== null)
+}
 
+/**
+ * Breadcrumb trail built from matched routes' `handle.breadcrumb`.
+ * @param crumbs - The breadcrumb entries to render, from `useBreadcrumbs`.
+ */
+function Breadcrumbs({
+  crumbs,
+}: {
+  crumbs: ReturnType<typeof useBreadcrumbs>
+}) {
   if (crumbs.length === 0) return null
 
   return (
@@ -79,6 +96,9 @@ function Breadcrumbs() {
   )
 }
 
+/**
+ * Topbar "Create" dropdown, opening the new-student/new-classroom dialogs.
+ */
 function CreateDropdown() {
   const [studentOpen, setStudentOpen] = useState(false)
   const [classroomOpen, setClassroomOpen] = useState(false)
@@ -117,16 +137,9 @@ function CreateDropdown() {
   )
 }
 
-const themeIcons = {
-  light: Sun,
-  dark: Moon,
-  system: Monitor,
-} as const
-
-function isTheme(value: unknown): value is Theme {
-  return value === "light" || value === "dark" || value === "system"
-}
-
+/**
+ * Signed-in account menu: profile, theme switcher, and sign out.
+ */
 function UserMenu() {
   const { user } = useUser()
   const { signOut, openUserProfile } = useClerk()
@@ -142,9 +155,7 @@ function UserMenu() {
     displayName.slice(0, 2).toUpperCase()
 
   // Avatar renders at size-8 (32px) — request a 2x-retina-sized crop
-  // instead of Clerk's full-size default image. imageUrl can be briefly
-  // empty right after a page refresh, before Clerk finishes loading the
-  // full user profile client-side.
+  // instead of Clerk's full-size default image.
   let avatarImageUrl: string | undefined
   if (user.imageUrl) {
     const url = new URL(user.imageUrl)
@@ -224,10 +235,14 @@ function UserMenu() {
   )
 }
 
+/**
+ * Signed-out (theme toggle + sign in) or signed-in (account menu) controls.
+ */
 function AuthControl() {
   return (
     <>
       <Show when="signed-out">
+        <ThemeToggle />
         <Button
           variant="default"
           nativeButton={false}
@@ -243,20 +258,37 @@ function AuthControl() {
   )
 }
 
+/**
+ * App-wide top bar: sidebar toggle, breadcrumbs, search, create menu, and auth controls.
+ */
 export function AppTopbar() {
+  const { toggleSidebar } = useSidebar()
+  const crumbs = useBreadcrumbs()
+
   return (
     <header className="sticky top-0 z-40 flex h-(--header-height) w-full shrink-0 items-center gap-2 border-b border-border bg-background px-4">
-      <SidebarTrigger />
-      <Link to="/" className="hidden items-center gap-2 font-medium md:flex">
-        <span>Seating Chart</span>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className="md:hidden"
+        onClick={toggleSidebar}
+        aria-label="Toggle Sidebar"
+      >
+        <Menu />
+      </Button>
+      <Link to="/" className="hidden md:flex">
+        <Wordmark textClassName="font-medium" />
       </Link>
-      <Separator
-        orientation="vertical"
-        className="hidden sm:block data-vertical:h-4 data-vertical:self-auto"
-      />
-      <Breadcrumbs />
+      {crumbs.length > 0 && (
+        <Separator
+          orientation="vertical"
+          className="hidden md:block data-vertical:h-4 data-vertical:self-auto"
+        />
+      )}
+      <Breadcrumbs crumbs={crumbs} />
       <div className="ml-auto flex items-center gap-2">
-        <Input placeholder="Search..." className="max-w-48 min-w-25" />
+        <NavLoadingIndicator />
+        <TopbarSearch />
         <CreateDropdown />
         <AuthControl />
       </div>

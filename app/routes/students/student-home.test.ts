@@ -57,6 +57,36 @@ describe("student-home loader", () => {
     expect(new URL(String(url)).searchParams.get("page_size")).toBe("20")
   })
 
+  it("falls back to the students-view-mode cookie when no ?view= param is present", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse({ ...emptyPage, page_size: 20 }))
+      .mockResolvedValueOnce(jsonResponse(noClassrooms))
+
+    const result = await loader(
+      makeArgs("http://test/students", {
+        headers: { Cookie: "students-view-mode=list" },
+      })
+    )
+
+    expect(result.viewMode).toBe("list")
+    const [url] = vi.mocked(fetch).mock.calls[0]
+    expect(new URL(String(url)).searchParams.get("page_size")).toBe("20")
+  })
+
+  it("an explicit ?view= param overrides the cookie", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse(emptyPage))
+      .mockResolvedValueOnce(jsonResponse(noClassrooms))
+
+    const result = await loader(
+      makeArgs("http://test/students?view=grid", {
+        headers: { Cookie: "students-view-mode=list" },
+      })
+    )
+
+    expect(result.viewMode).toBe("grid")
+  })
+
   it("clamps a non-numeric or negative page to 1", async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(jsonResponse(emptyPage))

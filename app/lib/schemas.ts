@@ -7,13 +7,10 @@ export const CreateStudentSchema = z.object({
   name: z
     .string()
     .trim()
-    .min(1, "Name must be at least 0 characters.")
+    .min(1, "Name must be at least 1 character.")
     .max(100, "Name must be at most 100 characters."),
-  // Nullish (not just nullable): image_url isn't a react-hook-form-registered
-  // field — StudentPhotoField's staged/removed state lives outside the form
-  // and is merged into the submit payload by hand in onSubmit — so the
-  // zodResolver-validated RHF values never contain this key at all.
-  // A plain string, not z.url(): this holds an S3 object key, not a URL.
+  // Nullish, not nullable: image_url is merged into the submit payload by
+  // hand (outside RHF); the string itself is an S3 object key, not a URL.
   image_url: z.string().min(1).nullish(),
 })
 
@@ -49,19 +46,19 @@ export const UpdateStudentSchema = z.object({
     z
       .string()
       .trim()
-      .min(1, "Name must be at least 0 characters.")
+      .min(1, "Name must be at least 1 character.")
       .max(100, "Name must be at most 100 characters.")
   ),
   image_url: z.string().min(1).nullish(),
 })
 
 export const CreateClassroomSchema = z.object({
-  period: z.coerce.number<number>().int().positive(),
+  period: z.coerce.number<number>().int().nonnegative(),
   subject: z
     .string()
     .trim()
-    .min(1, "Subject must be at least 0 characters.")
-    .max(50, "Subject must be at most 30 characters."),
+    .min(1, "Subject must be at least 1 character.")
+    .max(50, "Subject must be at most 50 characters."),
 })
 
 export const ClassroomSchema = CreateClassroomSchema.extend({
@@ -72,13 +69,13 @@ export const ClassroomSchema = CreateClassroomSchema.extend({
 export type Classroom = z.infer<typeof ClassroomSchema>
 
 export const UpdateClassroomSchema = z.object({
-  period: z.optional(z.coerce.number<number>().int().positive()),
+  period: z.optional(z.coerce.number<number>().int().nonnegative()),
   subject: z.optional(
     z
       .string()
       .trim()
-      .min(1, "Subject must be at least 0 characters.")
-      .max(50, "Subject must be at most 30 characters.")
+      .min(1, "Subject must be at least 1 character.")
+      .max(50, "Subject must be at most 50 characters.")
   ),
   boundary_width: z.optional(z.int().positive()),
   boundary_height: z.optional(z.int().positive()),
