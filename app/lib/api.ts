@@ -8,6 +8,7 @@ import {
   CreateStudentSchema,
   RandomizeSeatingChartOptionsSchema,
   SeatingChartSchema,
+  StudentLimitStatusSchema,
   StudentSchema,
   StudentsPageSchema,
   UpdateClassroomSchema,
@@ -19,6 +20,7 @@ import {
   type RandomizeSeatingChartOptions,
   type SeatingChart,
   type Student,
+  type StudentLimitStatus,
   type StudentsPage,
 } from "~/lib/schemas"
 
@@ -221,6 +223,17 @@ export async function getStudentsPage(
   }
 
   return apiFetch(`/students?${searchParams}`, StudentsPageSchema, { token })
+}
+
+/**
+ * Fetches the current user's student count against the account cap.
+ * @param token - The caller's session token, if any.
+ * @returns The current count and the cap it's measured against.
+ */
+export async function getStudentLimitStatus(
+  token?: string | null
+): Promise<StudentLimitStatus> {
+  return apiFetch(`/students/count`, StudentLimitStatusSchema, { token })
 }
 
 /**

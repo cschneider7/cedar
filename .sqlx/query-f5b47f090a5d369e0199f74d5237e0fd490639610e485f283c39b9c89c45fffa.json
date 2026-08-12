@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO students (user_id, student_id, name)\n            SELECT $1, gs, 'Student ' || gs FROM generate_series(1, $2::int) AS gs",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f5b47f090a5d369e0199f74d5237e0fd490639610e485f283c39b9c89c45fffa"
+}

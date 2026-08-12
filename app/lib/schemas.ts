@@ -34,6 +34,12 @@ export const BulkDeleteResultSchema = z.object({
 })
 export type BulkDeleteResult = z.infer<typeof BulkDeleteResultSchema>
 
+export const StudentLimitStatusSchema = z.object({
+  count: z.int().nonnegative(),
+  limit: z.int().positive(),
+})
+export type StudentLimitStatus = z.infer<typeof StudentLimitStatusSchema>
+
 export const UpdateStudentSchema = z.object({
   classroom_id: z.uuidv4().nullish(),
   student_id: z.optional(

@@ -2,7 +2,6 @@ import { flexRender, useTable } from "@tanstack/react-table"
 import { ClipboardList, Plus, Search } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router"
-import { toast } from "sonner"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
 import { Button } from "~/components/ui/button"
 import {
@@ -35,6 +34,7 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table"
+import { toast } from "~/components/ui/toast"
 import { getClassrooms, getStudents } from "~/lib/api"
 import { tokenFromRequest } from "~/lib/auth"
 import type { Student } from "~/lib/schemas"
@@ -252,7 +252,7 @@ export default function Component({ loaderData }: Route.ComponentProps) {
 
   useEffect(() => {
     if (studentsError) {
-      toast.warning("Couldn't load student counts.")
+      toast.add({ title: "Couldn't load student counts.", type: "warning" })
     }
   }, [studentsError])
 

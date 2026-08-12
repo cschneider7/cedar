@@ -7,7 +7,6 @@ import {
 } from "@xyflow/react"
 import { GripVerticalIcon, MinusIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { memo, useState } from "react"
-import { toast } from "sonner"
 import { BaseNode, BaseNodeContent } from "~/components/base-node"
 import {
   AlertDialog,
@@ -21,6 +20,7 @@ import {
   AlertDialogTitle,
 } from "~/components/ui/alert-dialog"
 import { Button } from "~/components/ui/button"
+import { toast } from "~/components/ui/toast"
 import {
   getBoundary,
   getSeatId,
@@ -97,7 +97,7 @@ export const TableNode = memo(function TableNode({
       positionAbsoluteX + width > boundary.width - TABLE_OFFSET ||
       positionAbsoluteY + height > boundary.height - TABLE_OFFSET
     ) {
-      toast.error("Not enough room to grow this table")
+      toast.add({ title: "Not enough room to grow this table", type: "error" })
       return
     }
     const newRow = data.rows
@@ -172,7 +172,7 @@ export const TableNode = memo(function TableNode({
       positionAbsoluteX + width > boundary.width - TABLE_OFFSET ||
       positionAbsoluteY + height > boundary.height - TABLE_OFFSET
     ) {
-      toast.error("Not enough room to grow this table")
+      toast.add({ title: "Not enough room to grow this table", type: "error" })
       return
     }
     const newCol = data.cols
