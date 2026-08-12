@@ -4,7 +4,6 @@ import { useEffect } from "react"
 import { Link } from "react-router"
 import { toast } from "sonner"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
-import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import {
   Empty,
@@ -23,7 +22,6 @@ import {
   ItemMedia,
   ItemTitle,
 } from "~/components/ui/item"
-import { useRecentClassrooms } from "~/hooks/use-recent-classrooms"
 import { getClassrooms, getStudents } from "~/lib/api"
 import type { Classroom } from "~/lib/schemas"
 import type { Route } from "./+types/home"
@@ -118,8 +116,8 @@ function EmptyDashboard() {
         </EmptyMedia>
         <EmptyTitle>No Classrooms Yet</EmptyTitle>
         <EmptyDescription>
-          You haven&apos;t created any classrooms yet. Get started by
-          creating your first classroom.
+          You haven&apos;t created any classrooms yet. Get started by creating
+          your first classroom.
         </EmptyDescription>
       </EmptyHeader>
       <EmptyContent className="flex-row justify-center gap-2">
@@ -154,26 +152,9 @@ function StatTile({
   )
 }
 
-function RecentClassroomItem({ classroom }: { classroom: Classroom }) {
-  return (
-    <Item
-      variant="outline"
-      render={<Link to={`/classrooms/${classroom.id}`} />}
-    >
-      <ItemContent>
-        <ItemTitle>{classroom.subject}</ItemTitle>
-      </ItemContent>
-      <ItemActions>
-        <Badge variant="secondary">Period {classroom.period}</Badge>
-      </ItemActions>
-    </Item>
-  )
-}
-
 export default function Home({ loaderData }: Route.ComponentProps) {
   const { isAuthenticated, classrooms, classroomsError, studentsError } =
     loaderData
-  const [recentIds] = useRecentClassrooms()
 
   useEffect(() => {
     if (classroomsError) toast.warning("Couldn't load classrooms.")
@@ -181,11 +162,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   useEffect(() => {
     if (studentsError) toast.warning("Couldn't load students.")
   }, [studentsError])
-
-  const classroomById = new Map(classrooms.map((c) => [c.id, c]))
-  const recentClassrooms = recentIds
-    .map((id) => classroomById.get(id))
-    .filter((c): c is Classroom => c !== undefined)
 
   return (
     <div className="flex h-full min-h-0 flex-col items-center gap-8 overflow-y-auto p-6">
@@ -200,35 +176,18 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       ) : classrooms.length === 0 && !classroomsError ? (
         <EmptyDashboard />
       ) : (
-        <div className="flex w-full max-w-md flex-col gap-8">
-          <ItemGroup>
-            <StatTile
-              icon={<ClipboardList className="size-7" />}
-              label="Classrooms"
-              to="/classrooms"
-            />
-            <StatTile
-              icon={<UsersRound className="size-7" />}
-              label="Students"
-              to="/students"
-            />
-          </ItemGroup>
-          {recentClassrooms.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <h2 className="text-sm font-medium text-muted-foreground">
-                Jump back in
-              </h2>
-              <ItemGroup>
-                {recentClassrooms.map((classroom) => (
-                  <RecentClassroomItem
-                    key={classroom.id}
-                    classroom={classroom}
-                  />
-                ))}
-              </ItemGroup>
-            </div>
-          )}
-        </div>
+        <ItemGroup className="w-full max-w-md">
+          <StatTile
+            icon={<ClipboardList className="size-7" />}
+            label="Classrooms"
+            to="/classrooms"
+          />
+          <StatTile
+            icon={<UsersRound className="size-7" />}
+            label="Students"
+            to="/students"
+          />
+        </ItemGroup>
       )}
     </div>
   )
