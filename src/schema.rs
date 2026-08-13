@@ -11,12 +11,36 @@ where
     Deserialize::deserialize(deserializer).map(Some)
 }
 
+/// A classroom's term season, paired with `term_year` to form e.g. "Fall 2026".
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum TermSeason {
+    Fall,
+    Winter,
+    Spring,
+    Summer,
+}
+
+impl TermSeason {
+    /// The lowercase string stored in the `term_season` DB column.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TermSeason::Fall => "fall",
+            TermSeason::Winter => "winter",
+            TermSeason::Spring => "spring",
+            TermSeason::Summer => "summer",
+        }
+    }
+}
+
 /// Request body for creating a classroom; boundary dimensions are not
 /// accepted here and instead take their DB column defaults.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ClassroomSchema {
     pub subject: String,
     pub period: i16,
+    pub term_season: TermSeason,
+    pub term_year: i16,
 }
 
 /// Request body for partially updating a classroom; omitted fields keep
@@ -25,6 +49,8 @@ pub struct ClassroomSchema {
 pub struct UpdateClassroomSchema {
     pub subject: Option<String>,
     pub period: Option<i16>,
+    pub term_season: Option<TermSeason>,
+    pub term_year: Option<i16>,
     pub boundary_width: Option<i32>,
     pub boundary_height: Option<i32>,
 }

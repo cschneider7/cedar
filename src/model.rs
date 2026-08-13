@@ -9,6 +9,8 @@ pub struct ClassroomModel {
     pub user_id: String,
     pub subject: String,
     pub period: i16,
+    pub term_season: String,
+    pub term_year: i16,
     pub boundary_width: i32,
     pub boundary_height: i32,
     pub created_time: Option<chrono::DateTime<chrono::Utc>>,

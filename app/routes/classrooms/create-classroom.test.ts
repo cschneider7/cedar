@@ -5,6 +5,8 @@ import { action } from "./create-classroom"
 const validPayload = {
   subject: "Math 2",
   period: 3,
+  term_season: "fall",
+  term_year: 2026,
 }
 
 const args = (body: unknown) =>

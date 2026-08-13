@@ -16,6 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"
+import { formatTerm } from "~/lib/classroom-term"
 import type { Classroom } from "~/lib/schemas"
 
 export const classroomTableFeatures = tableFeatures({
@@ -91,6 +92,12 @@ export function getClassroomColumns({
       cell: ({ row }) => (
         <Badge variant="secondary">Period {row.original.period}</Badge>
       ),
+    },
+    {
+      id: "term",
+      header: "Term",
+      cell: ({ row }) =>
+        formatTerm(row.original.term_season, row.original.term_year),
     },
     {
       id: "students",

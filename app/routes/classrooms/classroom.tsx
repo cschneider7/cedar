@@ -1,5 +1,6 @@
 import { SeatingChartCanvas } from "~/components/seating-chart/seating-chart-canvas"
 import { Separator } from "~/components/ui/separator"
+import { formatTerm } from "~/lib/classroom-term"
 import {
   getClassroom,
   getClassroomSeatingChart,
@@ -77,6 +78,13 @@ export default function Component({ loaderData }: Route.ComponentProps) {
           className="hidden sm:block data-vertical:h-4 data-vertical:self-auto"
         />
         <h3 className="font-heading text-lg font-light">{classroom.subject}</h3>
+        <Separator
+          orientation="vertical"
+          className="hidden sm:block data-vertical:h-4 data-vertical:self-auto"
+        />
+        <h3 className="font-heading text-lg font-light">
+          {formatTerm(classroom.term_season, classroom.term_year)}
+        </h3>
       </div>
       <SeatingChartCanvas
         classroomId={classroom.id}
