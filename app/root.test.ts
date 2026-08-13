@@ -17,6 +17,8 @@ describe("root loader", () => {
         id: "classroom-1",
         period: 2,
         subject: "Math",
+        term_season: "fall",
+        term_year: 2026,
         boundary_width: 1080,
         boundary_height: 820,
       },

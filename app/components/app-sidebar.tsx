@@ -37,6 +37,11 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "~/components/ui/sidebar"
+import { toast } from "~/components/ui/toast"
+import {
+  MAX_CLASSROOMS_PER_USER,
+  isAtClassroomLimit,
+} from "~/lib/classroom-limit"
 import type { Classroom } from "~/lib/schemas"
 import type { loader as rootLoader } from "~/root"
 
@@ -110,6 +115,17 @@ export function AppSidebar() {
   const location = useLocation()
   const revalidator = useRevalidator()
 
+  function handleNewClassroom() {
+    if (isAtClassroomLimit(classrooms.length, MAX_CLASSROOMS_PER_USER)) {
+      toast.add({
+        title: `You've reached the ${MAX_CLASSROOMS_PER_USER} classroom limit.`,
+        type: "error",
+      })
+      return
+    }
+    setCreateOpen(true)
+  }
+
   return (
     <Sidebar className="top-(--header-height) h-[calc(100svh-var(--header-height))]!">
       <SidebarHeader>
@@ -160,7 +176,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Seating Charts</SidebarGroupLabel>
           <SidebarGroupAction
             aria-label="New classroom"
-            onClick={() => setCreateOpen(true)}
+            onClick={handleNewClassroom}
           >
             <Plus />
           </SidebarGroupAction>

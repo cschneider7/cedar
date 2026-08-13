@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO classrooms (user_id, subject, period) VALUES ($1, $2, $3) RETURNING *",
+  "query": "UPDATE classrooms SET\n            subject = $1,\n            period = $2,\n            term_season = $3,\n            term_year = $4,\n            boundary_width = $5,\n            boundary_height = $6\n        WHERE id = $7\n        RETURNING *",
   "describe": {
     "columns": [
       {
@@ -49,6 +49,28 @@
       },
       {
         "ordinal": 4,
+        "name": "term_season",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "term_season"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "term_year",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "term_year"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
         "name": "boundary_width",
         "type_info": "Int4",
         "origin": {
@@ -59,7 +81,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 7,
         "name": "boundary_height",
         "type_info": "Int4",
         "origin": {
@@ -70,7 +92,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 8,
         "name": "created_time",
         "type_info": "Timestamptz",
         "origin": {
@@ -84,8 +106,12 @@
     "parameters": {
       "Left": [
         "Text",
+        "Int2",
         "Text",
-        "Int2"
+        "Int2",
+        "Int4",
+        "Int4",
+        "Uuid"
       ]
     },
     "nullable": [
@@ -95,8 +121,10 @@
       false,
       false,
       false,
+      false,
+      false,
       true
     ]
   },
-  "hash": "ad4f2b131162f5c55161c2a44e0dccdd5948fd5c12417443a10f64077fc739f5"
+  "hash": "21ef29bd48094a6df31249b88122a3ca02617e734825e19a238a98ea13587bed"
 }

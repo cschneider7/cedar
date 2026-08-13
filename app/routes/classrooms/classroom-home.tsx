@@ -3,6 +3,7 @@ import { ClipboardList, Plus, Search } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
+import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
 import {
   Empty,
@@ -37,6 +38,11 @@ import {
 import { toast } from "~/components/ui/toast"
 import { getClassrooms, getStudents } from "~/lib/api"
 import { tokenFromRequest } from "~/lib/auth"
+import {
+  MAX_CLASSROOMS_PER_USER,
+  isAtClassroomLimit,
+} from "~/lib/classroom-limit"
+import { formatTerm } from "~/lib/classroom-term"
 import type { Student } from "~/lib/schemas"
 import {
   classroomTableFeatures,
@@ -249,6 +255,18 @@ export default function Component({ loaderData }: Route.ComponentProps) {
   const { classrooms, studentCounts, studentsError } = loaderData
   const navigate = useNavigate()
   const [searchInput, setSearchInput] = useState("")
+  const [createOpen, setCreateOpen] = useState(false)
+
+  function handleOpenCreate() {
+    if (isAtClassroomLimit(classrooms.length, MAX_CLASSROOMS_PER_USER)) {
+      toast.add({
+        title: `You've reached the ${MAX_CLASSROOMS_PER_USER} classroom limit.`,
+        type: "error",
+      })
+      return
+    }
+    setCreateOpen(true)
+  }
 
   useEffect(() => {
     if (studentsError) {
@@ -259,8 +277,12 @@ export default function Component({ loaderData }: Route.ComponentProps) {
   const filteredClassrooms = useMemo(() => {
     const q = searchInput.trim().toLowerCase()
     if (!q) return classrooms
-    return classrooms.filter((classroom) =>
-      classroom.subject.toLowerCase().includes(q)
+    return classrooms.filter(
+      (classroom) =>
+        classroom.subject.toLowerCase().includes(q) ||
+        formatTerm(classroom.term_season, classroom.term_year)
+          .toLowerCase()
+          .includes(q)
     )
   }, [classrooms, searchInput])
 
@@ -287,16 +309,24 @@ export default function Component({ loaderData }: Route.ComponentProps) {
         <EmptyClassrooms />
       ) : (
         <div>
+          {classrooms.length >= Math.ceil(MAX_CLASSROOMS_PER_USER * 0.95) && (
+            <Alert className="mb-4">
+              <AlertDescription>
+                You&apos;re approaching the maximum number of classrooms -{" "}
+                {classrooms.length}/{MAX_CLASSROOMS_PER_USER}
+              </AlertDescription>
+            </Alert>
+          )}
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <SearchInput value={searchInput} onChange={setSearchInput} />
+            <Button className="ml-auto" onClick={handleOpenCreate}>
+              <Plus />
+              <span>Create classroom</span>
+            </Button>
             <ClassroomFormDialog
               mode="create"
-              trigger={
-                <Button className="ml-auto">
-                  <Plus />
-                  <span>Create classroom</span>
-                </Button>
-              }
+              open={createOpen}
+              onOpenChange={setCreateOpen}
             />
           </div>
 

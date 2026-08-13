@@ -49,6 +49,28 @@
       },
       {
         "ordinal": 4,
+        "name": "term_season",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "term_season"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "term_year",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "term_year"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
         "name": "boundary_width",
         "type_info": "Int4",
         "origin": {
@@ -59,7 +81,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 7,
         "name": "boundary_height",
         "type_info": "Int4",
         "origin": {
@@ -70,7 +92,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 8,
         "name": "created_time",
         "type_info": "Timestamptz",
         "origin": {
@@ -88,6 +110,8 @@
       ]
     },
     "nullable": [
+      false,
+      false,
       false,
       false,
       false,

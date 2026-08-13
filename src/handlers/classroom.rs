@@ -22,6 +22,25 @@ use crate::{
     seating_chart::{self, MAX_TABLE_DIMENSION},
 };
 
+/// Abuse-prevention ceiling: a flat cap on classrooms per user account.
+const MAX_CLASSROOMS_PER_USER: i64 = 50;
+
+/// Rejects a new classroom if `user_id` is already at `MAX_CLASSROOMS_PER_USER`.
+async fn check_classroom_limit(db: &sqlx::PgPool, user_id: &str) -> Result<(), AppError> {
+    let count = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) as "count!" FROM classrooms WHERE user_id = $1"#,
+        user_id
+    )
+    .fetch_one(db)
+    .await?;
+    if count >= MAX_CLASSROOMS_PER_USER {
+        return Err(AppError::BadRequest(
+            "Classroom limit reached (50 classrooms per account).".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// Lists every classroom owned by the current user, ordered by period.
 pub async fn classroom_list_handler(
     CurrentUserId(user_id): CurrentUserId,
@@ -63,18 +82,24 @@ pub async fn create_classroom_handler(
     State(data): State<Arc<AppState>>,
     Json(body): Json<ClassroomSchema>,
 ) -> Result<impl IntoResponse, AppError> {
+    check_classroom_limit(&data.db, &user_id).await?;
+
     let classroom = sqlx::query_as!(
         ClassroomModel,
         r#"INSERT INTO classrooms (
             user_id,
             subject,
-            period
+            period,
+            term_season,
+            term_year
         )
-        VALUES ($1, $2, $3)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING *"#,
         user_id,
         &body.subject,
         body.period,
+        body.term_season.as_str(),
+        body.term_year,
     )
     .fetch_one(&data.db)
     .await?;
@@ -101,6 +126,11 @@ pub async fn update_classroom_handler(
 
     let new_subject = body.subject.as_ref().unwrap_or(&classroom.subject);
     let new_period = body.period.unwrap_or(classroom.period);
+    let new_term_season = body
+        .term_season
+        .map(|s| s.as_str())
+        .unwrap_or(&classroom.term_season);
+    let new_term_year = body.term_year.unwrap_or(classroom.term_year);
     let new_boundary_width = body.boundary_width.unwrap_or(classroom.boundary_width);
     let new_boundary_height = body.boundary_height.unwrap_or(classroom.boundary_height);
 
@@ -109,12 +139,16 @@ pub async fn update_classroom_handler(
         r#"UPDATE classrooms SET
             subject = $1,
             period = $2,
-            boundary_width = $3,
-            boundary_height = $4
-        WHERE id = $5
+            term_season = $3,
+            term_year = $4,
+            boundary_width = $5,
+            boundary_height = $6
+        WHERE id = $7
         RETURNING *"#,
         &new_subject,
         new_period,
+        new_term_season,
+        new_term_year,
         new_boundary_width,
         new_boundary_height,
         &classroom.id
@@ -510,11 +544,90 @@ mod tests {
         .unwrap()
     }
 
+    async fn seed_classrooms(pool: &sqlx::PgPool, user_id: &str, count: i64) {
+        sqlx::query!(
+            r#"INSERT INTO classrooms (user_id, subject, period, term_season, term_year)
+            SELECT $1, 'Subject ' || gs, gs, 'fall', 2026 FROM generate_series(1, $2::int) AS gs"#,
+            user_id,
+            count as i32
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    #[sqlx::test]
+    async fn create_classroom_rejects_at_limit(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        seed_classrooms(&pool, &user_id, 50).await;
+
+        let body = json!({"subject": "One Too Many", "period": 1, "term_season": "fall", "term_year": 2026});
+        let response = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/classrooms",
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn create_classroom_allows_up_to_limit(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        seed_classrooms(&pool, &user_id, 49).await;
+
+        let body =
+            json!({"subject": "Last One", "period": 1, "term_season": "fall", "term_year": 2026});
+        let response = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/classrooms",
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn create_classroom_limit_is_per_user(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_a = test_user_id();
+        let user_b = test_user_id();
+        seed_classrooms(&pool, &user_a, 50).await;
+
+        let body =
+            json!({"subject": "New For B", "period": 1, "term_season": "fall", "term_year": 2026});
+        let response = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/classrooms",
+                body,
+                &user_b,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        Ok(())
+    }
+
     #[sqlx::test]
     async fn create_classroom_success(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
-        let body = json!({"subject": "Math 2", "period": 3});
+        let body =
+            json!({"subject": "Math 2", "period": 3, "term_season": "fall", "term_year": 2026});
 
         let response = app
             .oneshot(authenticated_json_request(
@@ -530,6 +643,8 @@ mod tests {
         let json = body_json(response).await;
         assert_eq!(json["data"]["subject"], "Math 2");
         assert_eq!(json["data"]["period"], 3);
+        assert_eq!(json["data"]["term_season"], "fall");
+        assert_eq!(json["data"]["term_year"], 2026);
 
         Ok(())
     }
@@ -538,7 +653,8 @@ mod tests {
     async fn create_classroom_defaults_boundary_dimensions(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
-        let body = json!({"subject": "Math 2", "period": 3});
+        let body =
+            json!({"subject": "Math 2", "period": 3, "term_season": "fall", "term_year": 2026});
 
         let response = app
             .oneshot(authenticated_json_request(
@@ -565,7 +681,8 @@ mod tests {
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
-        let body = json!({"subject": "Math 2", "period": 3});
+        let body =
+            json!({"subject": "Math 2", "period": 3, "term_season": "fall", "term_year": 2026});
         let first = app
             .clone()
             .oneshot(authenticated_json_request(
@@ -578,7 +695,8 @@ mod tests {
             .unwrap();
         assert_eq!(first.status(), StatusCode::CREATED);
 
-        let body = json!({"subject": "Math 2", "period": 3});
+        let body =
+            json!({"subject": "Math 2", "period": 3, "term_season": "fall", "term_year": 2026});
         let second = app
             .oneshot(authenticated_json_request(
                 "POST",
@@ -677,6 +795,35 @@ mod tests {
         assert_eq!(json["data"]["period"], 5);
         assert_eq!(json["data"]["boundary_width"], 1500);
         assert_eq!(json["data"]["boundary_height"], 1200);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn update_classroom_term_leaves_other_fields_unchanged(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let existing = insert_classroom(&pool, &user_id, "Math 2", 3).await;
+
+        let body = json!({"term_season": "spring", "term_year": 2027});
+        let response = app
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                &format!("/api/v1/classrooms/{}", existing.id),
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        assert_eq!(json["data"]["term_season"], "spring");
+        assert_eq!(json["data"]["term_year"], 2027);
+        assert_eq!(json["data"]["subject"], existing.subject);
+        assert_eq!(json["data"]["period"], existing.period);
 
         Ok(())
     }

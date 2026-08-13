@@ -37,6 +37,10 @@ import { toast } from "~/components/ui/toast"
 import { TopbarSearch } from "~/components/topbar-search"
 import { Wordmark } from "~/components/wordmark"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
+import {
+  MAX_CLASSROOMS_PER_USER,
+  isAtClassroomLimit,
+} from "~/lib/classroom-limit"
 import { isAtStudentLimit } from "~/lib/student-limit"
 import type { loader as rootLoader } from "~/root"
 
@@ -120,6 +124,22 @@ function CreateDropdown() {
     setStudentOpen(true)
   }
 
+  function handleNewClassroom() {
+    if (
+      isAtClassroomLimit(
+        rootData?.classrooms?.length ?? null,
+        MAX_CLASSROOMS_PER_USER
+      )
+    ) {
+      toast.add({
+        title: `You've reached the ${MAX_CLASSROOMS_PER_USER} classroom limit.`,
+        type: "error",
+      })
+      return
+    }
+    setClassroomOpen(true)
+  }
+
   return (
     <>
       <DropdownMenu>
@@ -135,7 +155,7 @@ function CreateDropdown() {
           <DropdownMenuItem onClick={handleNewStudent}>
             New student
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setClassroomOpen(true)}>
+          <DropdownMenuItem onClick={handleNewClassroom}>
             New classroom
           </DropdownMenuItem>
         </DropdownMenuContent>

@@ -1,5 +1,13 @@
 import * as z from "zod"
 import { MAX_TABLE_DIMENSION } from "~/lib/seating-chart-utils"
+import { TERM_SEASONS } from "~/lib/classroom-term"
+
+const currentYear = new Date().getFullYear()
+const termYearSchema = z.coerce
+  .number<number>()
+  .int()
+  .min(currentYear - 5, `Year must be ${currentYear - 5} or later.`)
+  .max(currentYear + 5, `Year must be ${currentYear + 5} or earlier.`)
 
 export const CreateStudentSchema = z.object({
   classroom_id: z.uuidv4().nullable(),
@@ -65,6 +73,8 @@ export const CreateClassroomSchema = z.object({
     .trim()
     .min(1, "Subject must be at least 1 character.")
     .max(50, "Subject must be at most 50 characters."),
+  term_season: z.enum(TERM_SEASONS),
+  term_year: termYearSchema,
 })
 
 export const ClassroomSchema = CreateClassroomSchema.extend({
@@ -83,6 +93,8 @@ export const UpdateClassroomSchema = z.object({
       .min(1, "Subject must be at least 1 character.")
       .max(50, "Subject must be at most 50 characters.")
   ),
+  term_season: z.optional(z.enum(TERM_SEASONS)),
+  term_year: z.optional(termYearSchema),
   boundary_width: z.optional(z.int().positive()),
   boundary_height: z.optional(z.int().positive()),
 })

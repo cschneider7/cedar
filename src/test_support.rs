@@ -101,6 +101,9 @@ pub fn authenticated_request(method: &str, uri: &str, user_id: &str) -> Request<
         .unwrap()
 }
 
+/// Inserts a classroom with a hardcoded default term ("fall" 2026) — term
+/// isn't relevant to most callers of this helper; tests exercising term
+/// behavior go through the real create/update handlers instead.
 pub async fn insert_classroom(
     pool: &sqlx::PgPool,
     user_id: &str,
@@ -109,7 +112,8 @@ pub async fn insert_classroom(
 ) -> ClassroomModel {
     sqlx::query_as!(
         ClassroomModel,
-        r#"INSERT INTO classrooms (user_id, subject, period) VALUES ($1, $2, $3) RETURNING *"#,
+        r#"INSERT INTO classrooms (user_id, subject, period, term_season, term_year)
+        VALUES ($1, $2, $3, 'fall', 2026) RETURNING *"#,
         user_id,
         subject,
         period

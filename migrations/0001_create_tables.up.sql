@@ -4,6 +4,8 @@ CREATE TABLE IF NOT EXISTS classrooms (
     user_id TEXT NOT NULL,
     subject TEXT NOT NULL,
     period SMALLINT NOT NULL,
+    term_season TEXT NOT NULL CHECK (term_season IN ('fall', 'winter', 'spring', 'summer')),
+    term_year SMALLINT NOT NULL,
     boundary_width INTEGER NOT NULL DEFAULT 1080,
     boundary_height INTEGER NOT NULL DEFAULT 820,
     created_time TIMESTAMPTZ DEFAULT now()

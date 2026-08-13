@@ -18,6 +18,9 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
+  FieldLegend,
+  FieldSeparator,
+  FieldSet,
 } from "~/components/ui/field"
 import { Input } from "~/components/ui/input"
 import {
@@ -30,6 +33,7 @@ import {
 } from "~/components/ui/select"
 import { Spinner } from "~/components/ui/spinner"
 import { useResourceFormDialog } from "~/hooks/use-resource-form-dialog"
+import { termSeasonOptions } from "~/lib/classroom-term"
 import type { Classroom } from "~/lib/schemas"
 import { CreateClassroomSchema, UpdateClassroomSchema } from "~/lib/schemas"
 
@@ -37,6 +41,12 @@ const periodOptions = Array.from({ length: 9 }, (_, i) => ({
   label: i.toString(),
   value: i,
 }))
+
+const currentYear = new Date().getFullYear()
+const yearOptions = Array.from({ length: 11 }, (_, i) => {
+  const year = currentYear - 5 + i
+  return { label: year.toString(), value: year }
+})
 
 type ClassroomFormDialogProps = (
   { mode: "create" } | { mode: "edit"; classroom: Classroom }
@@ -59,8 +69,13 @@ export function ClassroomFormDialog(props: ClassroomFormDialogProps) {
 
   const defaultValues =
     mode === "create"
-      ? { subject: "" }
-      : { subject: props.classroom.subject, period: props.classroom.period }
+      ? { subject: "", term_year: currentYear }
+      : {
+          subject: props.classroom.subject,
+          period: props.classroom.period,
+          term_season: props.classroom.term_season,
+          term_year: props.classroom.term_year,
+        }
 
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
@@ -105,62 +120,142 @@ export function ClassroomFormDialog(props: ClassroomFormDialogProps) {
         )}
         <form id="classroom-form" onSubmit={form.handleSubmit(onSubmit)}>
           <FieldGroup>
-            <Controller
-              name="subject"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel>
-                    Subject<span className="text-destructive">*</span>
-                  </FieldLabel>
-                  <Input
-                    {...field}
-                    aria-invalid={fieldState.invalid}
-                    placeholder="Math 2"
-                  />
-                  {fieldState.invalid && (
-                    <FieldError errors={[fieldState.error]} />
-                  )}
-                </Field>
-              )}
-            />
-            <Controller
-              name="period"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel>
-                    Period Number
-                    <span className="text-destructive">*</span>
-                  </FieldLabel>
-                  <Select
-                    name={field.name}
-                    value={field.value}
-                    onValueChange={field.onChange}
-                    items={periodOptions}
-                  >
-                    <SelectTrigger
+            <div className="flex items-start gap-4">
+              <Controller
+                name="subject"
+                control={form.control}
+                render={({ field, fieldState }) => (
+                  <Field className="flex-1" data-invalid={fieldState.invalid}>
+                    <FieldLabel>
+                      Subject<span className="text-destructive">*</span>
+                    </FieldLabel>
+                    <Input
+                      {...field}
                       aria-invalid={fieldState.invalid}
-                      className="w-full max-w-48"
+                      placeholder="Math 2"
+                    />
+                    {fieldState.invalid && (
+                      <FieldError errors={[fieldState.error]} />
+                    )}
+                  </Field>
+                )}
+              />
+              <Controller
+                name="period"
+                control={form.control}
+                render={({ field, fieldState }) => (
+                  <Field className="flex-1" data-invalid={fieldState.invalid}>
+                    <FieldLabel>
+                      Period Number
+                      <span className="text-destructive">*</span>
+                    </FieldLabel>
+                    <Select
+                      name={field.name}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      items={periodOptions}
                     >
-                      <SelectValue placeholder="Select a period" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        {periodOptions.map((item) => (
-                          <SelectItem key={item.value} value={item.value}>
-                            {item.label}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                  {fieldState.invalid && (
-                    <FieldError errors={[fieldState.error]} />
+                      <SelectTrigger
+                        aria-invalid={fieldState.invalid}
+                        className="w-full"
+                      >
+                        <SelectValue placeholder="Select a period" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {periodOptions.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    {fieldState.invalid && (
+                      <FieldError errors={[fieldState.error]} />
+                    )}
+                  </Field>
+                )}
+              />
+            </div>
+            <FieldSeparator />
+            <FieldSet>
+              <FieldLegend variant="label">Academic Term</FieldLegend>
+              <div className="flex items-start gap-4">
+                <Controller
+                  name="term_season"
+                  control={form.control}
+                  render={({ field, fieldState }) => (
+                    <Field className="flex-1" data-invalid={fieldState.invalid}>
+                      <FieldLabel className="font-normal">
+                        Season<span className="text-destructive">*</span>
+                      </FieldLabel>
+                      <Select
+                        name={field.name}
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        items={termSeasonOptions}
+                      >
+                        <SelectTrigger
+                          aria-invalid={fieldState.invalid}
+                          className="w-full"
+                        >
+                          <SelectValue placeholder="Select a season" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {termSeasonOptions.map((item) => (
+                              <SelectItem key={item.value} value={item.value}>
+                                {item.label}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      {fieldState.invalid && (
+                        <FieldError errors={[fieldState.error]} />
+                      )}
+                    </Field>
                   )}
-                </Field>
-              )}
-            />
+                />
+                <Controller
+                  name="term_year"
+                  control={form.control}
+                  render={({ field, fieldState }) => (
+                    <Field className="flex-1" data-invalid={fieldState.invalid}>
+                      <FieldLabel className="font-normal">
+                        Year<span className="text-destructive">*</span>
+                      </FieldLabel>
+                      <Select
+                        name={field.name}
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        items={yearOptions}
+                      >
+                        <SelectTrigger
+                          aria-invalid={fieldState.invalid}
+                          className="w-full"
+                        >
+                          <SelectValue placeholder="Select a year" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {yearOptions.map((item) => (
+                              <SelectItem key={item.value} value={item.value}>
+                                {item.label}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      {fieldState.invalid && (
+                        <FieldError errors={[fieldState.error]} />
+                      )}
+                    </Field>
+                  )}
+                />
+              </div>
+            </FieldSet>
           </FieldGroup>
         </form>
         <DialogFooter>

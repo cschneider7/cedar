@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO classrooms (\n            user_id,\n            subject,\n            period\n        )\n        VALUES ($1, $2, $3)\n        RETURNING *",
+  "query": "INSERT INTO classrooms (user_id, subject, period, term_season, term_year)\n        VALUES ($1, $2, $3, 'fall', 2026) RETURNING *",
   "describe": {
     "columns": [
       {
@@ -49,6 +49,28 @@
       },
       {
         "ordinal": 4,
+        "name": "term_season",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "term_season"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "term_year",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "term_year"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
         "name": "boundary_width",
         "type_info": "Int4",
         "origin": {
@@ -59,7 +81,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 7,
         "name": "boundary_height",
         "type_info": "Int4",
         "origin": {
@@ -70,7 +92,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 8,
         "name": "created_time",
         "type_info": "Timestamptz",
         "origin": {
@@ -95,8 +117,10 @@
       false,
       false,
       false,
+      false,
+      false,
       true
     ]
   },
-  "hash": "e8d7009cb021d51642d99bf4c8d7479ee2c700a7bdde13fb07c3b6897df0830d"
+  "hash": "0308268b747ace6ae35501d3c966b5c51bdb38f2cbe9c7d40ce8d9a0bafcd952"
 }
