@@ -186,10 +186,7 @@ export function ClassroomFormDialog(props: ClassroomFormDialogProps) {
                   name="term_season"
                   control={form.control}
                   render={({ field, fieldState }) => (
-                    <Field
-                      className="flex-1"
-                      data-invalid={fieldState.invalid}
-                    >
+                    <Field className="flex-1" data-invalid={fieldState.invalid}>
                       <FieldLabel className="font-normal">
                         Season<span className="text-destructive">*</span>
                       </FieldLabel>
@@ -225,10 +222,7 @@ export function ClassroomFormDialog(props: ClassroomFormDialogProps) {
                   name="term_year"
                   control={form.control}
                   render={({ field, fieldState }) => (
-                    <Field
-                      className="flex-1"
-                      data-invalid={fieldState.invalid}
-                    >
+                    <Field className="flex-1" data-invalid={fieldState.invalid}>
                       <FieldLabel className="font-normal">
                         Year<span className="text-destructive">*</span>
                       </FieldLabel>

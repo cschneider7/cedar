@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT * FROM classrooms WHERE id = $1 AND user_id = $2",
+  "query": "UPDATE classrooms SET\n            subject = $1,\n            period = $2,\n            term_season = $3,\n            term_year = $4,\n            boundary_width = $5,\n            boundary_height = $6\n        WHERE id = $7\n        RETURNING *",
   "describe": {
     "columns": [
       {
@@ -105,8 +105,13 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid",
-        "Text"
+        "Text",
+        "Int2",
+        "Text",
+        "Int2",
+        "Int4",
+        "Int4",
+        "Uuid"
       ]
     },
     "nullable": [
@@ -121,5 +126,5 @@
       true
     ]
   },
-  "hash": "1abff504da873f64999ff0bb37f897fc4bd056c02217418bea0d68eb1f99fdb2"
+  "hash": "21ef29bd48094a6df31249b88122a3ca02617e734825e19a238a98ea13587bed"
 }

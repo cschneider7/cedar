@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT * FROM classrooms WHERE id = $1 AND user_id = $2",
+  "query": "INSERT INTO classrooms (\n            user_id,\n            subject,\n            period,\n            term_season,\n            term_year\n        )\n        VALUES ($1, $2, $3, $4, $5)\n        RETURNING *",
   "describe": {
     "columns": [
       {
@@ -105,8 +105,11 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid",
-        "Text"
+        "Text",
+        "Text",
+        "Int2",
+        "Text",
+        "Int2"
       ]
     },
     "nullable": [
@@ -121,5 +124,5 @@
       true
     ]
   },
-  "hash": "1abff504da873f64999ff0bb37f897fc4bd056c02217418bea0d68eb1f99fdb2"
+  "hash": "9f7cd83ab574ef1e42bbec8f9f9099333bf539bd7883debff9bef0a7ba7bea94"
 }
