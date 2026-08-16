@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { DeleteConfirmDialog } from "~/components/delete-confirm-dialog"
 import { useDeleteResource } from "~/hooks/use-delete-resource"
+import { formatClassroomName } from "~/lib/classroom-term"
 import type { Classroom } from "~/lib/schemas"
 
 /**
@@ -40,7 +41,7 @@ export function DeleteClassroomDialog({
       trigger={trigger}
       open={isOpen}
       onOpenChange={setOpen}
-      title={`Delete Period ${classroom.period} - ${classroom.subject}?`}
+      title={`Delete ${formatClassroomName(classroom)}?`}
       description="This will permanently delete the classroom and cannot be undone. Are you sure you want to continue?"
       isDeleting={isDeleting}
       error={error}

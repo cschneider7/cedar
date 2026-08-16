@@ -1,6 +1,9 @@
+import { useRouteLoaderData } from "react-router"
+import { PinToggleButton } from "~/components/pin-toggle-button"
 import { SeatingChartCanvas } from "~/components/seating-chart/seating-chart-canvas"
 import { Separator } from "~/components/ui/separator"
-import { formatTerm } from "~/lib/classroom-term"
+import { getPinnedClassrooms } from "~/lib/classroom-limit"
+import { formatClassroomName, formatTerm } from "~/lib/classroom-term"
 import {
   getClassroom,
   getClassroomSeatingChart,
@@ -11,11 +14,12 @@ import {
 import { tokenFromRequest } from "~/lib/auth"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 import { SeatingChartSchema } from "~/lib/schemas"
+import type { loader as rootLoader } from "~/root"
 import type { Route } from "./+types/classroom"
 
 export const handle: BreadcrumbHandle = {
   breadcrumb: (data: Route.ComponentProps["loaderData"] | undefined) =>
-    data ? `Period ${data.classroom.period} — ${data.classroom.subject}` : "",
+    data ? formatClassroomName(data.classroom) : "",
   to: (data: Route.ComponentProps["loaderData"] | undefined) =>
     data ? `/classrooms/${data.classroom.id}` : "/classrooms",
 }
@@ -68,6 +72,8 @@ export async function action(args: Route.ActionArgs) {
 
 export default function Component({ loaderData }: Route.ComponentProps) {
   const { classroom, students, seatingChart } = loaderData
+  const rootData = useRouteLoaderData<typeof rootLoader>("root")
+  const pinnedCount = getPinnedClassrooms(rootData?.classrooms ?? []).length
 
   return (
     <div className="flex h-full flex-col">
@@ -85,6 +91,7 @@ export default function Component({ loaderData }: Route.ComponentProps) {
         <h3 className="font-heading text-lg font-light">
           {formatTerm(classroom.term_season, classroom.term_year)}
         </h3>
+        <PinToggleButton classroom={classroom} pinnedCount={pinnedCount} />
       </div>
       <SeatingChartCanvas
         classroomId={classroom.id}

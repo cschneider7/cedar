@@ -162,6 +162,7 @@ describe("student-home loader", () => {
         term_year: 2026,
         boundary_width: 1080,
         boundary_height: 820,
+        pinned_at: null,
       },
     ]
     vi.mocked(fetch)

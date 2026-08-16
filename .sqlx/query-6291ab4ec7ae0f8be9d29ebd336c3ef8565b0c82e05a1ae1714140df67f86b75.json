@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE classrooms SET\n            subject = $1,\n            period = $2,\n            term_season = $3,\n            term_year = $4,\n            boundary_width = $5,\n            boundary_height = $6\n        WHERE id = $7\n        RETURNING *",
+  "query": "UPDATE classrooms SET\n            subject = $1,\n            period = $2,\n            term_season = $3,\n            term_year = $4,\n            boundary_width = $5,\n            boundary_height = $6,\n            pinned_at = $7\n        WHERE id = $8\n        RETURNING *",
   "describe": {
     "columns": [
       {
@@ -101,6 +101,17 @@
             "name": "created_time"
           }
         }
+      },
+      {
+        "ordinal": 9,
+        "name": "pinned_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "pinned_at"
+          }
+        }
       }
     ],
     "parameters": {
@@ -111,6 +122,7 @@
         "Int2",
         "Int4",
         "Int4",
+        "Timestamptz",
         "Uuid"
       ]
     },
@@ -123,8 +135,9 @@
       false,
       false,
       false,
+      true,
       true
     ]
   },
-  "hash": "21ef29bd48094a6df31249b88122a3ca02617e734825e19a238a98ea13587bed"
+  "hash": "6291ab4ec7ae0f8be9d29ebd336c3ef8565b0c82e05a1ae1714140df67f86b75"
 }

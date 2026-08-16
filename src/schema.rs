@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 use uuid::Uuid;
 
@@ -53,6 +54,8 @@ pub struct UpdateClassroomSchema {
     pub term_year: Option<i16>,
     pub boundary_width: Option<i32>,
     pub boundary_height: Option<i32>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub pinned_at: Option<Option<DateTime<Utc>>>,
 }
 
 /// Request body for creating a student.
