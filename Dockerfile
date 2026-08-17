@@ -7,7 +7,9 @@ ARG RUST_VERSION=1.97.1
 ARG NODE_VERSION=26
 
 # ---------------------------------------------------------------------------
-# Backend (Rust/Axum, class_management package) — targets: backend-dev, backend
+# Backend (Rust/Axum, class_management package) — target: backend-dev
+# (production runs as Vercel Functions, built by Vercel itself — see
+# vercel.json/api/index.rs — not by this Dockerfile.)
 # ---------------------------------------------------------------------------
 FROM rust:${RUST_VERSION}-slim-trixie AS backend-system-deps
 WORKDIR /app
@@ -32,27 +34,6 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.backend.sh
 
 EXPOSE 3000
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.backend.sh"]
-
-# Production build (fly.toml builds this with `build-target = "backend"`).
-FROM backend-system-deps AS backend-builder
-COPY Cargo.toml Cargo.lock ./
-COPY src src
-COPY .sqlx .sqlx
-COPY migrations migrations
-
-ENV SQLX_OFFLINE=true
-RUN cargo build --release
-
-FROM debian:trixie-slim AS backend
-WORKDIR /app
-
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=backend-builder /app/target/release/class_management /app/class_management
-
-EXPOSE 3000
-CMD ["/app/class_management"]
 
 # ---------------------------------------------------------------------------
 # Frontend (React Router) — targets: frontend-dev, frontend (default target)
