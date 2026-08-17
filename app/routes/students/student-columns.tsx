@@ -24,6 +24,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"
+import { formatClassroomName } from "~/lib/classroom-term"
 import type { Classroom, Student } from "~/lib/schemas"
 
 export type StudentSortKey = "name" | "student_id" | "classroom"
@@ -200,7 +201,7 @@ export function getStudentColumns({
           ? classroomById.get(row.original.classroom_id)
           : undefined
         return classroom ? (
-          <Badge variant="secondary">Period {classroom.period}</Badge>
+          <Badge variant="secondary">{formatClassroomName(classroom)}</Badge>
         ) : (
           <Badge variant="outline">Unassigned</Badge>
         )

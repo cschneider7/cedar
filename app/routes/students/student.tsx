@@ -22,6 +22,7 @@ import { StudentFormDialog } from "~/components/student-form-dialog"
 import { getClassroom, getStudent, toRouteError } from "~/lib/api"
 import { tokenFromRequest } from "~/lib/auth"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
+import { formatClassroomName } from "~/lib/classroom-term"
 import type { Route } from "./+types/student"
 
 export const handle: BreadcrumbHandle = {
@@ -75,7 +76,7 @@ export default function Component({ loaderData }: Route.ComponentProps) {
                       variant="secondary"
                       render={<Link to={`/classrooms/${classroom.id}`} />}
                     >
-                      Period {classroom.period}
+                      {formatClassroomName(classroom)}
                     </Badge>
                   }
                 />

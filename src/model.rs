@@ -14,6 +14,7 @@ pub struct ClassroomModel {
     pub boundary_width: i32,
     pub boundary_height: i32,
     pub created_time: Option<chrono::DateTime<chrono::Utc>>,
+    pub pinned_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// Row shape of the `students` table. `user_id` is a Clerk user id, not a UUID.

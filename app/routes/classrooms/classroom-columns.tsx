@@ -8,7 +8,7 @@ import { MoreHorizontalIcon, PencilIcon, Trash2Icon } from "lucide-react"
 import { useState } from "react"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
 import { DeleteClassroomDialog } from "~/components/delete-classroom-dialog"
-import { Badge } from "~/components/ui/badge"
+import { PinToggleButton } from "~/components/pin-toggle-button"
 import { Button } from "~/components/ui/button"
 import {
   DropdownMenu,
@@ -76,11 +76,24 @@ function ActionsCell({ classroom }: { classroom: Classroom }) {
 export function getClassroomColumns({
   studentCounts,
   studentsError,
+  pinnedCount,
 }: {
   studentCounts: Record<string, number>
   studentsError: boolean
+  pinnedCount: number
 }): ColumnDef<typeof classroomTableFeatures, Classroom>[] {
   return [
+    {
+      id: "pin",
+      header: "",
+      cell: ({ row }) => (
+        <PinToggleButton
+          classroom={row.original}
+          pinnedCount={pinnedCount}
+          label={row.original.subject}
+        />
+      ),
+    },
     {
       accessorKey: "subject",
       header: "Subject",
@@ -89,9 +102,7 @@ export function getClassroomColumns({
     {
       id: "period",
       header: "Period",
-      cell: ({ row }) => (
-        <Badge variant="secondary">Period {row.original.period}</Badge>
-      ),
+      cell: ({ row }) => row.original.period,
     },
     {
       id: "term",

@@ -34,6 +34,7 @@ import {
   type PhotoFieldValue,
 } from "~/components/student-photo-field"
 import { useResourceFormDialog } from "~/hooks/use-resource-form-dialog"
+import { formatClassroomName } from "~/lib/classroom-term"
 import type { Classroom, Student } from "~/lib/schemas"
 import { CreateStudentSchema, UpdateStudentSchema } from "~/lib/schemas"
 
@@ -176,7 +177,7 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
   ]
   classrooms.forEach((classroom) => {
     classroomOptions.push({
-      label: `Period ${classroom.period} - ${classroom.subject}`,
+      label: formatClassroomName(classroom),
       value: classroom.id,
     })
   })

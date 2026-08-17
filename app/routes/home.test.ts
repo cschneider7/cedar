@@ -19,6 +19,7 @@ const classrooms: Classroom[] = [
     term_year: 2026,
     boundary_width: 1080,
     boundary_height: 820,
+    pinned_at: null,
   },
   {
     id: "c2",
@@ -28,6 +29,7 @@ const classrooms: Classroom[] = [
     term_year: 2026,
     boundary_width: 1080,
     boundary_height: 820,
+    pinned_at: null,
   },
 ]
 
@@ -63,13 +65,12 @@ describe("home loader", () => {
     expect(fetch).not.toHaveBeenCalled()
     expect(result).toEqual({
       isAuthenticated: false,
-      classrooms: [],
       classroomsError: false,
       studentsError: false,
     })
   })
 
-  it("returns classrooms when both calls succeed", async () => {
+  it("returns no error flags when both calls succeed", async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(jsonResponse(classrooms))
       .mockResolvedValueOnce(jsonResponse(students))
@@ -78,20 +79,18 @@ describe("home loader", () => {
 
     expect(result).toEqual({
       isAuthenticated: true,
-      classrooms,
       classroomsError: false,
       studentsError: false,
     })
   })
 
-  it("degrades to an empty classroom list and an error flag when getClassrooms fails", async () => {
+  it("sets an error flag when getClassrooms fails", async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(new Response(null, { status: 500 }))
       .mockResolvedValueOnce(jsonResponse(students))
 
     const result = await loader(loaderArgs())
 
-    expect(result.classrooms).toEqual([])
     expect(result.classroomsError).toBe(true)
     expect(result.studentsError).toBe(false)
   })
@@ -103,7 +102,6 @@ describe("home loader", () => {
 
     const result = await loader(loaderArgs())
 
-    expect(result.classrooms).toEqual(classrooms)
     expect(result.classroomsError).toBe(false)
     expect(result.studentsError).toBe(true)
   })

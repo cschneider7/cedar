@@ -1,11 +1,5 @@
-import {
-  ClipboardList,
-  Home,
-  MoreHorizontal,
-  Plus,
-  UsersRound,
-} from "lucide-react"
-import { useState } from "react"
+import { ClipboardList, Home, MoreHorizontal, UsersRound } from "lucide-react"
+import { useMemo, useState } from "react"
 import {
   Link,
   NavLink,
@@ -20,6 +14,7 @@ import { Wordmark } from "~/components/wordmark"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -28,7 +23,6 @@ import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
-  SidebarGroupAction,
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
@@ -37,26 +31,63 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "~/components/ui/sidebar"
-import { toast } from "~/components/ui/toast"
-import {
-  MAX_CLASSROOMS_PER_USER,
-  isAtClassroomLimit,
-} from "~/lib/classroom-limit"
+import { useClassroomPatch } from "~/hooks/use-classroom-patch"
+import { usePinClassroom } from "~/hooks/use-pin-classroom"
+import { getPinnedClassrooms } from "~/lib/classroom-limit"
+import { formatClassroomName } from "~/lib/classroom-term"
 import type { Classroom } from "~/lib/schemas"
 import type { loader as rootLoader } from "~/root"
 
 /**
- * One classroom's row in the sidebar, with a view/edit/delete actions menu.
+ * Swaps `pinned_at` between two pinned classrooms via two independent
+ * `useClassroomPatch` fetchers — there's no dedicated reorder endpoint.
+ * React Router's automatic post-action revalidation refreshes the sidebar
+ * once both writes land, so no manual revalidate is needed here. If the
+ * second write fails after the first succeeds, the pinned order can end up
+ * slightly wrong — not worth transactional reorder machinery for a 10-item
+ * cosmetic ordering.
+ */
+function useReorderPinnedClassrooms() {
+  const a = useClassroomPatch()
+  const b = useClassroomPatch()
+  const isSwapping = a.fetcher.state !== "idle" || b.fetcher.state !== "idle"
+
+  function swap(
+    x: { id: string; pinned_at: string },
+    y: { id: string; pinned_at: string }
+  ) {
+    a.submit(x.id, { pinned_at: y.pinned_at })
+    b.submit(y.id, { pinned_at: x.pinned_at })
+  }
+
+  return { swap, isSwapping }
+}
+
+/**
+ * One pinned classroom's row in the sidebar, with a
+ * view/edit/pin/reorder/delete actions menu.
  */
 function ClassroomRow({
   classroom,
+  pinnedCount,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
   onRequestDelete,
 }: {
   classroom: Classroom
+  pinnedCount: number
+  canMoveUp: boolean
+  canMoveDown: boolean
+  onMoveUp: () => void
+  onMoveDown: () => void
   onRequestDelete: () => void
 }) {
   const [editOpen, setEditOpen] = useState(false)
   const location = useLocation()
+  const { setPinned, isPending: isPinPending } = usePinClassroom()
+  const isPinned = classroom.pinned_at != null
 
   return (
     <SidebarMenuItem>
@@ -64,9 +95,7 @@ function ClassroomRow({
         isActive={location.pathname === `/classrooms/${classroom.id}`}
         render={<NavLink to={`/classrooms/${classroom.id}`} />}
       >
-        <span className="truncate">
-          Period {classroom.period} — {classroom.subject}
-        </span>
+        <span className="truncate">{formatClassroomName(classroom)}</span>
       </SidebarMenuButton>
       <DropdownMenu>
         <DropdownMenuTrigger
@@ -77,14 +106,31 @@ function ClassroomRow({
           }
         />
         <DropdownMenuContent side="right" align="start">
-          <DropdownMenuItem
-            render={<Link to={`/classrooms/${classroom.id}`} />}
-          >
-            View
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setEditOpen(true)}>
-            Edit
-          </DropdownMenuItem>
+          <DropdownMenuGroup>
+            <DropdownMenuItem
+              render={<Link to={`/classrooms/${classroom.id}`} />}
+            >
+              View
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setEditOpen(true)}>
+              Edit
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuItem
+              disabled={isPinPending}
+              onClick={() => setPinned(classroom.id, !isPinned, pinnedCount)}
+            >
+              {isPinned ? "Unpin" : "Pin"}
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={!canMoveUp} onClick={onMoveUp}>
+              Move Up
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={!canMoveDown} onClick={onMoveDown}>
+              Move Down
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onClick={onRequestDelete}>
             Delete
@@ -108,23 +154,17 @@ export function AppSidebar() {
   const rootData = useRouteLoaderData<typeof rootLoader>("root")
   const classrooms = rootData?.classrooms ?? []
   const classroomsError = rootData?.classroomsError ?? false
-  const [createOpen, setCreateOpen] = useState(false)
   const [deletingClassroom, setDeletingClassroom] = useState<Classroom | null>(
     null
   )
   const location = useLocation()
   const revalidator = useRevalidator()
+  const { swap, isSwapping } = useReorderPinnedClassrooms()
 
-  function handleNewClassroom() {
-    if (isAtClassroomLimit(classrooms.length, MAX_CLASSROOMS_PER_USER)) {
-      toast.add({
-        title: `You've reached the ${MAX_CLASSROOMS_PER_USER} classroom limit.`,
-        type: "error",
-      })
-      return
-    }
-    setCreateOpen(true)
-  }
+  const pinnedClassrooms = useMemo(
+    () => getPinnedClassrooms(classrooms),
+    [classrooms]
+  )
 
   return (
     <Sidebar className="top-(--header-height) h-[calc(100svh-var(--header-height))]!">
@@ -174,12 +214,6 @@ export function AppSidebar() {
 
         <SidebarGroup>
           <SidebarGroupLabel>Seating Charts</SidebarGroupLabel>
-          <SidebarGroupAction
-            aria-label="New classroom"
-            onClick={handleNewClassroom}
-          >
-            <Plus />
-          </SidebarGroupAction>
           <SidebarGroupContent>
             {classroomsError ? (
               <div className="flex flex-col gap-1 px-2 py-1 text-sm text-muted-foreground">
@@ -194,12 +228,27 @@ export function AppSidebar() {
                   Retry
                 </Button>
               </div>
+            ) : pinnedClassrooms.length === 0 ? (
+              <div className="px-4 py-1 text-sm text-muted-foreground italic">
+                Empty
+              </div>
             ) : (
               <SidebarMenu className="gap-1">
-                {classrooms.map((classroom) => (
+                {pinnedClassrooms.map((classroom, index) => (
                   <ClassroomRow
                     key={classroom.id}
                     classroom={classroom}
+                    pinnedCount={pinnedClassrooms.length}
+                    canMoveUp={index > 0 && !isSwapping}
+                    canMoveDown={
+                      index < pinnedClassrooms.length - 1 && !isSwapping
+                    }
+                    onMoveUp={() =>
+                      swap(classroom, pinnedClassrooms[index - 1])
+                    }
+                    onMoveDown={() =>
+                      swap(classroom, pinnedClassrooms[index + 1])
+                    }
                     onRequestDelete={() => setDeletingClassroom(classroom)}
                   />
                 ))}
@@ -213,11 +262,6 @@ export function AppSidebar() {
           <SidebarGroupContent></SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <ClassroomFormDialog
-        mode="create"
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-      />
       {deletingClassroom && (
         <DeleteClassroomDialog
           classroom={deletingClassroom}

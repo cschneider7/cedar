@@ -81,6 +81,7 @@ export const ClassroomSchema = CreateClassroomSchema.extend({
   id: z.string().min(1),
   boundary_width: z.int(),
   boundary_height: z.int(),
+  pinned_at: z.string().nullable(),
 })
 export type Classroom = z.infer<typeof ClassroomSchema>
 
@@ -97,6 +98,7 @@ export const UpdateClassroomSchema = z.object({
   term_year: z.optional(termYearSchema),
   boundary_width: z.optional(z.int().positive()),
   boundary_height: z.optional(z.int().positive()),
+  pinned_at: z.string().nullable().optional(),
 })
 
 export const SeatingChartSchema = z.object({

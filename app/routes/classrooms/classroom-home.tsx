@@ -40,6 +40,7 @@ import { getClassrooms, getStudents } from "~/lib/api"
 import { tokenFromRequest } from "~/lib/auth"
 import {
   MAX_CLASSROOMS_PER_USER,
+  getPinnedClassrooms,
   isAtClassroomLimit,
 } from "~/lib/classroom-limit"
 import { formatTerm } from "~/lib/classroom-term"
@@ -286,9 +287,14 @@ export default function Component({ loaderData }: Route.ComponentProps) {
     )
   }, [classrooms, searchInput])
 
+  const pinnedCount = useMemo(
+    () => getPinnedClassrooms(classrooms).length,
+    [classrooms]
+  )
+
   const columns = useMemo(
-    () => getClassroomColumns({ studentCounts, studentsError }),
-    [studentCounts, studentsError]
+    () => getClassroomColumns({ studentCounts, studentsError, pinnedCount }),
+    [studentCounts, studentsError, pinnedCount]
   )
 
   const table = useTable({
@@ -369,7 +375,8 @@ export default function Component({ loaderData }: Route.ComponentProps) {
                         <TableCell
                           key={cell.id}
                           onClick={
-                            cell.column.id === "actions"
+                            cell.column.id === "actions" ||
+                            cell.column.id === "pin"
                               ? (e) => e.stopPropagation()
                               : undefined
                           }

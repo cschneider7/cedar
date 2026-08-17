@@ -21,6 +21,7 @@ describe("create-classroom action", () => {
       ...validPayload,
       boundary_width: 1080,
       boundary_height: 820,
+      pinned_at: null,
     }
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response(JSON.stringify({ data: createdClassroom }), {

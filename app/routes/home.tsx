@@ -2,16 +2,6 @@ import { getAuth } from "@clerk/react-router/server"
 import { ArrowUpRightIcon, ClipboardList, UsersRound } from "lucide-react"
 import { useEffect } from "react"
 import { Link } from "react-router"
-import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
-import { Button } from "~/components/ui/button"
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "~/components/ui/empty"
 import {
   Item,
   ItemActions,
@@ -23,7 +13,6 @@ import {
 } from "~/components/ui/item"
 import { toast } from "~/components/ui/toast"
 import { getClassrooms, getStudents } from "~/lib/api"
-import type { Classroom } from "~/lib/schemas"
 import type { Route } from "./+types/home"
 
 export function meta({}: Route.MetaArgs) {
@@ -42,19 +31,18 @@ export async function loader(args: Route.LoaderArgs) {
   if (!isAuthenticated) {
     return {
       isAuthenticated: false as const,
-      classrooms: [],
       classroomsError: false,
       studentsError: false,
     }
   }
   const token = await getToken()
-  const [classroomsResult, studentsFailed] = await Promise.all([
+  // Classrooms/students are only fetched to detect a reachability failure
+  // for the toasts below — the dashboard doesn't display their data itself.
+  const [classroomsFailed, studentsFailed] = await Promise.all([
     getClassrooms(token).then(
-      (classrooms) => ({ classrooms, failed: false }),
-      () => ({ classrooms: [] as Classroom[], failed: true })
+      () => false,
+      () => true
     ),
-    // Students are only fetched to detect a reachability failure for the
-    // toast below — the dashboard doesn't display student data itself.
     getStudents(token).then(
       () => false,
       () => true
@@ -62,8 +50,7 @@ export async function loader(args: Route.LoaderArgs) {
   ])
   return {
     isAuthenticated: true as const,
-    classrooms: classroomsResult.classrooms,
-    classroomsError: classroomsResult.failed,
+    classroomsError: classroomsFailed,
     studentsError: studentsFailed,
   }
 }
@@ -107,29 +94,6 @@ function SignedOutHome() {
   )
 }
 
-function EmptyDashboard() {
-  return (
-    <Empty>
-      <EmptyHeader>
-        <EmptyMedia variant="icon">
-          <ClipboardList />
-        </EmptyMedia>
-        <EmptyTitle>No Classrooms Yet</EmptyTitle>
-        <EmptyDescription>
-          You haven&apos;t created any classrooms yet. Get started by creating
-          your first classroom.
-        </EmptyDescription>
-      </EmptyHeader>
-      <EmptyContent className="flex-row justify-center gap-2">
-        <ClassroomFormDialog
-          mode="create"
-          trigger={<Button>Create classroom</Button>}
-        />
-      </EmptyContent>
-    </Empty>
-  )
-}
-
 function StatTile({
   icon,
   label,
@@ -153,8 +117,7 @@ function StatTile({
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { isAuthenticated, classrooms, classroomsError, studentsError } =
-    loaderData
+  const { isAuthenticated, classroomsError, studentsError } = loaderData
 
   useEffect(() => {
     if (classroomsError)
@@ -175,8 +138,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       </div>
       {!isAuthenticated ? (
         <SignedOutHome />
-      ) : classrooms.length === 0 && !classroomsError ? (
-        <EmptyDashboard />
       ) : (
         <ItemGroup className="w-full max-w-md">
           <StatTile

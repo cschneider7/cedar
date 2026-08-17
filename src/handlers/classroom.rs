@@ -25,6 +25,10 @@ use crate::{
 /// Abuse-prevention ceiling: a flat cap on classrooms per user account.
 const MAX_CLASSROOMS_PER_USER: i64 = 50;
 
+/// A separate, smaller cap on how many of a user's classrooms can be pinned
+/// at once (sidebar real estate, not abuse prevention).
+const MAX_PINNED_CLASSROOMS_PER_USER: i64 = 10;
+
 /// Rejects a new classroom if `user_id` is already at `MAX_CLASSROOMS_PER_USER`.
 async fn check_classroom_limit(db: &sqlx::PgPool, user_id: &str) -> Result<(), AppError> {
     let count = sqlx::query_scalar!(
@@ -36,6 +40,25 @@ async fn check_classroom_limit(db: &sqlx::PgPool, user_id: &str) -> Result<(), A
     if count >= MAX_CLASSROOMS_PER_USER {
         return Err(AppError::BadRequest(
             "Classroom limit reached (50 classrooms per account).".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// Rejects newly pinning a classroom if `user_id` already has
+/// `MAX_PINNED_CLASSROOMS_PER_USER` pinned. Only called when a request is
+/// transitioning a classroom from unpinned to pinned — reordering/unpinning
+/// never needs this check.
+async fn check_pinned_classroom_limit(db: &sqlx::PgPool, user_id: &str) -> Result<(), AppError> {
+    let count = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) as "count!" FROM classrooms WHERE user_id = $1 AND pinned_at IS NOT NULL"#,
+        user_id
+    )
+    .fetch_one(db)
+    .await?;
+    if count >= MAX_PINNED_CLASSROOMS_PER_USER {
+        return Err(AppError::BadRequest(
+            "Pinned classroom limit reached (10 pinned classrooms per account).".to_string(),
         ));
     }
     Ok(())
@@ -133,6 +156,11 @@ pub async fn update_classroom_handler(
     let new_term_year = body.term_year.unwrap_or(classroom.term_year);
     let new_boundary_width = body.boundary_width.unwrap_or(classroom.boundary_width);
     let new_boundary_height = body.boundary_height.unwrap_or(classroom.boundary_height);
+    let new_pinned_at = body.pinned_at.unwrap_or(classroom.pinned_at);
+
+    if classroom.pinned_at.is_none() && new_pinned_at.is_some() {
+        check_pinned_classroom_limit(&data.db, &user_id).await?;
+    }
 
     let updated_classroom = sqlx::query_as!(
         ClassroomModel,
@@ -142,8 +170,9 @@ pub async fn update_classroom_handler(
             term_season = $3,
             term_year = $4,
             boundary_width = $5,
-            boundary_height = $6
-        WHERE id = $7
+            boundary_height = $6,
+            pinned_at = $7
+        WHERE id = $8
         RETURNING *"#,
         &new_subject,
         new_period,
@@ -151,6 +180,7 @@ pub async fn update_classroom_handler(
         new_term_year,
         new_boundary_width,
         new_boundary_height,
+        new_pinned_at,
         &classroom.id
     )
     .fetch_one(&data.db)
@@ -556,6 +586,17 @@ mod tests {
         .unwrap();
     }
 
+    async fn seed_pinned_classrooms(pool: &sqlx::PgPool, user_id: &str, count: i64) {
+        seed_classrooms(pool, user_id, count).await;
+        sqlx::query!(
+            r#"UPDATE classrooms SET pinned_at = now() WHERE user_id = $1"#,
+            user_id
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
     #[sqlx::test]
     async fn create_classroom_rejects_at_limit(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
@@ -824,6 +865,149 @@ mod tests {
         assert_eq!(json["data"]["term_year"], 2027);
         assert_eq!(json["data"]["subject"], existing.subject);
         assert_eq!(json["data"]["period"], existing.period);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn update_classroom_pin_sets_pinned_at(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let existing = insert_classroom(&pool, &user_id, "Math 2", 3).await;
+        assert!(existing.pinned_at.is_none());
+
+        let body = json!({"pinned_at": "2026-08-16T12:00:00Z"});
+        let response = app
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                &format!("/api/v1/classrooms/{}", existing.id),
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        assert!(!json["data"]["pinned_at"].is_null());
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn update_classroom_unpin_clears_pinned_at(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let existing = insert_classroom(&pool, &user_id, "Math 2", 3).await;
+
+        let pin_response = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                &format!("/api/v1/classrooms/{}", existing.id),
+                json!({"pinned_at": "2026-08-16T12:00:00Z"}),
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(pin_response.status(), StatusCode::OK);
+
+        let unpin_response = app
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                &format!("/api/v1/classrooms/{}", existing.id),
+                json!({"pinned_at": null}),
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(unpin_response.status(), StatusCode::OK);
+
+        let json = body_json(unpin_response).await;
+        assert!(json["data"]["pinned_at"].is_null());
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn update_classroom_omitted_pinned_at_leaves_it_unchanged(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let existing = insert_classroom(&pool, &user_id, "Math 2", 3).await;
+
+        let pin_response = app
+            .clone()
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                &format!("/api/v1/classrooms/{}", existing.id),
+                json!({"pinned_at": "2026-08-16T12:00:00Z"}),
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(pin_response.status(), StatusCode::OK);
+        let pinned_json = body_json(pin_response).await;
+        let pinned_at = pinned_json["data"]["pinned_at"].clone();
+
+        let response = app
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                &format!("/api/v1/classrooms/{}", existing.id),
+                json!({"subject": "Algebra"}),
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        assert_eq!(json["data"]["subject"], "Algebra");
+        assert_eq!(json["data"]["pinned_at"], pinned_at);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn update_classroom_pin_rejects_at_pin_limit(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        seed_pinned_classrooms(&pool, &user_id, 10).await;
+        let existing = insert_classroom(&pool, &user_id, "Math 2", 3).await;
+
+        let response = app
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                &format!("/api/v1/classrooms/{}", existing.id),
+                json!({"pinned_at": "2026-08-16T12:00:00Z"}),
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn update_classroom_pin_limit_is_per_user(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_a = test_user_id();
+        let user_b = test_user_id();
+        seed_pinned_classrooms(&pool, &user_a, 10).await;
+        let existing = insert_classroom(&pool, &user_b, "Math 2", 3).await;
+
+        let response = app
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                &format!("/api/v1/classrooms/{}", existing.id),
+                json!({"pinned_at": "2026-08-16T12:00:00Z"}),
+                &user_b,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
 
         Ok(())
     }

@@ -101,6 +101,17 @@
             "name": "created_time"
           }
         }
+      },
+      {
+        "ordinal": 9,
+        "name": "pinned_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "classrooms",
+            "name": "pinned_at"
+          }
+        }
       }
     ],
     "parameters": {
@@ -117,6 +128,7 @@
       false,
       false,
       false,
+      true,
       true
     ]
   },

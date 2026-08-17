@@ -10,6 +10,7 @@ import {
 } from "~/components/ui/input-group"
 import { Item, ItemContent, ItemTitle } from "~/components/ui/item"
 import { Popover, PopoverContent } from "~/components/ui/popover"
+import { formatClassroomName } from "~/lib/classroom-term"
 import type { loader as quickSearchLoader } from "~/routes/api/quick-search"
 import type { loader as rootLoader } from "~/root"
 
@@ -129,9 +130,7 @@ function SearchDropdown() {
                 }
               >
                 <ItemContent>
-                  <ItemTitle>
-                    Period {classroom.period} — {classroom.subject}
-                  </ItemTitle>
+                  <ItemTitle>{formatClassroomName(classroom)}</ItemTitle>
                 </ItemContent>
                 <Badge variant="secondary">Classroom</Badge>
               </Item>
