@@ -24,10 +24,24 @@ import {
   type StudentsPage,
 } from "~/lib/schemas"
 
-const API_URL = import.meta.env.VITE_API_URL
-if (!API_URL) {
+const RAW_API_URL = import.meta.env.VITE_API_URL
+if (!RAW_API_URL) {
   throw new Error("VITE_API_URL is not set")
 }
+
+// VITE_API_URL is "/api/v1" (relative, same-origin) on Vercel — that only
+// resolves in the browser. Route loaders/actions run this same code
+// server-side too, where a bare relative path isn't a valid fetch() URL, so
+// resolve it against the deployment's own origin (VERCEL_URL, injected
+// automatically by Vercel) when running there. Local dev/docker-compose
+// already set an absolute VITE_API_URL, so this is a no-op for them.
+const IS_INTERNAL_SSR_FETCH =
+  typeof window === "undefined" &&
+  !RAW_API_URL.startsWith("http") &&
+  !!process.env.VERCEL_URL
+const API_URL = IS_INTERNAL_SSR_FETCH
+  ? `https://${process.env.VERCEL_URL}${RAW_API_URL}`
+  : RAW_API_URL
 
 /**
  * A failed API call — `kind` distinguishes a real HTTP error from a
@@ -98,6 +112,24 @@ function withAuth(token?: string | null): HeadersInit | undefined {
   return token ? { Authorization: `Bearer ${token}` } : undefined
 }
 
+/**
+ * Lets the SSR loader's own same-deployment request through Vercel
+ * Deployment Protection (Vercel Authentication) — without it, this project
+ * has no custom domain to exempt internal requests, so the protection layer
+ * intercepts the call before it ever reaches the Rust function, and it comes
+ * back as an HTML challenge page instead of JSON. `VERCEL_AUTOMATION_BYPASS_SECRET`
+ * is auto-injected once any bypass secret exists for the project.
+ * @returns The bypass header, or `undefined` outside an internal SSR fetch.
+ */
+function withProtectionBypass(): HeadersInit | undefined {
+  return IS_INTERNAL_SSR_FETCH && process.env.VERCEL_AUTOMATION_BYPASS_SECRET
+    ? {
+        "x-vercel-protection-bypass":
+          process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
+      }
+    : undefined
+}
+
 type ApiFetchOptions = {
   method?: string
   token?: string | null
@@ -128,6 +160,7 @@ async function apiFetch<T>(
           ? { "Content-Type": "application/json" }
           : undefined),
         ...withAuth(opts.token),
+        ...withProtectionBypass(),
       },
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
       signal: opts.signal,
