@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   test:
-    name: Run Test Suite
+    name: Node Test Suite
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
