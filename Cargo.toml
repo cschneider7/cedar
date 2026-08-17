@@ -17,9 +17,26 @@ tokio = { version = "1.52.3", features = ["full"] }
 tower-http = { version = "0.7.0", features = ["trace", "cors"] }
 thiserror = "2"
 tracing = "0.1.44"
+tower = "0.5"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 uuid = { version = "1.23.4", features = ["serde", "v4"] }
+vercel_runtime = { version = "2.4", features = ["axum"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
+
+# Local-dev/Fly-shaped entrypoint (unchanged behavior).
+[[bin]]
+name = "class_management"
+path = "src/main.rs"
+
+# Vercel Functions entrypoint.
+[[bin]]
+name = "index"
+path = "api/index.rs"
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+opt-level = 3
