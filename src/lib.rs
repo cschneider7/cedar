@@ -1,6 +1,6 @@
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
-use sqlx::postgres::{PgPool, PgPoolOptions};
+use sqlx::postgres::{PgConnectOptions, PgPool, PgPoolOptions};
 
 pub mod auth;
 pub mod blob;
@@ -39,9 +39,21 @@ impl AppState {
         let s3_secret_access_key =
             std::env::var("S3_SECRET_ACCESS_KEY").expect("S3_SECRET_ACCESS_KEY must be set");
 
+        // Disables sqlx's client-side prepared-statement cache: Neon's pooled
+        // (PgBouncer transaction-mode) connection string can route different
+        // statements from the same logical connection to different backend
+        // servers between transactions, so a cached *named* prepared
+        // statement from one backend can go missing on another, surfacing as
+        // a "prepared statement does not exist" error. Unnamed statements
+        // (what this produces) are re-parsed per query but aren't backend-
+        // pinned, which is safe under transaction pooling.
+        let connect_options = PgConnectOptions::from_str(&db_url)
+            .expect("DATABASE_URL must be a valid Postgres connection string")
+            .statement_cache_capacity(0);
+
         let pool = match PgPoolOptions::new()
             .max_connections(MAX_CONNECTIONS)
-            .connect(&db_url)
+            .connect_with(connect_options)
             .await
         {
             Ok(pool) => {
