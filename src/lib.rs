@@ -16,7 +16,10 @@ pub mod test_support;
 
 pub use routes::create_router;
 
-const MAX_CONNECTIONS: u32 = 10;
+// Conservative starting value for Fluid Compute's multiple concurrent
+// instances (each builds its own pool, unlike Fly's single long-lived VM) —
+// tune from real Neon connection metrics post-cutover.
+const MAX_CONNECTIONS: u32 = 4;
 
 /// Shared state threaded through every handler via `Arc<AppState>`.
 pub struct AppState {
