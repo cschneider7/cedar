@@ -9,7 +9,6 @@ import { useState } from "react"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
 import { DeleteClassroomDialog } from "~/components/delete-classroom-dialog"
 import { PinToggleButton } from "~/components/pin-toggle-button"
-import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import {
   DropdownMenu,
@@ -103,9 +102,7 @@ export function getClassroomColumns({
     {
       id: "period",
       header: "Period",
-      cell: ({ row }) => (
-        <Badge variant="secondary">Period {row.original.period}</Badge>
-      ),
+      cell: ({ row }) => row.original.period,
     },
     {
       id: "term",

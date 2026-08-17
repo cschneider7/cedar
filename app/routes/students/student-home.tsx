@@ -65,6 +65,7 @@ import {
 } from "~/hooks/use-student-view-mode"
 import { getClassrooms, getStudentsPage } from "~/lib/api"
 import { tokenFromRequest } from "~/lib/auth"
+import { formatClassroomName } from "~/lib/classroom-term"
 import type { Classroom, Student } from "~/lib/schemas"
 import { isAtStudentLimit } from "~/lib/student-limit"
 import { cn } from "~/lib/utils"
@@ -196,7 +197,7 @@ function StudentCard({
       </ItemContent>
       <ItemFooter>
         {classroom ? (
-          <Badge variant="secondary">Period {classroom.period}</Badge>
+          <Badge variant="secondary">{formatClassroomName(classroom)}</Badge>
         ) : (
           <Badge variant="outline">Unassigned</Badge>
         )}
