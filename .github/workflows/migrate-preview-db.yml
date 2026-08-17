@@ -1,0 +1,86 @@
+name: Migrate Preview Database
+
+# Runs sqlx migrations against the Neon branch the Vercel-Neon Marketplace
+# integration provisions for this PR's preview deployment, before that
+# deployment starts serving traffic. Unlike the old deploy-preview.yml, this
+# workflow never creates the Neon branch itself — the Vercel-Neon
+# integration owns that (see docs/hosting.md).
+#
+# Resolves the branch via Neon's own API rather than `vercel env pull`:
+# Vercel-injected env vars (including the integration's DATABASE_URL) are
+# stored as Sensitive and the Vercel CLI will not reveal their real value
+# via `env pull` (confirmed empirically during the migration spike — it
+# silently writes "[SENSITIVE]" instead of the value). The Vercel-Neon
+# integration names each branch it creates `preview/<git branch name>`
+# with creation_source "vercel" (confirmed empirically against this
+# project's real integration — not a documented guarantee, so re-check
+# if this ever stops matching).
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  migrate_preview_db:
+    name: Migrate Preview DB
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Resolve this PR's Neon branch
+        env:
+          GIT_BRANCH: ${{ github.head_ref }}
+        run: |
+          branch_id=$(curl -sf -H "Authorization: Bearer $NEON_API_KEY" \
+            "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches" \
+            | jq -r --arg name "preview/$GIT_BRANCH" \
+              '.branches[] | select(.name == $name and .creation_source == "vercel") | .id' \
+            | head -n1)
+
+          if [ -z "$branch_id" ]; then
+            echo "::error::No Neon branch named preview/$GIT_BRANCH found — is the Vercel-Neon Marketplace integration installed and has it finished provisioning this PR's branch yet?"
+            exit 1
+          fi
+          echo "NEON_BRANCH_ID=$branch_id" >> "$GITHUB_ENV"
+
+      - name: Get unpooled connection URI
+        run: |
+          uri=$(curl -sf -H "Authorization: Bearer $NEON_API_KEY" \
+            "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/connection_uri?branch_id=$NEON_BRANCH_ID&database_name=neondb&role_name=neondb_owner&pooled=false" \
+            | jq -r '.uri')
+          echo "::add-mask::$uri"
+          echo "DATABASE_URL=$uri" >> "$GITHUB_ENV"
+
+      - name: Cache sqlx-cli
+        id: cache-sqlx-cli
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/sqlx
+          key: sqlx-cli-${{ runner.os }}-0.9.0
+      - name: Install sqlx-cli
+        if: steps.cache-sqlx-cli.outputs.cache-hit != 'true'
+        run: cargo install sqlx-cli --version 0.9.0 --no-default-features --features postgres,rustls --locked
+      - name: Run migrations
+        run: sqlx migrate run
+
+      - name: Post schema diff comment to PR
+        uses: neondatabase/schema-diff-action@v1
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          compare_branch: ${{ env.NEON_BRANCH_ID }}
+          api_key: ${{ secrets.NEON_API_KEY }}
