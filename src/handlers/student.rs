@@ -202,9 +202,10 @@ pub async fn create_student_handler(
             classroom_id,
             student_id,
             name,
-            image_url
+            image_url,
+            seating_preference
         )
-        VALUES ($1, $2, $3, $4, $5)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *",
     )
     .bind(user_id)
@@ -212,6 +213,7 @@ pub async fn create_student_handler(
     .bind(body.student_id)
     .bind(&body.name)
     .bind(body.image_url)
+    .bind(body.seating_preference.map(|p| p.as_str()))
     .fetch_one(&data.db)
     .await?;
 
@@ -258,6 +260,10 @@ pub async fn update_student_handler(
         .image_url
         .clone()
         .unwrap_or_else(|| student.image_url.clone());
+    let new_seating_preference: Option<&str> = match &body.seating_preference {
+        Some(pref) => pref.as_ref().map(|p| p.as_str()),
+        None => student.seating_preference.as_deref(),
+    };
 
     check_classroom_ownership(&data.db, new_classroom_id, &user_id).await?;
 
@@ -266,14 +272,16 @@ pub async fn update_student_handler(
             classroom_id = $1,
             student_id = $2,
             name = $3,
-            image_url = $4
-        WHERE id = $5
+            image_url = $4,
+            seating_preference = $5
+        WHERE id = $6
         RETURNING *",
     )
     .bind(new_classroom_id)
     .bind(new_student_id)
     .bind(new_name)
     .bind(new_image_url)
+    .bind(new_seating_preference)
     .bind(student.id)
     .fetch_one(&data.db)
     .await?;
@@ -391,6 +399,27 @@ mod tests {
         .bind(student_id)
         .bind(name)
         .bind(image_url)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    }
+
+    async fn insert_student_with_seating_preference(
+        pool: &sqlx::PgPool,
+        user_id: &str,
+        student_id: i32,
+        name: &str,
+        preference: &str,
+    ) -> StudentModel {
+        sqlx::query_as(
+            "INSERT INTO students (user_id, classroom_id, student_id, name, seating_preference)
+            VALUES ($1, NULL, $2, $3, $4)
+            RETURNING *",
+        )
+        .bind(user_id)
+        .bind(student_id)
+        .bind(name)
+        .bind(preference)
         .fetch_one(pool)
         .await
         .unwrap()
@@ -561,6 +590,65 @@ mod tests {
 
         let json = body_json(response).await;
         assert_eq!(json["data"]["image_url"], "students/user_1/bob.jpg");
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn create_student_with_seating_preference_success(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let body = json!({
+            "student_id": 1,
+            "name": "Bob Burger",
+            "classroom_id": null,
+            "seating_preference": "front",
+        });
+
+        let response = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/students",
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let json = body_json(response).await;
+        assert_eq!(json["data"]["seating_preference"], "front");
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn create_student_omits_seating_preference_defaults_to_null(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let body = json!({
+            "student_id": 1,
+            "name": "Bob Burger",
+            "classroom_id": null,
+        });
+
+        let response = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/students",
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let json = body_json(response).await;
+        assert!(json["data"]["seating_preference"].is_null());
 
         Ok(())
     }
@@ -873,6 +961,88 @@ mod tests {
 
         let json = body_json(response).await;
         assert!(json["data"]["image_url"].is_null());
+
+        Ok(())
+    }
+
+    // Double-Option deserialization for seating_preference: omitted keeps,
+    // explicit null clears — same pattern as classroom_id/image_url above.
+    #[sqlx::test]
+    async fn update_student_omitted_seating_preference_keeps_existing_value(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let existing =
+            insert_student_with_seating_preference(&pool, &user_id, 1, "Bob", "front").await;
+
+        let body = json!({"name": "Bob Updated"});
+        let response = app
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                &format!("/api/v1/students/{}", existing.id),
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        assert_eq!(json["data"]["seating_preference"], "front");
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn update_student_explicit_null_seating_preference_clears_value(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let existing =
+            insert_student_with_seating_preference(&pool, &user_id, 1, "Bob", "front").await;
+
+        let body = json!({"seating_preference": null});
+        let response = app
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                &format!("/api/v1/students/{}", existing.id),
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        assert!(json["data"]["seating_preference"].is_null());
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn update_student_new_seating_preference_sets_value(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let existing = insert_student(&pool, &user_id, None, 1, "Bob").await;
+
+        let body = json!({"seating_preference": "back"});
+        let response = app
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                &format!("/api/v1/students/{}", existing.id),
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        assert_eq!(json["data"]["seating_preference"], "back");
 
         Ok(())
     }
