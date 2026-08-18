@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { cn } from "~/lib/utils"
 import { studentImageProxyUrl } from "~/lib/image-utils"
 import type { Student } from "~/lib/schemas"
@@ -47,7 +48,9 @@ function getInitials(name: string): string {
 
 /**
  * Renders a student's uploaded photo, or a deterministic initials badge
- * when no photo is set.
+ * when no photo is set or the photo fails to load (e.g. a stale `image_url`
+ * left over from a database branch/environment whose object storage doesn't
+ * have the underlying file).
  */
 export function StudentAvatar({
   student,
@@ -56,7 +59,9 @@ export function StudentAvatar({
   student: Pick<Student, "id" | "name" | "image_url">
   className?: string
 }) {
-  if (student.image_url) {
+  const [imageFailed, setImageFailed] = useState(false)
+
+  if (student.image_url && !imageFailed) {
     return (
       <img
         src={studentImageProxyUrl(student.image_url)}
@@ -64,6 +69,7 @@ export function StudentAvatar({
         draggable="false"
         loading="lazy"
         className={cn("object-cover", className)}
+        onError={() => setImageFailed(true)}
       />
     )
   }
