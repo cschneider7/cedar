@@ -10,6 +10,7 @@ import {
   isRouteErrorResponse,
   useRevalidator,
 } from "react-router"
+import { SpeedInsights } from "@vercel/speed-insights/react"
 import { Spinner } from "~/components/ui/spinner"
 
 import { Button } from "~/components/ui/button"
@@ -117,6 +118,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </ThemeProvider>
         <ScrollRestoration />
         <Scripts />
+        <SpeedInsights />
       </body>
     </html>
   )
