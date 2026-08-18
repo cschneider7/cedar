@@ -26,12 +26,10 @@ const MAX_STUDENTS_PER_USER: i64 = 850;
 
 /// Rejects a new student if `user_id` is already at `MAX_STUDENTS_PER_USER`.
 async fn check_student_limit(db: &sqlx::PgPool, user_id: &str) -> Result<(), AppError> {
-    let count = sqlx::query_scalar!(
-        r#"SELECT COUNT(*) as "count!" FROM students WHERE user_id = $1"#,
-        user_id
-    )
-    .fetch_one(db)
-    .await?;
+    let count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM students WHERE user_id = $1")
+        .bind(user_id)
+        .fetch_one(db)
+        .await?;
     if count >= MAX_STUDENTS_PER_USER {
         return Err(AppError::BadRequest(
             "Student limit reached (850 students per account).".to_string(),
@@ -50,11 +48,11 @@ async fn check_classroom_ownership(
     let Some(classroom_id) = classroom_id else {
         return Ok(());
     };
-    let exists = sqlx::query_scalar!(
-        r#"SELECT EXISTS(SELECT 1 FROM classrooms WHERE id = $1 AND user_id = $2) as "exists!""#,
-        classroom_id,
-        user_id
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM classrooms WHERE id = $1 AND user_id = $2)",
     )
+    .bind(classroom_id)
+    .bind(user_id)
     .fetch_one(db)
     .await?;
     if !exists {
@@ -84,11 +82,10 @@ pub async fn student_list_handler(
         && params.sort_by.is_none()
         && params.sort_dir.is_none()
     {
-        let students = sqlx::query_as!(
-            StudentModel,
-            r#"SELECT * FROM students WHERE user_id = $1 ORDER by name"#,
-            user_id
+        let students = sqlx::query_as::<_, StudentModel>(
+            "SELECT * FROM students WHERE user_id = $1 ORDER BY name",
         )
+        .bind(user_id)
         .fetch_all(&data.db)
         .await?;
         return Ok((StatusCode::OK, Json(json!({"data": students}))));
@@ -101,113 +98,66 @@ pub async fn student_list_handler(
     let sort_by = params.sort_by.unwrap_or(StudentSortBy::Name);
     let sort_dir = params.sort_dir.unwrap_or(SortDir::Asc);
 
-    let total_count = sqlx::query_scalar!(
-        r#"SELECT COUNT(*) as "count!" FROM students
-           WHERE user_id = $1 AND ($2::text IS NULL OR name ILIKE $2)"#,
-        &user_id,
-        like_pattern
-    )
-    .fetch_one(&data.db)
-    .await?;
+    let total_count: i64 = match &like_pattern {
+        Some(pattern) => {
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM students WHERE user_id = $1 AND name ILIKE $2",
+            )
+            .bind(&user_id)
+            .bind(pattern)
+            .fetch_one(&data.db)
+            .await?
+        }
+        None => {
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM students WHERE user_id = $1")
+                .bind(&user_id)
+                .fetch_one(&data.db)
+                .await?
+        }
+    };
 
     let total_pages = ((total_count as f64) / (page_size as f64)).ceil().max(1.0) as i64;
     let page = requested_page.min(total_pages);
     let offset = (page - 1) * page_size;
 
-    let students = match (sort_by, sort_dir) {
-        (StudentSortBy::Name, SortDir::Asc) => {
-            sqlx::query_as!(
-                StudentModel,
-                r#"SELECT * FROM students
-                   WHERE user_id = $1 AND ($2::text IS NULL OR name ILIKE $2)
-                   ORDER BY name ASC
-                   LIMIT $3 OFFSET $4"#,
-                &user_id,
-                like_pattern,
-                page_size,
-                offset
-            )
-            .fetch_all(&data.db)
-            .await?
+    let mut builder = sqlx::QueryBuilder::new(
+        "SELECT students.* FROM students \
+         LEFT JOIN classrooms ON classrooms.id = students.classroom_id \
+         WHERE students.user_id = ",
+    );
+    builder.push_bind(&user_id);
+    builder.push(" AND (");
+    match &like_pattern {
+        Some(pattern) => {
+            builder.push("students.name ILIKE ");
+            builder.push_bind(pattern);
         }
-        (StudentSortBy::Name, SortDir::Desc) => {
-            sqlx::query_as!(
-                StudentModel,
-                r#"SELECT * FROM students
-                   WHERE user_id = $1 AND ($2::text IS NULL OR name ILIKE $2)
-                   ORDER BY name DESC
-                   LIMIT $3 OFFSET $4"#,
-                &user_id,
-                like_pattern,
-                page_size,
-                offset
-            )
-            .fetch_all(&data.db)
-            .await?
+        None => {
+            builder.push("TRUE");
         }
-        (StudentSortBy::StudentId, SortDir::Asc) => {
-            sqlx::query_as!(
-                StudentModel,
-                r#"SELECT * FROM students
-                   WHERE user_id = $1 AND ($2::text IS NULL OR name ILIKE $2)
-                   ORDER BY student_id ASC, name ASC
-                   LIMIT $3 OFFSET $4"#,
-                &user_id,
-                like_pattern,
-                page_size,
-                offset
-            )
-            .fetch_all(&data.db)
-            .await?
-        }
-        (StudentSortBy::StudentId, SortDir::Desc) => {
-            sqlx::query_as!(
-                StudentModel,
-                r#"SELECT * FROM students
-                   WHERE user_id = $1 AND ($2::text IS NULL OR name ILIKE $2)
-                   ORDER BY student_id DESC, name ASC
-                   LIMIT $3 OFFSET $4"#,
-                &user_id,
-                like_pattern,
-                page_size,
-                offset
-            )
-            .fetch_all(&data.db)
-            .await?
-        }
+    }
+    builder.push(") ORDER BY ");
+    builder.push(match (sort_by, sort_dir) {
+        (StudentSortBy::Name, SortDir::Asc) => "students.name ASC",
+        (StudentSortBy::Name, SortDir::Desc) => "students.name DESC",
+        (StudentSortBy::StudentId, SortDir::Asc) => "students.student_id ASC, students.name ASC",
+        (StudentSortBy::StudentId, SortDir::Desc) => "students.student_id DESC, students.name ASC",
         (StudentSortBy::Classroom, SortDir::Asc) => {
-            sqlx::query_as!(
-                StudentModel,
-                r#"SELECT students.* FROM students
-                   LEFT JOIN classrooms ON classrooms.id = students.classroom_id
-                   WHERE students.user_id = $1 AND ($2::text IS NULL OR students.name ILIKE $2)
-                   ORDER BY (students.classroom_id IS NULL) ASC, classrooms.period ASC, students.name ASC
-                   LIMIT $3 OFFSET $4"#,
-                &user_id,
-                like_pattern,
-                page_size,
-                offset
-            )
-            .fetch_all(&data.db)
-            .await?
+            "(students.classroom_id IS NULL) ASC, classrooms.period ASC, students.name ASC"
         }
         (StudentSortBy::Classroom, SortDir::Desc) => {
-            sqlx::query_as!(
-                StudentModel,
-                r#"SELECT students.* FROM students
-                   LEFT JOIN classrooms ON classrooms.id = students.classroom_id
-                   WHERE students.user_id = $1 AND ($2::text IS NULL OR students.name ILIKE $2)
-                   ORDER BY (students.classroom_id IS NULL) ASC, classrooms.period DESC, students.name ASC
-                   LIMIT $3 OFFSET $4"#,
-                &user_id,
-                like_pattern,
-                page_size,
-                offset
-            )
-            .fetch_all(&data.db)
-            .await?
+            "(students.classroom_id IS NULL) ASC, classrooms.period DESC, students.name ASC"
         }
-    };
+    });
+    builder.push(" LIMIT ");
+    builder.push_bind(page_size);
+    builder.push(" OFFSET ");
+    builder.push_bind(offset);
+
+    let students = builder
+        .build_query_as::<StudentModel>()
+        .fetch_all(&data.db)
+        .await?;
 
     Ok((
         StatusCode::OK,
@@ -229,14 +179,12 @@ pub async fn get_student_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let student = sqlx::query_as!(
-        StudentModel,
-        r#"SELECT * FROM students WHERE id = $1 AND user_id = $2"#,
-        &id,
-        user_id
-    )
-    .fetch_one(&data.db)
-    .await?;
+    let student =
+        sqlx::query_as::<_, StudentModel>("SELECT * FROM students WHERE id = $1 AND user_id = $2")
+            .bind(id)
+            .bind(user_id)
+            .fetch_one(&data.db)
+            .await?;
 
     Ok((StatusCode::OK, Json(json!({"data": student}))))
 }
@@ -251,9 +199,8 @@ pub async fn create_student_handler(
     check_student_limit(&data.db, &user_id).await?;
     check_classroom_ownership(&data.db, body.classroom_id, &user_id).await?;
 
-    let student = sqlx::query_as!(
-        StudentModel,
-        r#"INSERT INTO students (
+    let student = sqlx::query_as::<_, StudentModel>(
+        "INSERT INTO students (
             user_id,
             classroom_id,
             student_id,
@@ -261,13 +208,13 @@ pub async fn create_student_handler(
             image_url
         )
         VALUES ($1, $2, $3, $4, $5)
-        RETURNING *"#,
-        user_id,
-        body.classroom_id,
-        body.student_id,
-        &body.name,
-        body.image_url
+        RETURNING *",
     )
+    .bind(user_id)
+    .bind(body.classroom_id)
+    .bind(body.student_id)
+    .bind(&body.name)
+    .bind(body.image_url)
     .fetch_one(&data.db)
     .await?;
 
@@ -281,12 +228,10 @@ pub async fn count_students_handler(
     CurrentUserId(user_id): CurrentUserId,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let count = sqlx::query_scalar!(
-        r#"SELECT COUNT(*) as "count!" FROM students WHERE user_id = $1"#,
-        user_id
-    )
-    .fetch_one(&data.db)
-    .await?;
+    let count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM students WHERE user_id = $1")
+        .bind(user_id)
+        .fetch_one(&data.db)
+        .await?;
 
     Ok((
         StatusCode::OK,
@@ -302,14 +247,12 @@ pub async fn update_student_handler(
     State(data): State<Arc<AppState>>,
     Json(body): Json<UpdateStudentSchema>,
 ) -> Result<impl IntoResponse, AppError> {
-    let student = sqlx::query_as!(
-        StudentModel,
-        r#"SELECT * FROM students WHERE id = $1 AND user_id = $2"#,
-        &id,
-        &user_id
-    )
-    .fetch_one(&data.db)
-    .await?;
+    let student =
+        sqlx::query_as::<_, StudentModel>("SELECT * FROM students WHERE id = $1 AND user_id = $2")
+            .bind(id)
+            .bind(&user_id)
+            .fetch_one(&data.db)
+            .await?;
 
     let new_classroom_id = body.classroom_id.unwrap_or(student.classroom_id);
     let new_student_id = body.student_id.unwrap_or(student.student_id);
@@ -321,21 +264,20 @@ pub async fn update_student_handler(
 
     check_classroom_ownership(&data.db, new_classroom_id, &user_id).await?;
 
-    let updated_student = sqlx::query_as!(
-        StudentModel,
-        r#"UPDATE students SET
+    let updated_student = sqlx::query_as::<_, StudentModel>(
+        "UPDATE students SET
             classroom_id = $1,
             student_id = $2,
             name = $3,
             image_url = $4
         WHERE id = $5
-        RETURNING *"#,
-        new_classroom_id,
-        new_student_id,
-        &new_name,
-        new_image_url,
-        student.id
+        RETURNING *",
     )
+    .bind(new_classroom_id)
+    .bind(new_student_id)
+    .bind(new_name)
+    .bind(new_image_url)
+    .bind(student.id)
     .fetch_one(&data.db)
     .await?;
 
@@ -354,12 +296,11 @@ pub async fn delete_student_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let student = sqlx::query_as!(
-        StudentModel,
-        r#"DELETE FROM students WHERE id = $1 AND user_id = $2 RETURNING *"#,
-        &id,
-        user_id
+    let student = sqlx::query_as::<_, StudentModel>(
+        "DELETE FROM students WHERE id = $1 AND user_id = $2 RETURNING *",
     )
+    .bind(id)
+    .bind(user_id)
     .fetch_one(&data.db)
     .await?;
 
@@ -379,16 +320,16 @@ pub async fn bulk_delete_students_handler(
     State(data): State<Arc<AppState>>,
     Json(body): Json<BulkDeleteStudentsSchema>,
 ) -> Result<impl IntoResponse, AppError> {
+    #[derive(sqlx::FromRow)]
     struct DeletedImageUrl {
         image_url: Option<String>,
     }
 
-    let deleted = sqlx::query_as!(
-        DeletedImageUrl,
-        r#"DELETE FROM students WHERE user_id = $1 AND id = ANY($2) RETURNING image_url"#,
-        user_id,
-        &body.ids
+    let deleted = sqlx::query_as::<_, DeletedImageUrl>(
+        "DELETE FROM students WHERE user_id = $1 AND id = ANY($2) RETURNING image_url",
     )
+    .bind(user_id)
+    .bind(&body.ids)
     .fetch_all(&data.db)
     .await?;
 
@@ -424,16 +365,15 @@ mod tests {
         student_id: i32,
         name: &str,
     ) -> StudentModel {
-        sqlx::query_as!(
-            StudentModel,
-            r#"INSERT INTO students (user_id, classroom_id, student_id, name)
+        sqlx::query_as::<_, StudentModel>(
+            "INSERT INTO students (user_id, classroom_id, student_id, name)
             VALUES ($1, $2, $3, $4)
-            RETURNING *"#,
-            user_id,
-            classroom_id,
-            student_id,
-            name
+            RETURNING *",
         )
+        .bind(user_id)
+        .bind(classroom_id)
+        .bind(student_id)
+        .bind(name)
         .fetch_one(pool)
         .await
         .unwrap()
@@ -446,35 +386,35 @@ mod tests {
         name: &str,
         image_url: &str,
     ) -> StudentModel {
-        sqlx::query_as!(
-            StudentModel,
-            r#"INSERT INTO students (user_id, classroom_id, student_id, name, image_url)
+        sqlx::query_as::<_, StudentModel>(
+            "INSERT INTO students (user_id, classroom_id, student_id, name, image_url)
             VALUES ($1, NULL, $2, $3, $4)
-            RETURNING *"#,
-            user_id,
-            student_id,
-            name,
-            image_url
+            RETURNING *",
         )
+        .bind(user_id)
+        .bind(student_id)
+        .bind(name)
+        .bind(image_url)
         .fetch_one(pool)
         .await
         .unwrap()
     }
 
     async fn fetch_student(pool: &sqlx::PgPool, id: Uuid) -> Option<StudentModel> {
-        sqlx::query_as!(StudentModel, r#"SELECT * FROM students WHERE id = $1"#, id)
+        sqlx::query_as::<_, StudentModel>("SELECT * FROM students WHERE id = $1")
+            .bind(id)
             .fetch_optional(pool)
             .await
             .unwrap()
     }
 
     async fn seed_students(pool: &sqlx::PgPool, user_id: &str, count: i64) {
-        sqlx::query!(
-            r#"INSERT INTO students (user_id, student_id, name)
-            SELECT $1, gs, 'Student ' || gs FROM generate_series(1, $2::int) AS gs"#,
-            user_id,
-            count as i32
+        sqlx::query(
+            "INSERT INTO students (user_id, student_id, name)
+            SELECT $1, gs, 'Student ' || gs FROM generate_series(1, $2::int) AS gs",
         )
+        .bind(user_id)
+        .bind(count as i32)
         .execute(pool)
         .await
         .unwrap();

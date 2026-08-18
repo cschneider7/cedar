@@ -110,14 +110,13 @@ pub async fn insert_classroom(
     subject: &str,
     period: i16,
 ) -> ClassroomModel {
-    sqlx::query_as!(
-        ClassroomModel,
-        r#"INSERT INTO classrooms (user_id, subject, period, term_season, term_year)
-        VALUES ($1, $2, $3, 'fall', 2026) RETURNING *"#,
-        user_id,
-        subject,
-        period
+    sqlx::query_as::<_, ClassroomModel>(
+        "INSERT INTO classrooms (user_id, subject, period, term_season, term_year)
+        VALUES ($1, $2, $3, 'fall', 2026) RETURNING *",
     )
+    .bind(user_id)
+    .bind(subject)
+    .bind(period)
     .fetch_one(pool)
     .await
     .unwrap()

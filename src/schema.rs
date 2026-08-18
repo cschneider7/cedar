@@ -123,7 +123,7 @@ pub struct SeatingChartSchema {
 
 /// A single table's grid shape, canvas position, and seat assignments; a
 /// seat's index within `seat_assignments` is its `seat_number`.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, sqlx::FromRow)]
 pub struct TableSchema {
     pub table_number: i32,
     pub rows: i16,
