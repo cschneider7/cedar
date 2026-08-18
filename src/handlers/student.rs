@@ -26,7 +26,7 @@ const MAX_STUDENTS_PER_USER: i64 = 850;
 
 /// Rejects a new student if `user_id` is already at `MAX_STUDENTS_PER_USER`.
 async fn check_student_limit(db: &sqlx::PgPool, user_id: &str) -> Result<(), AppError> {
-    let count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM students WHERE user_id = $1")
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM students WHERE user_id = $1")
         .bind(user_id)
         .fetch_one(db)
         .await?;
@@ -48,7 +48,7 @@ async fn check_classroom_ownership(
     let Some(classroom_id) = classroom_id else {
         return Ok(());
     };
-    let exists = sqlx::query_scalar::<_, bool>(
+    let exists: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM classrooms WHERE id = $1 AND user_id = $2)",
     )
     .bind(classroom_id)
@@ -82,12 +82,11 @@ pub async fn student_list_handler(
         && params.sort_by.is_none()
         && params.sort_dir.is_none()
     {
-        let students = sqlx::query_as::<_, StudentModel>(
-            "SELECT * FROM students WHERE user_id = $1 ORDER BY name",
-        )
-        .bind(user_id)
-        .fetch_all(&data.db)
-        .await?;
+        let students: Vec<StudentModel> =
+            sqlx::query_as("SELECT * FROM students WHERE user_id = $1 ORDER BY name")
+                .bind(user_id)
+                .fetch_all(&data.db)
+                .await?;
         return Ok((StatusCode::OK, Json(json!({"data": students}))));
     }
 
@@ -100,16 +99,14 @@ pub async fn student_list_handler(
 
     let total_count: i64 = match &like_pattern {
         Some(pattern) => {
-            sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(*) FROM students WHERE user_id = $1 AND name ILIKE $2",
-            )
-            .bind(&user_id)
-            .bind(pattern)
-            .fetch_one(&data.db)
-            .await?
+            sqlx::query_scalar("SELECT COUNT(*) FROM students WHERE user_id = $1 AND name ILIKE $2")
+                .bind(&user_id)
+                .bind(pattern)
+                .fetch_one(&data.db)
+                .await?
         }
         None => {
-            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM students WHERE user_id = $1")
+            sqlx::query_scalar("SELECT COUNT(*) FROM students WHERE user_id = $1")
                 .bind(&user_id)
                 .fetch_one(&data.db)
                 .await?
@@ -179,8 +176,8 @@ pub async fn get_student_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let student =
-        sqlx::query_as::<_, StudentModel>("SELECT * FROM students WHERE id = $1 AND user_id = $2")
+    let student: StudentModel =
+        sqlx::query_as("SELECT * FROM students WHERE id = $1 AND user_id = $2")
             .bind(id)
             .bind(user_id)
             .fetch_one(&data.db)
@@ -199,7 +196,7 @@ pub async fn create_student_handler(
     check_student_limit(&data.db, &user_id).await?;
     check_classroom_ownership(&data.db, body.classroom_id, &user_id).await?;
 
-    let student = sqlx::query_as::<_, StudentModel>(
+    let student: StudentModel = sqlx::query_as(
         "INSERT INTO students (
             user_id,
             classroom_id,
@@ -228,7 +225,7 @@ pub async fn count_students_handler(
     CurrentUserId(user_id): CurrentUserId,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM students WHERE user_id = $1")
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM students WHERE user_id = $1")
         .bind(user_id)
         .fetch_one(&data.db)
         .await?;
@@ -247,8 +244,8 @@ pub async fn update_student_handler(
     State(data): State<Arc<AppState>>,
     Json(body): Json<UpdateStudentSchema>,
 ) -> Result<impl IntoResponse, AppError> {
-    let student =
-        sqlx::query_as::<_, StudentModel>("SELECT * FROM students WHERE id = $1 AND user_id = $2")
+    let student: StudentModel =
+        sqlx::query_as("SELECT * FROM students WHERE id = $1 AND user_id = $2")
             .bind(id)
             .bind(&user_id)
             .fetch_one(&data.db)
@@ -264,7 +261,7 @@ pub async fn update_student_handler(
 
     check_classroom_ownership(&data.db, new_classroom_id, &user_id).await?;
 
-    let updated_student = sqlx::query_as::<_, StudentModel>(
+    let updated_student: StudentModel = sqlx::query_as(
         "UPDATE students SET
             classroom_id = $1,
             student_id = $2,
@@ -296,13 +293,12 @@ pub async fn delete_student_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let student = sqlx::query_as::<_, StudentModel>(
-        "DELETE FROM students WHERE id = $1 AND user_id = $2 RETURNING *",
-    )
-    .bind(id)
-    .bind(user_id)
-    .fetch_one(&data.db)
-    .await?;
+    let student: StudentModel =
+        sqlx::query_as("DELETE FROM students WHERE id = $1 AND user_id = $2 RETURNING *")
+            .bind(id)
+            .bind(user_id)
+            .fetch_one(&data.db)
+            .await?;
 
     if let Some(url) = student.image_url.clone() {
         data.blob_deleter.delete(url).await;
@@ -325,7 +321,7 @@ pub async fn bulk_delete_students_handler(
         image_url: Option<String>,
     }
 
-    let deleted = sqlx::query_as::<_, DeletedImageUrl>(
+    let deleted: Vec<DeletedImageUrl> = sqlx::query_as(
         "DELETE FROM students WHERE user_id = $1 AND id = ANY($2) RETURNING image_url",
     )
     .bind(user_id)
@@ -365,7 +361,7 @@ mod tests {
         student_id: i32,
         name: &str,
     ) -> StudentModel {
-        sqlx::query_as::<_, StudentModel>(
+        sqlx::query_as(
             "INSERT INTO students (user_id, classroom_id, student_id, name)
             VALUES ($1, $2, $3, $4)
             RETURNING *",
@@ -386,7 +382,7 @@ mod tests {
         name: &str,
         image_url: &str,
     ) -> StudentModel {
-        sqlx::query_as::<_, StudentModel>(
+        sqlx::query_as(
             "INSERT INTO students (user_id, classroom_id, student_id, name, image_url)
             VALUES ($1, NULL, $2, $3, $4)
             RETURNING *",
@@ -401,7 +397,7 @@ mod tests {
     }
 
     async fn fetch_student(pool: &sqlx::PgPool, id: Uuid) -> Option<StudentModel> {
-        sqlx::query_as::<_, StudentModel>("SELECT * FROM students WHERE id = $1")
+        sqlx::query_as("SELECT * FROM students WHERE id = $1")
             .bind(id)
             .fetch_optional(pool)
             .await
