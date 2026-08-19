@@ -20,6 +20,7 @@ export const CreateStudentSchema = z.object({
   // Nullish, not nullable: image_url is merged into the submit payload by
   // hand (outside RHF); the string itself is an S3 object key, not a URL.
   image_url: z.string().min(1).nullish(),
+  seating_preference: z.enum(["front", "back"]).nullable().optional(),
 })
 
 export const StudentSchema = CreateStudentSchema.extend({
@@ -64,6 +65,7 @@ export const UpdateStudentSchema = z.object({
       .max(100, "Name must be at most 100 characters.")
   ),
   image_url: z.string().min(1).nullish(),
+  seating_preference: z.enum(["front", "back"]).nullable().optional(),
 })
 
 export const CreateClassroomSchema = z.object({
