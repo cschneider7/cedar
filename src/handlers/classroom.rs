@@ -362,7 +362,7 @@ pub async fn randomize_seating_chart_handler(
             .await?;
     let students: Vec<(Uuid, Option<SeatingPreference>)> = students
         .into_iter()
-        .map(|(id, pref)| (id, pref.and_then(|s| SeatingPreference::from_str(&s))))
+        .map(|(id, pref)| (id, pref.and_then(|s| SeatingPreference::from_db_str(&s))))
         .collect();
 
     let tables = seating_chart::build_randomized_chart(

@@ -53,8 +53,7 @@ impl SeatingPreference {
 
     /// Parses the lowercase string stored in the `seating_preference` DB
     /// column back into a `SeatingPreference`, or `None` if it doesn't match.
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn from_db_str(s: &str) -> Option<Self> {
         match s {
             "front" => Some(SeatingPreference::Front),
             "back" => Some(SeatingPreference::Back),
