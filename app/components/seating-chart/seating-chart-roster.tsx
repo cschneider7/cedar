@@ -1,6 +1,7 @@
 import { useDraggable } from "@dnd-kit/core"
 import { CSS } from "@dnd-kit/utilities"
 import { StudentAvatar } from "~/components/student-avatar"
+import { Badge } from "~/components/ui/badge"
 import { Empty, EmptyDescription } from "~/components/ui/empty"
 import { Item, ItemContent, ItemHeader, ItemTitle } from "~/components/ui/item"
 import { ScrollArea } from "~/components/ui/scroll-area"
@@ -11,11 +12,19 @@ import type { Student } from "~/lib/schemas"
 function StudentChipCard({ student }: { student: Student }) {
   return (
     <>
-      <ItemHeader>
+      <ItemHeader className="relative">
         <StudentAvatar
           student={student}
           className="aspect-5/4 w-full rounded-sm"
         />
+        {student.seating_preference && (
+          <Badge
+            variant="secondary"
+            className="absolute top-1 left-1 h-4 px-1 text-[9px] leading-none"
+          >
+            {student.seating_preference === "front" ? "Front" : "Back"}
+          </Badge>
+        )}
       </ItemHeader>
       <ItemContent>
         <ItemTitle className="text-xs select-none">{student.name}</ItemTitle>
