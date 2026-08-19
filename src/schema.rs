@@ -43,6 +43,7 @@ pub enum SeatingPreference {
 }
 
 impl SeatingPreference {
+    /// The lowercase string stored in the `seating_preference` DB column.
     pub fn as_str(&self) -> &'static str {
         match self {
             SeatingPreference::Front => "front",
@@ -50,6 +51,8 @@ impl SeatingPreference {
         }
     }
 
+    /// Parses the lowercase string stored in the `seating_preference` DB
+    /// column back into a `SeatingPreference`, or `None` if it doesn't match.
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
@@ -95,7 +98,8 @@ pub struct StudentSchema {
 }
 
 /// Request body for partially updating a student; omitted fields keep their
-/// existing value, while an explicit `null` `classroom_id`/`image_url` clears it.
+/// existing value, while an explicit `null` `classroom_id`/`image_url`/
+/// `seating_preference` clears it.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateStudentSchema {
     #[serde(default, deserialize_with = "deserialize_some")]

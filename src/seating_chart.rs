@@ -148,22 +148,6 @@ pub fn build_randomized_chart(
         seat_y: i32,
     }
 
-    // Step 2: partition students by preference, shuffle each group independently.
-    let mut front_students: Vec<Uuid> = Vec::new();
-    let mut back_students: Vec<Uuid> = Vec::new();
-    let mut none_students: Vec<Uuid> = Vec::new();
-    for (id, pref) in students {
-        match pref {
-            Some(SeatingPreference::Front) => front_students.push(id),
-            Some(SeatingPreference::Back) => back_students.push(id),
-            None => none_students.push(id),
-        }
-    }
-    let mut rng = rand::rng();
-    front_students.shuffle(&mut rng);
-    back_students.shuffle(&mut rng);
-    none_students.shuffle(&mut rng);
-
     // Step 1: compute each seat's absolute canvas y (row-major, matching
     // getSeatPosition in app/lib/seating-chart-utils.ts).
     let mut seats: Vec<SeatRef> = Vec::new();
@@ -179,6 +163,22 @@ pub fn build_randomized_chart(
             });
         }
     }
+
+    // Step 2: partition students by preference, shuffle each group independently.
+    let mut front_students: Vec<Uuid> = Vec::new();
+    let mut back_students: Vec<Uuid> = Vec::new();
+    let mut none_students: Vec<Uuid> = Vec::new();
+    for (id, pref) in students {
+        match pref {
+            Some(SeatingPreference::Front) => front_students.push(id),
+            Some(SeatingPreference::Back) => back_students.push(id),
+            None => none_students.push(id),
+        }
+    }
+    let mut rng = rand::rng();
+    front_students.shuffle(&mut rng);
+    back_students.shuffle(&mut rng);
+    none_students.shuffle(&mut rng);
 
     // Step 3: shuffle first (randomizes ties on seat_y), then stable-sort ascending.
     seats.shuffle(&mut rng);
@@ -572,19 +572,20 @@ mod tests {
 
     #[test]
     fn preference_contention_gives_a_random_subset_the_preferred_seats() {
-        // 2 rows x 2 cols = 4 seats, only 2 of which are in the front-most
-        // row. 3 front-preferring students plus 1 none student fills the
-        // table exactly, so 3 front students must contend for 2 front-row
-        // seats.
+        // 4 rows x 1 col = 4 seats, each row a distinct seat_y (50/150/250/
+        // 350). 3 front-preferring students plus 1 none student fills the
+        // table exactly, so 3 front students must contend for seats, only
+        // one of which (seat_y 350) can go to the non-preferring student.
         let existing = vec![TableGeometry {
-            rows: 2,
-            cols: 2,
+            rows: 4,
+            cols: 1,
             x_pos: 40,
             y_pos: 40,
         }];
         let front = students_with_preference(3, SeatingPreference::Front);
         let none = students(1);
         let front_ids: HashSet<Uuid> = student_ids(&front).into_iter().collect();
+        let none_ids: HashSet<Uuid> = student_ids(&none).into_iter().collect();
 
         let mut roster = front;
         roster.extend(none);
@@ -599,22 +600,50 @@ mod tests {
         let assigned_ids: HashSet<Uuid> = assigned.iter().map(|(id, _)| *id).collect();
         assert_eq!(assigned_ids, roster_ids);
 
-        // Exactly min(front.len(), capacity) = 3 front students get the 3
-        // lowest seat_y seats; the remaining seat goes to whoever's left.
-        let mut seat_ys: Vec<i32> = assigned.iter().map(|(_, y)| *y).collect();
-        seat_ys.sort();
-        let cutoff = seat_ys[2];
-
-        let front_seated = assigned
-            .iter()
-            .filter(|(id, _)| front_ids.contains(id))
-            .count();
-        assert_eq!(front_seated, 3);
+        // The single highest seat (seat_y 350, the only one front students
+        // don't need) must go to the no-preference student, and every front
+        // student must land strictly above it.
+        let max_seat_y = tables[0].y_pos + SEAT_PADDING + 3 * (SEAT_NODE_SIZE + SEAT_PADDING);
         for (id, y) in &assigned {
+            if none_ids.contains(id) {
+                assert_eq!(*y, max_seat_y);
+            }
             if front_ids.contains(id) {
-                assert!(*y <= cutoff);
+                assert!(*y < max_seat_y);
             }
         }
+    }
+
+    #[test]
+    fn single_row_of_seats_seats_everyone_without_double_assignment() {
+        // 1 row x 3 cols = 3 seats, all in the same (only) row, so there's no
+        // front/back row distinction to check. This locks in the invariant
+        // that `front_take + back_take <= n` protects against: a table too
+        // short to have separate front/back rows must still seat everyone
+        // exactly once without panicking or double-assigning a seat.
+        let existing = vec![TableGeometry {
+            rows: 1,
+            cols: 3,
+            x_pos: 40,
+            y_pos: 40,
+        }];
+        let front = students_with_preference(1, SeatingPreference::Front);
+        let back = students_with_preference(1, SeatingPreference::Back);
+        let none = students(1);
+
+        let mut roster = front;
+        roster.extend(back);
+        roster.extend(none);
+        let roster_ids: HashSet<Uuid> = student_ids(&roster).into_iter().collect();
+
+        let tables =
+            build_randomized_chart(roster, true, existing, 2, 2, BOUNDARY.0, BOUNDARY.1).unwrap();
+        let assigned = assigned_ids(&tables);
+
+        assert_eq!(assigned.len(), 3);
+        let unique: HashSet<Uuid> = assigned.iter().copied().collect();
+        assert_eq!(assigned.len(), unique.len());
+        assert_eq!(unique, roster_ids);
     }
 
     #[test]
