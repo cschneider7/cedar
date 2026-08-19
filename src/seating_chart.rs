@@ -30,10 +30,11 @@ pub struct TableGeometry {
 }
 
 /// Converts a table's grid shape into its full pixel footprint (width, height).
+/// Mirrors `getTableNodeSize` in `app/lib/seating-chart-utils.ts`: width scales
+/// with `cols`, height scales with `rows`.
 fn table_pixel_size(rows: i16, cols: i16) -> (i32, i32) {
-    let row_pixels = (rows as i32) * (SEAT_NODE_SIZE + SEAT_PADDING) + SEAT_PADDING;
-    let col_pixels = (cols as i32) * (SEAT_NODE_SIZE + SEAT_PADDING) + SEAT_PADDING;
-    (row_pixels, col_pixels)
+    let dim_pixels = |n: i16| (n as i32) * (SEAT_NODE_SIZE + SEAT_PADDING) + SEAT_PADDING;
+    (dim_pixels(cols), dim_pixels(rows))
 }
 
 /// Reports whether two axis-aligned rectangles, each given as a
@@ -358,6 +359,28 @@ mod tests {
 
         assert_eq!(tables.len(), 2);
         assert_ne!((tables[1].x_pos, tables[1].y_pos), (40, 40));
+    }
+
+    #[test]
+    fn new_table_footprint_matches_its_actual_rows_and_cols_orientation() {
+        // A 1x4 table is wide/short: width = 4 * 100 + 10 = 410 (cols-driven),
+        // height = 1 * 100 + 10 = 110 (rows-driven) -- hardcoded independent
+        // of table_pixel_size so a rows/cols swap inside that function can't
+        // mask itself here. Size the boundary to fit exactly that orientation
+        // with no slack on either axis, so a swapped footprint (110 wide,
+        // 410 tall) can't fit and would error instead.
+        let expected_width = 410;
+        let expected_height = 110;
+        let width = TABLE_OFFSET * 2 + expected_width;
+        let height = TABLE_OFFSET * 2 + expected_height;
+        let tables =
+            build_randomized_chart(students(4), false, vec![], 1, 4, width, height).unwrap();
+
+        assert_eq!(tables.len(), 1);
+        assert_eq!(tables[0].x_pos, TABLE_OFFSET);
+        assert_eq!(tables[0].y_pos, TABLE_OFFSET);
+        assert!(tables[0].x_pos + expected_width <= width - TABLE_OFFSET);
+        assert!(tables[0].y_pos + expected_height <= height - TABLE_OFFSET);
     }
 
     #[test]
