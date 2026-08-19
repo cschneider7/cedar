@@ -82,11 +82,12 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
 
   const defaultValues =
     mode === "create"
-      ? { name: "", classroom_id: null }
+      ? { name: "", classroom_id: null, seating_preference: null }
       : {
           name: props.student.name,
           student_id: props.student.student_id,
           classroom_id: props.student.classroom_id,
+          seating_preference: props.student.seating_preference ?? null,
         }
 
   const form = useForm<z.infer<typeof schema>>({
@@ -181,6 +182,15 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
       value: classroom.id,
     })
   })
+
+  const seatingPreferenceOptions: {
+    label: string
+    value: "front" | "back" | null
+  }[] = [
+    { label: "No preference", value: null },
+    { label: "Front", value: "front" },
+    { label: "Back", value: "back" },
+  ]
 
   return (
     <Dialog
@@ -278,6 +288,38 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
                             value={classroom.value}
                           >
                             {classroom.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {fieldState.invalid && (
+                      <FieldError errors={[fieldState.error]} />
+                    )}
+                  </Field>
+                )}
+              />
+              <Controller
+                name="seating_preference"
+                control={form.control}
+                render={({ field, fieldState }) => (
+                  <Field className="flex-1" data-invalid={fieldState.invalid}>
+                    <FieldLabel>Seating Preference</FieldLabel>
+                    <Select
+                      name={field.name}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      items={seatingPreferenceOptions}
+                    >
+                      <SelectTrigger
+                        aria-invalid={fieldState.invalid}
+                        className="w-full"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {seatingPreferenceOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
