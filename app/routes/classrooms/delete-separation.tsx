@@ -6,7 +6,10 @@ import type { Route } from "./+types/delete-separation"
 
 export async function action(args: Route.ActionArgs): Promise<MutationResult> {
   try {
-    await deleteSeparation(args.params.separationId, await tokenFromRequest(args))
+    await deleteSeparation(
+      args.params.separationId,
+      await tokenFromRequest(args)
+    )
     return { ok: true, id: args.params.separationId }
   } catch (error) {
     return { ok: false, error: (error as Error).message }

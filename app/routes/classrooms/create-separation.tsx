@@ -5,8 +5,7 @@ import { CreateSeparationSchema, type Separation } from "~/lib/schemas"
 import type { Route } from "./+types/create-separation"
 
 export type CreateSeparationResult =
-  | { ok: true; separation: Separation }
-  | { ok: false; error: string }
+  { ok: true; separation: Separation } | { ok: false; error: string }
 
 // This is a fetcher-only action target — a direct GET (bookmark, refresh)
 // would otherwise render a blank content area, so redirect to the list.

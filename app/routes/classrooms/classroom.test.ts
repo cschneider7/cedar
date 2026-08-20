@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
-import type { Classroom, SeatingChart, Separation, Student } from "~/lib/schemas"
+import type {
+  Classroom,
+  SeatingChart,
+  Separation,
+  Student,
+} from "~/lib/schemas"
 import { makeArgs, stubFetch } from "~/lib/test-utils"
 import { action, loader } from "./classroom"
 
