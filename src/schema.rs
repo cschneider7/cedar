@@ -34,6 +34,34 @@ impl TermSeason {
     }
 }
 
+/// A student's seating preference (front or back of classroom).
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum SeatingPreference {
+    Front,
+    Back,
+}
+
+impl SeatingPreference {
+    /// The lowercase string stored in the `seating_preference` DB column.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SeatingPreference::Front => "front",
+            SeatingPreference::Back => "back",
+        }
+    }
+
+    /// Parses the lowercase string stored in the `seating_preference` DB
+    /// column back into a `SeatingPreference`, or `None` if it doesn't match.
+    pub fn from_db_str(s: &str) -> Option<Self> {
+        match s {
+            "front" => Some(SeatingPreference::Front),
+            "back" => Some(SeatingPreference::Back),
+            _ => None,
+        }
+    }
+}
+
 /// Request body for creating a classroom; boundary dimensions are not
 /// accepted here and instead take their DB column defaults.
 #[derive(Serialize, Deserialize, Debug)]
@@ -65,10 +93,12 @@ pub struct StudentSchema {
     pub student_id: i32,
     pub name: String,
     pub image_url: Option<String>,
+    pub seating_preference: Option<SeatingPreference>,
 }
 
 /// Request body for partially updating a student; omitted fields keep their
-/// existing value, while an explicit `null` `classroom_id`/`image_url` clears it.
+/// existing value, while an explicit `null` `classroom_id`/`image_url`/
+/// `seating_preference` clears it.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateStudentSchema {
     #[serde(default, deserialize_with = "deserialize_some")]
@@ -77,6 +107,8 @@ pub struct UpdateStudentSchema {
     pub name: Option<String>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub image_url: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub seating_preference: Option<Option<SeatingPreference>>,
 }
 
 /// A column `GET /api/v1/students` can sort by.

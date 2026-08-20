@@ -30,6 +30,7 @@ import {
   FieldGroup,
   FieldLabel,
   FieldLegend,
+  FieldSeparator,
   FieldSet,
 } from "~/components/ui/field"
 import { Input } from "~/components/ui/input"
@@ -133,94 +134,89 @@ export function RandomSeatingChartDialog({
   return (
     <Dialog {...props}>
       <DialogContent className="sm:max-w-sm">
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>Randomize Seating Chart</DialogTitle>
-            <DialogDescription>
-              Nothing is saved until you click Save.
-            </DialogDescription>
-          </DialogHeader>
-          {fetcher.data && !fetcher.data.ok && (
-            <Alert variant="destructive">
-              <AlertDescription>{fetcher.data.error}</AlertDescription>
-            </Alert>
-          )}
+        <DialogHeader>
+          <DialogTitle>Randomize Seating Chart</DialogTitle>
+          <DialogDescription>
+            Generate a random seating chart. Tables will automatically be
+            created to seat every student.
+          </DialogDescription>
+        </DialogHeader>
+        {fetcher.data && !fetcher.data.ok && (
+          <Alert variant="destructive">
+            <AlertDescription>{fetcher.data.error}</AlertDescription>
+          </Alert>
+        )}
+        <form id="randomize-seating-chart-form" onSubmit={handleSubmit}>
           <FieldGroup>
-            <Field orientation="horizontal">
-              <Switch
-                id="table-retain"
-                checked={keepExisting}
-                onCheckedChange={setKeepExisting}
-                disabled={keptTables.length === 0}
-              />
-              <FieldContent>
-                <FieldLabel className="font-normal">
+            <FieldSet className="w-full max-w-xs">
+              <FieldLegend>Options</FieldLegend>
+              <Field orientation="horizontal">
+                <FieldLabel htmlFor="table-retain">
                   Keep Existing Tables
                 </FieldLabel>
-                <FieldDescription>
-                  Adds tables automatically if needed.
-                </FieldDescription>
-              </FieldContent>
-            </Field>
+                <Switch
+                  id="table-retain"
+                  checked={keepExisting}
+                  onCheckedChange={setKeepExisting}
+                  disabled={keptTables.length === 0}
+                />
+              </Field>
+            </FieldSet>
+            <FieldSeparator />
             <FieldSet className="w-full max-w-xs">
-              <FieldLegend variant="label">New Table Size</FieldLegend>
+              <FieldLegend>Size of New Tables</FieldLegend>
               <RadioGroup
-                value={sizeMode}
+                defaultValue="default"
                 onValueChange={(value) =>
                   setSizeMode(value as "default" | "custom")
                 }
               >
                 <Field orientation="horizontal">
                   <RadioGroupItem value="default" id="table-size-default" />
-                  <FieldLabel className="font-normal">Default</FieldLabel>
+                  <FieldLabel
+                    htmlFor="table-size-default"
+                    className="font-normal"
+                  >
+                    Default
+                  </FieldLabel>
                   <FieldDescription>2 × 2</FieldDescription>
                 </Field>
-                <Field orientation="horizontal">
-                  <RadioGroupItem value="custom" id="table-size-custom" />
-                  <FieldLabel className="font-normal">Custom</FieldLabel>
-                </Field>
-                {sizeMode === "custom" && (
-                  <div className="flex gap-2 pl-6">
-                    <Field>
-                      <FieldLabel
-                        htmlFor="table-size-rows"
-                        className="font-normal"
-                      >
-                        Rows
-                      </FieldLabel>
-                      <Input
-                        id="table-size-rows"
-                        type="number"
-                        min={1}
-                        max={MAX_TABLE_DIMENSION}
-                        value={customRows}
-                        onChange={(e) => setCustomRows(Number(e.target.value))}
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel
-                        htmlFor="table-size-cols"
-                        className="font-normal"
-                      >
-                        Columns
-                      </FieldLabel>
-                      <Input
-                        id="table-size-cols"
-                        type="number"
-                        min={1}
-                        max={MAX_TABLE_DIMENSION}
-                        value={customCols}
-                        onChange={(e) => setCustomCols(Number(e.target.value))}
-                      />
-                    </Field>
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  <Field orientation="horizontal">
+                    <RadioGroupItem value="custom" id="table-size-custom" />
+                    <FieldLabel
+                      htmlFor="table-size-custom"
+                      className="font-normal"
+                    >
+                      Custom
+                    </FieldLabel>
+                  </Field>
+                  <Field orientation="horizontal" className="max-w-15 self-end">
+                    <Input
+                      id="table-size-rows"
+                      disabled={sizeMode !== "custom"}
+                      type="number"
+                      min={1}
+                      max={MAX_TABLE_DIMENSION}
+                      value={customRows}
+                      onChange={(e) => setCustomRows(Number(e.target.value))}
+                    />
+                  </Field>
+                  <FieldDescription>×</FieldDescription>
+                  <Field orientation="horizontal" className="max-w-15 self-end">
+                    <Input
+                      id="table-size-cols"
+                      disabled={sizeMode !== "custom"}
+                      type="number"
+                      min={1}
+                      max={MAX_TABLE_DIMENSION}
+                      value={customCols}
+                      onChange={(e) => setCustomCols(Number(e.target.value))}
+                    />
+                  </Field>
+                </div>
               </RadioGroup>
             </FieldSet>
-            <FieldDescription>
-              {totalTables} table{totalTables === 1 ? "" : "s"} total
-              {neededNewTables > 0 && `, ${neededNewTables} new`}
-            </FieldDescription>
             {totalTables > RANDOMIZE_TABLE_COUNT_WARNING_THRESHOLD && (
               <Alert>
                 <AlertDescription>
@@ -229,16 +225,20 @@ export function RandomSeatingChartDialog({
               </Alert>
             )}
           </FieldGroup>
-          <DialogFooter>
-            <DialogClose render={<Button type="button" variant="outline" />}>
-              Cancel
-            </DialogClose>
-            <Button type="submit" disabled={isSubmitting || studentCount === 0}>
-              {isSubmitting && <Spinner />}
-              Generate
-            </Button>
-          </DialogFooter>
         </form>
+        <DialogFooter>
+          <DialogClose render={<Button type="button" variant="outline" />}>
+            Cancel
+          </DialogClose>
+          <Button
+            type="submit"
+            form="randomize-seating-chart-form"
+            disabled={isSubmitting || studentCount === 0}
+          >
+            {isSubmitting && <Spinner />}
+            Generate
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

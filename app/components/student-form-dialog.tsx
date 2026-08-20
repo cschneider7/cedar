@@ -1,8 +1,14 @@
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Controller, useForm } from "react-hook-form"
 import { useEffect, useRef, useState } from "react"
+import { Controller, useForm } from "react-hook-form"
 import { useFetcher } from "react-router"
 import * as z from "zod"
+import {
+  StudentPhotoField,
+  type PhotoFieldValue,
+} from "~/components/student-photo-field"
+import { Alert, AlertDescription } from "~/components/ui/alert"
+import { Button } from "~/components/ui/button"
 import {
   Dialog,
   DialogClose,
@@ -12,13 +18,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "~/components/ui/dialog"
-import { Alert, AlertDescription } from "~/components/ui/alert"
-import { Button } from "~/components/ui/button"
 import {
   Field,
   FieldError,
   FieldGroup,
   FieldLabel,
+  FieldSeparator,
 } from "~/components/ui/field"
 import { Input } from "~/components/ui/input"
 import {
@@ -29,10 +34,6 @@ import {
   SelectValue,
 } from "~/components/ui/select"
 import { Spinner } from "~/components/ui/spinner"
-import {
-  StudentPhotoField,
-  type PhotoFieldValue,
-} from "~/components/student-photo-field"
 import { useResourceFormDialog } from "~/hooks/use-resource-form-dialog"
 import { formatClassroomName } from "~/lib/classroom-term"
 import type { Classroom, Student } from "~/lib/schemas"
@@ -82,11 +83,12 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
 
   const defaultValues =
     mode === "create"
-      ? { name: "", classroom_id: null }
+      ? { name: "", classroom_id: null, seating_preference: null }
       : {
           name: props.student.name,
           student_id: props.student.student_id,
           classroom_id: props.student.classroom_id,
+          seating_preference: props.student.seating_preference ?? null,
         }
 
   const form = useForm<z.infer<typeof schema>>({
@@ -182,6 +184,15 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
     })
   })
 
+  const seatingPreferenceOptions: {
+    label: string
+    value: "front" | "back" | null
+  }[] = [
+    { label: "No preference", value: null },
+    { label: "Front", value: "front" },
+    { label: "Back", value: "back" },
+  ]
+
   return (
     <Dialog
       open={open}
@@ -265,10 +276,7 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
                       onValueChange={field.onChange}
                       items={classroomOptions}
                     >
-                      <SelectTrigger
-                        aria-invalid={fieldState.invalid}
-                        className="w-full"
-                      >
+                      <SelectTrigger aria-invalid={fieldState.invalid}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -289,6 +297,39 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
                 )}
               />
             </div>
+            <FieldSeparator />
+            <Controller
+              name="seating_preference"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field className="flex-1" data-invalid={fieldState.invalid}>
+                  <FieldLabel>Seating Preferences</FieldLabel>
+                  <Select
+                    name={field.name}
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    items={seatingPreferenceOptions}
+                  >
+                    <SelectTrigger
+                      aria-invalid={fieldState.invalid}
+                      className="w-full"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {seatingPreferenceOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {fieldState.invalid && (
+                    <FieldError errors={[fieldState.error]} />
+                  )}
+                </Field>
+              )}
+            />
           </FieldGroup>
         </form>
         <DialogFooter>

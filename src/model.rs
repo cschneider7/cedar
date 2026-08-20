@@ -27,6 +27,7 @@ pub struct StudentModel {
     pub name: String,
     pub image_url: Option<String>,
     pub created_time: Option<chrono::DateTime<chrono::Utc>>,
+    pub seating_preference: Option<String>,
 }
 
 /// Row shape of the `tables` table. Handlers build `TableSchema` directly

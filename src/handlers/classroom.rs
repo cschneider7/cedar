@@ -17,7 +17,7 @@ use crate::{
     model::ClassroomModel,
     schema::{
         ClassroomSchema, ColdCallCandidateSchema, ColdCallSchema, RandomizeSeatingChartSchema,
-        SeatingChartSchema, TableSchema, UpdateClassroomSchema,
+        SeatingChartSchema, SeatingPreference, TableSchema, UpdateClassroomSchema,
     },
     seating_chart::{self, MAX_TABLE_DIMENSION},
 };
@@ -355,10 +355,15 @@ pub async fn randomize_seating_chart_handler(
             .fetch_one(&data.db)
             .await?;
 
-    let students: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM students WHERE classroom_id = $1")
-        .bind(classroom_id)
-        .fetch_all(&data.db)
-        .await?;
+    let students: Vec<(Uuid, Option<String>)> =
+        sqlx::query_as("SELECT id, seating_preference FROM students WHERE classroom_id = $1")
+            .bind(classroom_id)
+            .fetch_all(&data.db)
+            .await?;
+    let students: Vec<(Uuid, Option<SeatingPreference>)> = students
+        .into_iter()
+        .map(|(id, pref)| (id, pref.and_then(|s| SeatingPreference::from_db_str(&s))))
+        .collect();
 
     let tables = seating_chart::build_randomized_chart(
         students,
@@ -512,6 +517,29 @@ mod tests {
         .bind(classroom_id)
         .bind(student_id)
         .bind(name)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    }
+
+    async fn insert_student_in_classroom_with_preference(
+        pool: &sqlx::PgPool,
+        user_id: &str,
+        classroom_id: Uuid,
+        student_id: i32,
+        name: &str,
+        preference: &str,
+    ) -> Uuid {
+        sqlx::query_scalar(
+            "INSERT INTO students (user_id, classroom_id, student_id, name, seating_preference)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id",
+        )
+        .bind(user_id)
+        .bind(classroom_id)
+        .bind(student_id)
+        .bind(name)
+        .bind(preference)
         .fetch_one(pool)
         .await
         .unwrap()
@@ -1438,6 +1466,62 @@ mod tests {
             .collect();
         assert_eq!(assigned.len(), 1);
         assert_eq!(assigned[0], &json!(in_classroom.to_string()));
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn randomize_seating_chart_honors_front_preference(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
+        let front = insert_student_in_classroom_with_preference(
+            &pool,
+            &user_id,
+            classroom.id,
+            1,
+            "Alice",
+            "front",
+        )
+        .await;
+        for i in 2..=8 {
+            insert_student_in_classroom(&pool, &user_id, classroom.id, i, "Student").await;
+        }
+
+        let cols = 2;
+        let body = json!({
+            "keep_existing_tables": false,
+            "new_table_rows": 4,
+            "new_table_cols": cols,
+            "existing_tables": [],
+            "boundary_width": 1080,
+            "boundary_height": 820
+        });
+        let response = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                &format!(
+                    "/api/v1/classrooms/{}/seating-chart/randomize",
+                    classroom.id
+                ),
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        let tables = json["data"]["tables"].as_array().unwrap();
+        let front_seat_index = tables
+            .iter()
+            .flat_map(|t| t["seat_assignments"].as_array().unwrap().iter().enumerate())
+            .find(|(_, s)| **s == json!(front.to_string()))
+            .map(|(i, _)| i)
+            .unwrap();
+        assert_eq!(front_seat_index / cols, 0);
 
         Ok(())
     }

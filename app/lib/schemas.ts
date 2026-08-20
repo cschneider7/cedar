@@ -1,6 +1,6 @@
 import * as z from "zod"
-import { MAX_TABLE_DIMENSION } from "~/lib/seating-chart-utils"
 import { TERM_SEASONS } from "~/lib/classroom-term"
+import { MAX_TABLE_DIMENSION } from "~/lib/seating-chart-utils"
 
 const currentYear = new Date().getFullYear()
 const termYearSchema = z.coerce
@@ -17,9 +17,8 @@ export const CreateStudentSchema = z.object({
     .trim()
     .min(1, "Name must be at least 1 character.")
     .max(100, "Name must be at most 100 characters."),
-  // Nullish, not nullable: image_url is merged into the submit payload by
-  // hand (outside RHF); the string itself is an S3 object key, not a URL.
   image_url: z.string().min(1).nullish(),
+  seating_preference: z.enum(["front", "back"]).nullish(),
 })
 
 export const StudentSchema = CreateStudentSchema.extend({
@@ -64,6 +63,7 @@ export const UpdateStudentSchema = z.object({
       .max(100, "Name must be at most 100 characters.")
   ),
   image_url: z.string().min(1).nullish(),
+  seating_preference: z.enum(["front", "back"]).nullable().optional(),
 })
 
 export const CreateClassroomSchema = z.object({

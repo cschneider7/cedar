@@ -7,6 +7,7 @@ const validPayload = {
   name: "Bob Burger",
   classroom_id: null,
   image_url: null,
+  seating_preference: "front",
 }
 
 const args = (body: unknown) =>
@@ -45,6 +46,27 @@ describe("create-student action", () => {
     )
 
     const result = await action(args(payloadWithoutImageUrl))
+
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({ ok: true, id: createdStudent.id })
+  })
+
+  // seating_preference is `.nullable().optional()` on CreateStudentSchema,
+  // so the request must still succeed when it's left out entirely.
+  it("creates the student when seating_preference is omitted entirely", async () => {
+    const {
+      seating_preference: _seatingPreference,
+      ...payloadWithoutSeatingPreference
+    } = validPayload
+    const createdStudent = {
+      id: "student-1",
+      ...payloadWithoutSeatingPreference,
+    }
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ data: createdStudent }), { status: 201 })
+    )
+
+    const result = await action(args(payloadWithoutSeatingPreference))
 
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(result).toEqual({ ok: true, id: createdStudent.id })

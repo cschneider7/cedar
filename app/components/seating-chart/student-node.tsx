@@ -2,6 +2,7 @@ import { useReactFlow, type Node, type NodeProps } from "@xyflow/react"
 import { Trash2Icon } from "lucide-react"
 import { memo, useContext } from "react"
 import { StudentAvatar } from "~/components/student-avatar"
+import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import {
   Item,
@@ -42,11 +43,19 @@ export const StudentNode = memo(function StudentNode({
         size="xs"
         className="relative size-full gap-1 overflow-hidden p-1 **:data-[slot=item-title]:text-[10px]"
       >
-        <ItemHeader>
+        <ItemHeader className="relative">
           <StudentAvatar
             student={data.student}
             className="aspect-5/4 w-full rounded-sm"
           />
+          {data.student.seating_preference && (
+            <Badge
+              variant="secondary"
+              className="absolute top-1 left-1 h-4 px-1 text-[9px] leading-none"
+            >
+              {data.student.seating_preference === "front" ? "Front" : "Back"}
+            </Badge>
+          )}
         </ItemHeader>
         <ItemContent>
           <ItemTitle className="text-xs select-none">

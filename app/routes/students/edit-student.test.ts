@@ -30,6 +30,22 @@ describe("edit-student action", () => {
     expect(result).toEqual({ ok: true, id: studentId })
   })
 
+  it("clears seating_preference by sending an explicit null", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 200 }))
+
+    const result = await action(args({ seating_preference: null }))
+
+    expect(fetch).toHaveBeenCalledTimes(1)
+    const [patchUrl, patchInit] = vi.mocked(fetch).mock.calls[0]
+    expect(patchUrl).toBe(`http://localhost:3000/api/v1/students/${studentId}`)
+    expect(patchInit?.method).toBe("PATCH")
+    expect(JSON.parse(patchInit?.body as string)).toEqual({
+      seating_preference: null,
+    })
+
+    expect(result).toEqual({ ok: true, id: studentId })
+  })
+
   it("returns validation errors and never calls fetch for an invalid payload", async () => {
     const result = await action(args({ student_id: -1 }))
 
