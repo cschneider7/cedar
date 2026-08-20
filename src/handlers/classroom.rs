@@ -365,8 +365,18 @@ pub async fn randomize_seating_chart_handler(
         .map(|(id, pref)| (id, pref.and_then(|s| SeatingPreference::from_db_str(&s))))
         .collect();
 
+    let roster_ids: Vec<Uuid> = students.iter().map(|(id, _)| *id).collect();
+    let separations: Vec<(Uuid, Uuid)> = sqlx::query_as(
+        "SELECT student_id_a, student_id_b FROM student_separations
+        WHERE student_id_a = ANY($1) AND student_id_b = ANY($1)",
+    )
+    .bind(&roster_ids)
+    .fetch_all(&data.db)
+    .await?;
+
     let tables = seating_chart::build_randomized_chart(
         students,
+        separations,
         body.keep_existing_tables,
         body.existing_tables,
         body.new_table_rows,
@@ -1522,6 +1532,72 @@ mod tests {
             .map(|(i, _)| i)
             .unwrap();
         assert_eq!(front_seat_index / cols, 0);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn randomize_seating_chart_respects_separation_when_feasible(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
+        let a = insert_student_in_classroom(&pool, &user_id, classroom.id, 1, "Alice").await;
+        let b = insert_student_in_classroom(&pool, &user_id, classroom.id, 2, "Bob").await;
+
+        let (id_a, id_b) = if a < b { (a, b) } else { (b, a) };
+        sqlx::query(
+            "INSERT INTO student_separations (user_id, student_id_a, student_id_b)
+            VALUES ($1, $2, $3)",
+        )
+        .bind(&user_id)
+        .bind(id_a)
+        .bind(id_b)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // 5 single-seat tables gives structurally guaranteed room to avoid
+        // seating the pair together (see seating_chart.rs's own tests for
+        // why this shape is deterministic, not just probabilistically likely).
+        let existing_tables: Vec<serde_json::Value> = (0..5)
+            .map(|i| json!({"rows": 1, "cols": 1, "x_pos": 40 + i * 200, "y_pos": 40}))
+            .collect();
+        let body = json!({
+            "keep_existing_tables": true,
+            "new_table_rows": 1,
+            "new_table_cols": 1,
+            "existing_tables": existing_tables,
+            "boundary_width": 1080,
+            "boundary_height": 820
+        });
+        let response = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                &format!(
+                    "/api/v1/classrooms/{}/seating-chart/randomize",
+                    classroom.id
+                ),
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = body_json(response).await;
+        let tables = json["data"]["tables"].as_array().unwrap();
+        let table_of = |student_id: Uuid| {
+            tables.iter().position(|t| {
+                t["seat_assignments"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|s| *s == json!(student_id.to_string()))
+            })
+        };
+        assert_ne!(table_of(a), table_of(b));
 
         Ok(())
     }

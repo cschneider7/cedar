@@ -5,9 +5,11 @@ import {
   ColdCallPickSchema,
   ColdCallSchema,
   CreateClassroomSchema,
+  CreateSeparationSchema,
   CreateStudentSchema,
   RandomizeSeatingChartOptionsSchema,
   SeatingChartSchema,
+  SeparationSchema,
   StudentLimitStatusSchema,
   StudentSchema,
   StudentsPageSchema,
@@ -19,6 +21,7 @@ import {
   type ColdCallPick,
   type RandomizeSeatingChartOptions,
   type SeatingChart,
+  type Separation,
   type Student,
   type StudentLimitStatus,
   type StudentsPage,
@@ -482,5 +485,49 @@ export async function pickColdCallStudent(
     method: "POST",
     token,
     body: z.parse(ColdCallSchema, payload),
+  })
+}
+
+/**
+ * Fetches every "keep apart" separation pair for the current user, unscoped
+ * by classroom.
+ * @param token - The caller's session token, if any.
+ * @returns All of the user's separation pairs.
+ */
+export async function getSeparations(
+  token?: string | null
+): Promise<Separation[]> {
+  return apiFetch(`/separations`, z.array(SeparationSchema), { token })
+}
+
+/**
+ * Creates a "keep apart" separation between two students.
+ * @param pair - The two students' public-facing UUIDs.
+ * @param token - The caller's session token, if any.
+ * @returns The created (or, if it already existed, the existing) pair.
+ */
+export async function createSeparation(
+  pair: z.infer<typeof CreateSeparationSchema>,
+  token?: string | null
+): Promise<Separation> {
+  return apiFetch(`/separations`, SeparationSchema, {
+    method: "POST",
+    token,
+    body: z.parse(CreateSeparationSchema, pair),
+  })
+}
+
+/**
+ * Deletes a "keep apart" separation pair.
+ * @param separationId - The pair's public-facing UUID.
+ * @param token - The caller's session token, if any.
+ */
+export async function deleteSeparation(
+  separationId: string,
+  token?: string | null
+) {
+  await apiFetch(`/separations/${separationId}`, undefined, {
+    method: "DELETE",
+    token,
   })
 }

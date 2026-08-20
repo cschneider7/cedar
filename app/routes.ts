@@ -38,6 +38,11 @@ export default [
           "routes/classrooms/randomize-seating-chart.tsx"
         ),
         route(":classroomId/cold-call", "routes/classrooms/cold-call.tsx"),
+        route("separations/new", "routes/classrooms/create-separation.tsx"),
+        route(
+          "separations/:separationId/delete",
+          "routes/classrooms/delete-separation.tsx"
+        ),
       ]),
     ]),
   ]),

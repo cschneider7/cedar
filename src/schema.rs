@@ -192,3 +192,10 @@ pub struct ColdCallCandidateSchema {
 pub struct ColdCallSchema {
     pub students: Vec<ColdCallCandidateSchema>,
 }
+
+/// Request body for creating a "keep apart" separation between two students.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CreateSeparationSchema {
+    pub student_id_a: Uuid,
+    pub student_id_b: Uuid,
+}
