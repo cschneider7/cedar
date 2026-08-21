@@ -40,7 +40,8 @@ import type { Classroom, Student } from "~/lib/schemas"
 import { CreateStudentSchema, UpdateStudentSchema } from "~/lib/schemas"
 
 type StudentFormDialogProps = (
-  { mode: "create" } | { mode: "edit"; student: Student }
+  | { mode: "create"; defaultClassroomId?: string | null }
+  | { mode: "edit"; student: Student }
 ) & {
   trigger?: React.ReactElement
   open?: boolean
@@ -83,7 +84,11 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
 
   const defaultValues =
     mode === "create"
-      ? { name: "", classroom_id: null, seating_preference: null }
+      ? {
+          name: "",
+          classroom_id: props.defaultClassroomId ?? null,
+          seating_preference: null,
+        }
       : {
           name: props.student.name,
           student_id: props.student.student_id,

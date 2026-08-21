@@ -35,7 +35,6 @@ import {
   FieldSet,
 } from "~/components/ui/field"
 import { Input } from "~/components/ui/input"
-import { Progress } from "~/components/ui/progress"
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group"
 import { ScrollArea } from "~/components/ui/scroll-area"
 import {
@@ -49,26 +48,21 @@ import { Spinner } from "~/components/ui/spinner"
 import { Switch } from "~/components/ui/switch"
 import { useDeleteResource } from "~/hooks/use-delete-resource"
 import type {
-  ColdCall,
   RandomizeSeatingChartOptions,
   SeatingChart,
   Separation,
   Student,
 } from "~/lib/schemas"
 import {
-  computeColdCallProbabilities,
   computeRandomizeTableCount,
   DEFAULT_TABLE_COLS,
   DEFAULT_TABLE_ROWS,
   getBoundaryMinSize,
   GRID_STEP,
-  INITIAL_WEIGHT,
   MAX_TABLE_DIMENSION,
   RANDOMIZE_TABLE_COUNT_WARNING_THRESHOLD,
   type TableGeometry,
 } from "~/lib/seating-chart-utils"
-import { cn } from "~/lib/utils"
-import type { action as coldCallAction } from "~/routes/classrooms/cold-call"
 import type { action as createSeparationAction } from "~/routes/classrooms/create-separation"
 import type { action as randomizeSeatingChartAction } from "~/routes/classrooms/randomize-seating-chart"
 
@@ -249,139 +243,6 @@ export function RandomSeatingChartDialog({
             {isSubmitting && <Spinner />}
             Generate
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-/** Dialog for cold-calling a random student, weighted so recent picks are less likely. */
-export function ColdCallDialog({
-  classroomId,
-  students,
-  weights,
-  onWeightsChange,
-  ...props
-}: React.ComponentProps<typeof Dialog> & {
-  classroomId: string
-  students: Student[]
-  weights: Record<string, number>
-  onWeightsChange: (weights: Record<string, number>) => void
-}) {
-  const fetcher = useFetcher<typeof coldCallAction>()
-  const isSubmitting = fetcher.state !== "idle"
-  const [hasPicked, setHasPicked] = useState(false)
-
-  const studentsById = useMemo(
-    () => new Map(students.map((s) => [s.id, s])),
-    [students]
-  )
-  const probabilities = useMemo(
-    () => computeColdCallProbabilities(students, weights),
-    [students, weights]
-  )
-
-  function submit(currentWeights: Record<string, number>) {
-    const payload: ColdCall = {
-      students: students.map((s) => ({
-        student_id: s.id,
-        weight: currentWeights[s.id] ?? INITIAL_WEIGHT,
-      })),
-    }
-    fetcher.submit(payload, {
-      method: "post",
-      action: `/classrooms/${classroomId}/cold-call`,
-      encType: "application/json",
-    })
-  }
-
-  useEffect(() => {
-    if (!props.open) {
-      return
-    }
-    setHasPicked(false)
-  }, [props.open])
-
-  useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data?.ok) {
-      const nextWeights = Object.fromEntries(
-        fetcher.data.pick.students.map((c) => [c.student_id, c.weight])
-      )
-      onWeightsChange(nextWeights)
-      setHasPicked(true)
-    }
-  }, [fetcher.state, fetcher.data])
-
-  const picked =
-    hasPicked &&
-    fetcher.data?.ok &&
-    studentsById.get(fetcher.data.pick.picked_student_id)
-  const pickedId = picked ? picked.id : null
-
-  function handleReset() {
-    onWeightsChange(
-      Object.fromEntries(students.map((s) => [s.id, INITIAL_WEIGHT]))
-    )
-    setHasPicked(false)
-  }
-
-  return (
-    <Dialog {...props}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Cold Call</DialogTitle>
-          <DialogDescription>
-            Picks a random student, favoring those who haven't been picked
-            recently.
-          </DialogDescription>
-        </DialogHeader>
-        {fetcher.data && !fetcher.data.ok && (
-          <Alert variant="destructive">
-            <AlertDescription>{fetcher.data.error}</AlertDescription>
-          </Alert>
-        )}
-        <ScrollArea className="h-64 rounded-md border">
-          <div className="flex flex-col gap-2 p-3">
-            {probabilities.map(({ student, probability }) => (
-              <div key={student.id} className="flex items-center gap-2">
-                <span
-                  className={cn(
-                    "w-24 truncate text-sm",
-                    student.id === pickedId && "font-semibold"
-                  )}
-                >
-                  {student.name}
-                </span>
-                <Progress value={probability * 100} className="flex-1" />
-                <span className="w-10 text-right text-sm text-muted-foreground tabular-nums">
-                  {Math.round(probability * 100)}%
-                </span>
-              </div>
-            ))}
-          </div>
-        </ScrollArea>
-        <div className="flex min-h-16 items-center justify-center rounded-md border">
-          {isSubmitting ? (
-            <Spinner />
-          ) : (
-            picked && <p className="text-lg font-medium">{picked.name}</p>
-          )}
-        </div>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={handleReset}>
-            Reset
-          </Button>
-          <Button
-            type="button"
-            disabled={isSubmitting || students.length === 0}
-            onClick={() => submit(weights)}
-          >
-            {isSubmitting && <Spinner />}
-            {hasPicked ? "Pick Again" : "Pick Student"}
-          </Button>
-          <DialogClose render={<Button type="button" variant="outline" />}>
-            Close
-          </DialogClose>
         </DialogFooter>
       </DialogContent>
     </Dialog>
