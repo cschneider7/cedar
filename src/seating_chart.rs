@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -92,11 +94,66 @@ fn create_empty_table(rows: i16, cols: i16, x_pos: i32, y_pos: i32) -> TableSche
     }
 }
 
+/// A seat's table/index identity plus its absolute canvas y, used to sort
+/// and assign seats independently of which table they belong to.
+struct SeatRef {
+    table_index: usize,
+    seat_index: usize,
+    seat_y: i32,
+}
+
+/// Greedily assigns `students` (already shuffled) into `candidates` (indices
+/// into `seats`/`assignment`, in the group's existing sorted order), each
+/// student preferring the first remaining candidate whose table doesn't
+/// already hold one of their "keep apart" partners. Falls back to the first
+/// remaining candidate if none qualify (today's exact behavior — best-effort
+/// only, no error on an unavoidable violation). With an empty `partner_map`
+/// this always takes the first remaining candidate, i.e. identical output to
+/// the pre-separations index-for-index fill. Mutates `candidates` (removing
+/// indices as they're used), `assignment`, and `table_occupants` in place.
+fn assign_greedy(
+    students: &[Uuid],
+    candidates: &mut Vec<usize>,
+    seats: &[SeatRef],
+    assignment: &mut [Option<Uuid>],
+    table_occupants: &mut HashMap<usize, HashSet<Uuid>>,
+    partner_map: &HashMap<Uuid, Vec<Uuid>>,
+) {
+    for &student_id in students {
+        if candidates.is_empty() {
+            break;
+        }
+        let partners = partner_map.get(&student_id);
+        let pick = partners
+            .and_then(|partners| {
+                candidates.iter().position(|&i| {
+                    let occupants = table_occupants.get(&seats[i].table_index);
+                    !partners
+                        .iter()
+                        .any(|p| occupants.is_some_and(|o| o.contains(p)))
+                })
+            })
+            .unwrap_or(0);
+        let seat_index = candidates.remove(pick);
+        let table_index = seats[seat_index].table_index;
+        assignment[seat_index] = Some(student_id);
+        table_occupants
+            .entry(table_index)
+            .or_default()
+            .insert(student_id);
+    }
+}
+
 /// Builds a proposed seating chart: kept tables augmented with just enough
-/// new tables to seat every student, then students shuffled in at random.
-/// Errors if the boundary can't fit all the needed new tables.
+/// new tables to seat every student, then students shuffled in at random,
+/// with a best-effort attempt to honor each student's front/back
+/// `seating_preference` and avoid seating "keep apart" `separations` pairs
+/// at the same table. Errors if the boundary can't fit all the needed new
+/// tables.
+#[allow(clippy::too_many_arguments)]
 pub fn build_randomized_chart(
     students: Vec<(Uuid, Option<SeatingPreference>)>,
+    separations: Vec<(Uuid, Uuid)>,
     keep_existing_tables: bool,
     existing_tables: Vec<TableGeometry>,
     new_table_rows: i16,
@@ -143,10 +200,10 @@ pub fn build_randomized_chart(
         ));
     }
 
-    struct SeatRef {
-        table_index: usize,
-        seat_index: usize,
-        seat_y: i32,
+    let mut partner_map: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
+    for (a, b) in &separations {
+        partner_map.entry(*a).or_default().push(*b);
+        partner_map.entry(*b).or_default().push(*a);
     }
 
     // Step 1: compute each seat's absolute canvas y (row-major, matching
@@ -191,17 +248,34 @@ pub fn build_randomized_chart(
     let back_start = n - back_take;
 
     let mut assignment: Vec<Option<Uuid>> = vec![None; n];
+    let mut table_occupants: HashMap<usize, HashSet<Uuid>> = HashMap::new();
 
-    // Step 4: front group -> first front_take seats in sorted order.
-    for (i, id) in front_students[..front_take].iter().enumerate() {
-        assignment[i] = Some(*id);
-    }
-    // Step 5: back group -> last back_take seats in sorted order.
-    for (i, id) in back_students[..back_take].iter().enumerate() {
-        assignment[back_start + i] = Some(*id);
-    }
+    // Step 4: front group -> first front_take seats in sorted order, greedily
+    // avoiding a seat whose table already holds a separated partner.
+    let mut front_candidates: Vec<usize> = (0..front_take).collect();
+    assign_greedy(
+        &front_students[..front_take],
+        &mut front_candidates,
+        &seats,
+        &mut assignment,
+        &mut table_occupants,
+        &partner_map,
+    );
+    // Step 5: back group -> last back_take seats in sorted order, same
+    // greedy avoidance.
+    let mut back_candidates: Vec<usize> = (back_start..n).collect();
+    assign_greedy(
+        &back_students[..back_take],
+        &mut back_candidates,
+        &seats,
+        &mut assignment,
+        &mut table_occupants,
+        &partner_map,
+    );
     // Step 6: everyone else (none group + front/back overflow) shuffled
-    // together into whatever seats remain.
+    // together into whatever seats remain, same greedy avoidance —
+    // `table_occupants` carries over from steps 4/5 since a separation can
+    // span a front/back-preferring student and a leftover one.
     let mut leftover: Vec<Uuid> = front_students[front_take..]
         .iter()
         .chain(back_students[back_take..].iter())
@@ -209,10 +283,15 @@ pub fn build_randomized_chart(
         .copied()
         .collect();
     leftover.shuffle(&mut rng);
-    let mut leftover_iter = leftover.into_iter();
-    for slot in &mut assignment[front_take..back_start] {
-        *slot = leftover_iter.next();
-    }
+    let mut leftover_candidates: Vec<usize> = (front_take..back_start).collect();
+    assign_greedy(
+        &leftover,
+        &mut leftover_candidates,
+        &seats,
+        &mut assignment,
+        &mut table_occupants,
+        &partner_map,
+    );
 
     // Write assignments back into table_pool via each seat's identity.
     for (slot, seat_ref) in assignment.into_iter().zip(seats.iter()) {
@@ -266,9 +345,17 @@ mod tests {
     #[test]
     fn no_existing_tables_seats_every_student_exactly_once() {
         let roster = students(5);
-        let tables =
-            build_randomized_chart(roster.clone(), false, vec![], 2, 2, BOUNDARY.0, BOUNDARY.1)
-                .unwrap();
+        let tables = build_randomized_chart(
+            roster.clone(),
+            vec![],
+            false,
+            vec![],
+            2,
+            2,
+            BOUNDARY.0,
+            BOUNDARY.1,
+        )
+        .unwrap();
 
         let capacity: usize = tables.iter().map(|t| t.seat_assignments.len()).sum();
         assert!(capacity >= roster.len());
@@ -287,6 +374,7 @@ mod tests {
         }];
         let tables = build_randomized_chart(
             students(4),
+            vec![],
             true,
             existing.clone(),
             2,
@@ -311,9 +399,17 @@ mod tests {
     #[test]
     fn insufficient_capacity_creates_expected_new_table_count_with_remainder() {
         // 9 students, 2x2 (4-seat) new tables, no kept capacity -> ceil(9/4) = 3, not 2.
-        let tables =
-            build_randomized_chart(students(9), false, vec![], 2, 2, BOUNDARY.0, BOUNDARY.1)
-                .unwrap();
+        let tables = build_randomized_chart(
+            students(9),
+            vec![],
+            false,
+            vec![],
+            2,
+            2,
+            BOUNDARY.0,
+            BOUNDARY.1,
+        )
+        .unwrap();
         assert_eq!(tables.len(), 3);
     }
 
@@ -326,7 +422,8 @@ mod tests {
             y_pos: 40,
         }];
         let tables =
-            build_randomized_chart(vec![], true, existing, 2, 2, BOUNDARY.0, BOUNDARY.1).unwrap();
+            build_randomized_chart(vec![], vec![], true, existing, 2, 2, BOUNDARY.0, BOUNDARY.1)
+                .unwrap();
 
         assert_eq!(tables.len(), 1);
         assert!(tables[0].seat_assignments.iter().all(|s| s.is_none()));
@@ -334,12 +431,28 @@ mod tests {
 
     #[test]
     fn keep_true_with_no_existing_tables_behaves_like_keep_false() {
-        let with_keep =
-            build_randomized_chart(students(5), true, vec![], 2, 2, BOUNDARY.0, BOUNDARY.1)
-                .unwrap();
-        let without_keep =
-            build_randomized_chart(students(5), false, vec![], 2, 2, BOUNDARY.0, BOUNDARY.1)
-                .unwrap();
+        let with_keep = build_randomized_chart(
+            students(5),
+            vec![],
+            true,
+            vec![],
+            2,
+            2,
+            BOUNDARY.0,
+            BOUNDARY.1,
+        )
+        .unwrap();
+        let without_keep = build_randomized_chart(
+            students(5),
+            vec![],
+            false,
+            vec![],
+            2,
+            2,
+            BOUNDARY.0,
+            BOUNDARY.1,
+        )
+        .unwrap();
 
         assert_eq!(geometry(&with_keep), geometry(&without_keep));
     }
@@ -353,9 +466,17 @@ mod tests {
             y_pos: 40,
         }];
         // Kept capacity 4, 5 students -> exactly one new 2x2 table needed.
-        let tables =
-            build_randomized_chart(students(5), true, existing, 2, 2, BOUNDARY.0, BOUNDARY.1)
-                .unwrap();
+        let tables = build_randomized_chart(
+            students(5),
+            vec![],
+            true,
+            existing,
+            2,
+            2,
+            BOUNDARY.0,
+            BOUNDARY.1,
+        )
+        .unwrap();
 
         assert_eq!(tables.len(), 2);
         assert_ne!((tables[1].x_pos, tables[1].y_pos), (40, 40));
@@ -374,7 +495,8 @@ mod tests {
         let width = TABLE_OFFSET * 2 + expected_width;
         let height = TABLE_OFFSET * 2 + expected_height;
         let tables =
-            build_randomized_chart(students(4), false, vec![], 1, 4, width, height).unwrap();
+            build_randomized_chart(students(4), vec![], false, vec![], 1, 4, width, height)
+                .unwrap();
 
         assert_eq!(tables.len(), 1);
         assert_eq!(tables[0].x_pos, TABLE_OFFSET);
@@ -387,9 +509,17 @@ mod tests {
     fn new_tables_avoid_overlapping_each_other_from_an_empty_pool() {
         // 3x3 tables (pixel size 297) are larger than the old fixed grid spacing, so
         // a naive next-slot heuristic would still overlap the first table.
-        let tables =
-            build_randomized_chart(students(10), false, vec![], 3, 3, BOUNDARY.0, BOUNDARY.1)
-                .unwrap();
+        let tables = build_randomized_chart(
+            students(10),
+            vec![],
+            false,
+            vec![],
+            3,
+            3,
+            BOUNDARY.0,
+            BOUNDARY.1,
+        )
+        .unwrap();
 
         assert_eq!(tables.len(), 2);
         assert!(!overlaps(
@@ -409,9 +539,17 @@ mod tests {
             y_pos: 40,
         }];
         let roster = students(10);
-        let tables =
-            build_randomized_chart(roster.clone(), true, existing, 2, 2, BOUNDARY.0, BOUNDARY.1)
-                .unwrap();
+        let tables = build_randomized_chart(
+            roster.clone(),
+            vec![],
+            true,
+            existing,
+            2,
+            2,
+            BOUNDARY.0,
+            BOUNDARY.1,
+        )
+        .unwrap();
 
         let assigned = assigned_ids(&tables);
         let unique: HashSet<Uuid> = assigned.iter().copied().collect();
@@ -425,6 +563,7 @@ mod tests {
         let tiny_boundary = 2 * TABLE_OFFSET + table_pixel_size(2, 2).0;
         let result = build_randomized_chart(
             students(8),
+            vec![],
             false,
             vec![],
             2,
@@ -445,8 +584,17 @@ mod tests {
         let table_size = table_pixel_size(2, 2).0;
         let spacing = (table_size + TABLE_GAP + GRID_STEP - 1) / GRID_STEP * GRID_STEP;
         let boundary = 2 * TABLE_OFFSET + spacing + table_size;
-        let tables =
-            build_randomized_chart(students(16), false, vec![], 2, 2, boundary, boundary).unwrap();
+        let tables = build_randomized_chart(
+            students(16),
+            vec![],
+            false,
+            vec![],
+            2,
+            2,
+            boundary,
+            boundary,
+        )
+        .unwrap();
 
         assert_eq!(tables.len(), 4);
         for table in &tables {
@@ -501,7 +649,8 @@ mod tests {
         let front = students_with_preference(2, SeatingPreference::Front);
         let front_ids: HashSet<Uuid> = student_ids(&front).into_iter().collect();
         let tables =
-            build_randomized_chart(front, true, existing, 2, 2, BOUNDARY.0, BOUNDARY.1).unwrap();
+            build_randomized_chart(front, vec![], true, existing, 2, 2, BOUNDARY.0, BOUNDARY.1)
+                .unwrap();
 
         let front_seat_ys: Vec<i32> = assigned_seat_ys(&tables)
             .into_iter()
@@ -527,7 +676,8 @@ mod tests {
         let back = students_with_preference(2, SeatingPreference::Back);
         let back_ids: HashSet<Uuid> = student_ids(&back).into_iter().collect();
         let tables =
-            build_randomized_chart(back, true, existing, 2, 2, BOUNDARY.0, BOUNDARY.1).unwrap();
+            build_randomized_chart(back, vec![], true, existing, 2, 2, BOUNDARY.0, BOUNDARY.1)
+                .unwrap();
 
         let back_seat_ys: Vec<i32> = assigned_seat_ys(&tables)
             .into_iter()
@@ -561,7 +711,8 @@ mod tests {
         roster.extend(none);
 
         let tables =
-            build_randomized_chart(roster, true, existing, 2, 2, BOUNDARY.0, BOUNDARY.1).unwrap();
+            build_randomized_chart(roster, vec![], true, existing, 2, 2, BOUNDARY.0, BOUNDARY.1)
+                .unwrap();
         let assigned = assigned_seat_ys(&tables);
 
         let front_max_y = assigned
@@ -615,7 +766,8 @@ mod tests {
         let roster_ids: HashSet<Uuid> = student_ids(&roster).into_iter().collect();
 
         let tables =
-            build_randomized_chart(roster, true, existing, 2, 2, BOUNDARY.0, BOUNDARY.1).unwrap();
+            build_randomized_chart(roster, vec![], true, existing, 2, 2, BOUNDARY.0, BOUNDARY.1)
+                .unwrap();
         let assigned = assigned_seat_ys(&tables);
 
         // No panic, and everyone is seated exactly once (capacity == roster size).
@@ -660,7 +812,8 @@ mod tests {
         let roster_ids: HashSet<Uuid> = student_ids(&roster).into_iter().collect();
 
         let tables =
-            build_randomized_chart(roster, true, existing, 2, 2, BOUNDARY.0, BOUNDARY.1).unwrap();
+            build_randomized_chart(roster, vec![], true, existing, 2, 2, BOUNDARY.0, BOUNDARY.1)
+                .unwrap();
         let assigned = assigned_ids(&tables);
 
         assert_eq!(assigned.len(), 3);
@@ -672,9 +825,17 @@ mod tests {
     #[test]
     fn zero_preference_students_matches_plain_shuffle_regression() {
         let roster = students(5);
-        let tables =
-            build_randomized_chart(roster.clone(), false, vec![], 2, 2, BOUNDARY.0, BOUNDARY.1)
-                .unwrap();
+        let tables = build_randomized_chart(
+            roster.clone(),
+            vec![],
+            false,
+            vec![],
+            2,
+            2,
+            BOUNDARY.0,
+            BOUNDARY.1,
+        )
+        .unwrap();
 
         let capacity: usize = tables.iter().map(|t| t.seat_assignments.len()).sum();
         assert!(capacity >= roster.len());
@@ -701,7 +862,8 @@ mod tests {
         roster.extend(none);
 
         let tables =
-            build_randomized_chart(roster, true, existing, 2, 2, BOUNDARY.0, BOUNDARY.1).unwrap();
+            build_randomized_chart(roster, vec![], true, existing, 2, 2, BOUNDARY.0, BOUNDARY.1)
+                .unwrap();
         let assigned = assigned_seat_ys(&tables);
 
         let mut seat_ys: Vec<i32> = assigned.iter().map(|(_, y)| *y).collect();
@@ -719,9 +881,17 @@ mod tests {
     fn new_tables_are_placed_with_a_gap_not_touching() {
         // 3 students, 1-seat tables, no kept capacity -> 3 new tables, each
         // packed as tightly as possible against the last.
-        let tables =
-            build_randomized_chart(students(3), false, vec![], 1, 1, BOUNDARY.0, BOUNDARY.1)
-                .unwrap();
+        let tables = build_randomized_chart(
+            students(3),
+            vec![],
+            false,
+            vec![],
+            1,
+            1,
+            BOUNDARY.0,
+            BOUNDARY.1,
+        )
+        .unwrap();
 
         assert_eq!(tables.len(), 3);
         let size = table_pixel_size(1, 1);
@@ -743,5 +913,168 @@ mod tests {
                 assert!(x_gap >= TABLE_GAP || y_gap >= TABLE_GAP);
             }
         }
+    }
+
+    /// The index into `tables` of whichever table seats `student_id`, if any.
+    fn table_of(tables: &[TableSchema], student_id: Uuid) -> Option<usize> {
+        tables
+            .iter()
+            .position(|t| t.seat_assignments.contains(&Some(student_id)))
+    }
+
+    #[test]
+    fn separated_pair_never_shares_a_table_when_capacity_allows() {
+        // 5 single-seat tables, 2 students who are a separated pair: once
+        // either takes a table's only seat, that table has zero remaining
+        // candidates, so avoidance is structurally guaranteed regardless of
+        // shuffle order -- this isn't just probabilistically likely to pass.
+        let existing: Vec<TableGeometry> = (0..5)
+            .map(|i| TableGeometry {
+                rows: 1,
+                cols: 1,
+                x_pos: 40 + i * 200,
+                y_pos: 40,
+            })
+            .collect();
+        let roster = students(2);
+        let (a, b) = (roster[0].0, roster[1].0);
+
+        for _ in 0..50 {
+            let tables = build_randomized_chart(
+                roster.clone(),
+                vec![(a.min(b), a.max(b))],
+                true,
+                existing.clone(),
+                2,
+                2,
+                BOUNDARY.0,
+                BOUNDARY.1,
+            )
+            .unwrap();
+
+            let table_a = table_of(&tables, a);
+            let table_b = table_of(&tables, b);
+            assert!(table_a.is_some() && table_b.is_some());
+            assert_ne!(table_a, table_b);
+        }
+    }
+
+    #[test]
+    fn separated_pair_falls_back_to_shared_table_when_no_room_to_avoid() {
+        // A single 2-seat table can't possibly seat a pair apart -- the
+        // greedy pass must still seat both without panicking, accepting the
+        // unavoidable violation (best-effort, matches seating_preference's
+        // existing posture).
+        let existing = vec![TableGeometry {
+            rows: 1,
+            cols: 2,
+            x_pos: 40,
+            y_pos: 40,
+        }];
+        let roster = students(2);
+        let (a, b) = (roster[0].0, roster[1].0);
+
+        let tables = build_randomized_chart(
+            roster,
+            vec![(a.min(b), a.max(b))],
+            true,
+            existing,
+            2,
+            2,
+            BOUNDARY.0,
+            BOUNDARY.1,
+        )
+        .unwrap();
+
+        assert_eq!(table_of(&tables, a), Some(0));
+        assert_eq!(table_of(&tables, b), Some(0));
+    }
+
+    #[test]
+    fn three_way_mutual_separation_with_insufficient_tables_still_seats_everyone() {
+        // 3 mutually-separated students, but only 3 seats spread across 2
+        // tables -- full pairwise separation is impossible (pigeonhole), so
+        // this only asserts the greedy pass degrades gracefully: no panic,
+        // everyone seated exactly once, no duplicate assignment.
+        let existing = vec![
+            TableGeometry {
+                rows: 1,
+                cols: 2,
+                x_pos: 40,
+                y_pos: 40,
+            },
+            TableGeometry {
+                rows: 1,
+                cols: 1,
+                x_pos: 400,
+                y_pos: 40,
+            },
+        ];
+        let roster = students(3);
+        let ids: Vec<Uuid> = roster.iter().map(|(id, _)| *id).collect();
+        let separations = vec![
+            (ids[0].min(ids[1]), ids[0].max(ids[1])),
+            (ids[0].min(ids[2]), ids[0].max(ids[2])),
+            (ids[1].min(ids[2]), ids[1].max(ids[2])),
+        ];
+
+        let tables = build_randomized_chart(
+            roster,
+            separations,
+            true,
+            existing,
+            2,
+            2,
+            BOUNDARY.0,
+            BOUNDARY.1,
+        )
+        .unwrap();
+
+        let assigned = assigned_ids(&tables);
+        assert_eq!(assigned.len(), 3);
+        let unique: HashSet<Uuid> = assigned.iter().copied().collect();
+        assert_eq!(unique.len(), 3);
+        for id in &ids {
+            assert!(unique.contains(id));
+        }
+    }
+
+    #[test]
+    fn separation_respected_within_front_preference_group() {
+        // Both students prefer "front", and with exactly 2 single-seat
+        // tables (n = 2 = front_take), the entire seat pool is the front
+        // group -- same structural guarantee as the plain-separation test
+        // above, but exercising the front-group assignment pass instead of
+        // the leftover pass.
+        let existing = vec![
+            TableGeometry {
+                rows: 1,
+                cols: 1,
+                x_pos: 40,
+                y_pos: 40,
+            },
+            TableGeometry {
+                rows: 1,
+                cols: 1,
+                x_pos: 400,
+                y_pos: 40,
+            },
+        ];
+        let roster = students_with_preference(2, SeatingPreference::Front);
+        let (a, b) = (roster[0].0, roster[1].0);
+
+        let tables = build_randomized_chart(
+            roster,
+            vec![(a.min(b), a.max(b))],
+            true,
+            existing,
+            2,
+            2,
+            BOUNDARY.0,
+            BOUNDARY.1,
+        )
+        .unwrap();
+
+        assert_ne!(table_of(&tables, a), table_of(&tables, b));
     }
 }

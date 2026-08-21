@@ -107,6 +107,18 @@ pub fn create_router(
         .route(
             "/api/v1/classrooms/{classroom_id}/cold-call",
             post(handlers::classroom::cold_call_handler),
+        )
+        .route(
+            "/api/v1/separations",
+            get(handlers::separation::list_separations_handler),
+        )
+        .route(
+            "/api/v1/separations",
+            post(handlers::separation::create_separation_handler),
+        )
+        .route(
+            "/api/v1/separations/{separation_id}",
+            delete(handlers::separation::delete_separation_handler),
         );
 
     let app_routes = match clerk_layer {

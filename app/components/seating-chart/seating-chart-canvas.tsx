@@ -23,6 +23,7 @@ import {
   MessageCircleQuestionMarkIcon,
   MoreHorizontalIcon,
   ShuffleIcon,
+  SplitIcon,
   TableIcon,
   Trash2Icon,
   UsersIcon,
@@ -56,7 +57,7 @@ import {
 } from "~/components/ui/dropdown-menu"
 import { Spinner } from "~/components/ui/spinner"
 import { toast } from "~/components/ui/toast"
-import type { SeatingChart, Student } from "~/lib/schemas"
+import type { SeatingChart, Separation, Student } from "~/lib/schemas"
 import {
   BOUNDARY_NODE_ID,
   boundaryArea,
@@ -86,6 +87,7 @@ import type { action as classroomAction } from "~/routes/classrooms/classroom"
 import {
   BoundarySizeDialog,
   ColdCallDialog,
+  KeepApartDialog,
   RandomSeatingChartDialog,
   UnassignAllDialog,
 } from "./seating-chart-dialogs"
@@ -126,6 +128,7 @@ interface SeatingChartCanvasProps {
   classroomId: string
   seatingChart: SeatingChart
   students: Student[]
+  separations: Separation[]
 }
 
 type DragSnapshot = { parentId?: string; position: Point }
@@ -137,6 +140,7 @@ function SeatingChartEditor({
   classroomId,
   seatingChart,
   students,
+  separations,
 }: SeatingChartCanvasProps) {
   const {
     getIntersectingNodes,
@@ -170,6 +174,7 @@ function SeatingChartEditor({
   const [unassignAllOpen, setUnassignAllOpen] = useState(false)
   const [boundarySizeOpen, setBoundarySizeOpen] = useState(false)
   const [coldCallOpen, setColdCallOpen] = useState(false)
+  const [keepApartOpen, setKeepApartOpen] = useState(false)
   const [coldCallWeights, setColdCallWeights] = useState<
     Record<string, number>
   >(() => Object.fromEntries(students.map((s) => [s.id, INITIAL_WEIGHT])))
@@ -576,6 +581,12 @@ function SeatingChartEditor({
                     <UsersIcon /> Manage Students
                   </DropdownMenuItem>
                   <DropdownMenuItem
+                    aria-label="Keep Apart"
+                    onClick={() => setKeepApartOpen(true)}
+                  >
+                    <SplitIcon /> Keep Apart
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
                     disabled={!isEditable}
                     variant="destructive"
                     aria-label="Unassign All Students"
@@ -618,6 +629,12 @@ function SeatingChartEditor({
           students={students}
           weights={coldCallWeights}
           onWeightsChange={setColdCallWeights}
+        />
+        <KeepApartDialog
+          open={keepApartOpen}
+          onOpenChange={setKeepApartOpen}
+          students={students}
+          separations={separations}
         />
       </div>
       <DndContext

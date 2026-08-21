@@ -7,6 +7,7 @@ import { formatClassroomName, formatTerm } from "~/lib/classroom-term"
 import {
   getClassroom,
   getClassroomSeatingChart,
+  getSeparations,
   getStudents,
   toRouteError,
   updateClassroomSeatingChart,
@@ -37,13 +38,20 @@ export async function loader(args: Route.LoaderArgs) {
   // Unlike other loaders here, failures are NOT degraded gracefully — a
   // seating chart can't render meaningfully with a partial roster/chart.
   try {
-    const [classroom, seatingChart, allStudents] = await Promise.all([
-      getClassroom(params.classroomId, token),
-      getClassroomSeatingChart(params.classroomId, token),
-      getStudents(token),
-    ])
+    const [classroom, seatingChart, allStudents, allSeparations] =
+      await Promise.all([
+        getClassroom(params.classroomId, token),
+        getClassroomSeatingChart(params.classroomId, token),
+        getStudents(token),
+        getSeparations(token),
+      ])
     const students = allStudents.filter((s) => s.classroom_id === classroom.id)
-    return { classroom, students, seatingChart }
+    const studentIds = new Set(students.map((s) => s.id))
+    const separations = allSeparations.filter(
+      (sep) =>
+        studentIds.has(sep.student_id_a) && studentIds.has(sep.student_id_b)
+    )
+    return { classroom, students, seatingChart, separations }
   } catch (error) {
     toRouteError(error)
   }
@@ -71,7 +79,7 @@ export async function action(args: Route.ActionArgs) {
 }
 
 export default function Component({ loaderData }: Route.ComponentProps) {
-  const { classroom, students, seatingChart } = loaderData
+  const { classroom, students, seatingChart, separations } = loaderData
   const rootData = useRouteLoaderData<typeof rootLoader>("root")
   const pinnedCount = getPinnedClassrooms(rootData?.classrooms ?? []).length
 
@@ -97,6 +105,7 @@ export default function Component({ loaderData }: Route.ComponentProps) {
         classroomId={classroom.id}
         seatingChart={seatingChart}
         students={students}
+        separations={separations}
       />
     </div>
   )

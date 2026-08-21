@@ -151,3 +151,13 @@ export const ColdCallPickSchema = z.object({
   students: z.array(ColdCallCandidateSchema),
 })
 export type ColdCallPick = z.infer<typeof ColdCallPickSchema>
+
+export const CreateSeparationSchema = z.object({
+  student_id_a: z.string().min(1),
+  student_id_b: z.string().min(1),
+})
+
+export const SeparationSchema = CreateSeparationSchema.extend({
+  id: z.string().min(1),
+})
+export type Separation = z.infer<typeof SeparationSchema>

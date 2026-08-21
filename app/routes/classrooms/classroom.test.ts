@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
-import type { Classroom, SeatingChart, Student } from "~/lib/schemas"
+import type {
+  Classroom,
+  SeatingChart,
+  Separation,
+  Student,
+} from "~/lib/schemas"
 import { makeArgs, stubFetch } from "~/lib/test-utils"
 import { action, loader } from "./classroom"
 
@@ -71,19 +76,33 @@ describe("classroom loader", () => {
         classroom_id: null,
         image_url: null,
       },
+      {
+        id: "s4",
+        student_id: 4,
+        name: "Also in this classroom",
+        classroom_id: classroomId,
+        image_url: null,
+      },
+    ]
+    const separations: Separation[] = [
+      { id: "sep1", student_id_a: "s1", student_id_b: "s2" },
+      { id: "sep2", student_id_a: "s2", student_id_b: "s3" },
+      { id: "sep3", student_id_a: "s1", student_id_b: "s4" },
     ]
 
     vi.mocked(fetch)
       .mockResolvedValueOnce(jsonResponse(classroom))
       .mockResolvedValueOnce(jsonResponse(seatingChart))
       .mockResolvedValueOnce(jsonResponse(students))
+      .mockResolvedValueOnce(jsonResponse(separations))
 
     const result = await loader(loaderArgs())
 
-    expect(fetch).toHaveBeenCalledTimes(3)
+    expect(fetch).toHaveBeenCalledTimes(4)
     const [classroomUrl] = vi.mocked(fetch).mock.calls[0]
     const [seatingChartUrl] = vi.mocked(fetch).mock.calls[1]
     const [studentsUrl] = vi.mocked(fetch).mock.calls[2]
+    const [separationsUrl] = vi.mocked(fetch).mock.calls[3]
     expect(classroomUrl).toBe(
       `http://localhost:3000/api/v1/classrooms/${classroomId}`
     )
@@ -91,10 +110,13 @@ describe("classroom loader", () => {
       `http://localhost:3000/api/v1/classrooms/${classroomId}/seating-chart`
     )
     expect(studentsUrl).toBe("http://localhost:3000/api/v1/students")
+    expect(separationsUrl).toBe("http://localhost:3000/api/v1/separations")
 
     expect(result.classroom).toEqual(classroom)
     expect(result.seatingChart).toEqual(seatingChart)
-    expect(result.students).toEqual([students[0]])
+    expect(result.students).toEqual([students[0], students[3]])
+    // Only the pair where both students are in this classroom survives.
+    expect(result.separations).toEqual([separations[2]])
   })
 })
 

@@ -30,6 +30,18 @@ pub struct StudentModel {
     pub seating_preference: Option<String>,
 }
 
+/// Row shape of the `student_separations` table — a "keep apart" pairing
+/// between two of a user's students. `student_id_a < student_id_b` always
+/// (DB-enforced), so a pair is stored/looked-up in one canonical order.
+#[derive(Debug, Deserialize, Serialize, sqlx::FromRow)]
+pub struct StudentSeparationModel {
+    pub id: Uuid,
+    pub user_id: String,
+    pub student_id_a: Uuid,
+    pub student_id_b: Uuid,
+    pub created_time: Option<chrono::DateTime<chrono::Utc>>,
+}
+
 /// Row shape of the `tables` table. Handlers build `TableSchema` directly
 /// instead of deserializing into this; it's only used by test helpers.
 #[allow(dead_code)]
