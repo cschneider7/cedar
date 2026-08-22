@@ -1,14 +1,11 @@
+import { PencilIcon } from "lucide-react"
 import { useMemo, useState } from "react"
 import { Link, Outlet, useLocation, useRouteLoaderData } from "react-router"
+import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
 import { PinToggleButton } from "~/components/pin-toggle-button"
+import { Button } from "~/components/ui/button"
 import { Separator } from "~/components/ui/separator"
 import { tabsListVariants } from "~/components/ui/tabs"
-import { getPinnedClassrooms } from "~/lib/classroom-limit"
-import {
-  classroomTabFromPathname,
-  type ClassroomTab,
-} from "~/lib/classroom-tabs"
-import { formatClassroomName, formatTerm } from "~/lib/classroom-term"
 import {
   getClassroom,
   getClassroomSeatingChart,
@@ -18,6 +15,12 @@ import {
 } from "~/lib/api"
 import { tokenFromRequest } from "~/lib/auth"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
+import { getPinnedClassrooms } from "~/lib/classroom-limit"
+import {
+  classroomTabFromPathname,
+  type ClassroomTab,
+} from "~/lib/classroom-tabs"
+import { formatClassroomName, formatTerm } from "~/lib/classroom-term"
 import { INITIAL_WEIGHT } from "~/lib/seating-chart-utils"
 import type { loader as rootLoader } from "~/root"
 import type { Route } from "./+types/classroom"
@@ -90,6 +93,8 @@ export default function Component({ loaderData }: Route.ComponentProps) {
   const location = useLocation()
   const activeTab = classroomTabFromPathname(location.pathname, classroom.id)
 
+  const [editOpen, setEditOpen] = useState(false)
+
   // Lifted here (rather than living in the Cold Call tab itself) so these
   // ephemeral weights survive navigating away and back to that tab — this
   // layout route doesn't unmount across its children's navigations.
@@ -118,12 +123,22 @@ export default function Component({ loaderData }: Route.ComponentProps) {
           {formatTerm(classroom.term_season, classroom.term_year)}
         </h3>
         <PinToggleButton classroom={classroom} pinnedCount={pinnedCount} />
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Edit classroom"
+          onClick={() => setEditOpen(true)}
+        >
+          <PencilIcon />
+        </Button>
+        <ClassroomFormDialog
+          mode="edit"
+          classroom={classroom}
+          open={editOpen}
+          onOpenChange={setEditOpen}
+        />
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-4">
-        {/* Base UI's Tabs.Tab, composed with a Link `render` prop, loops
-            infinitely (its active-tab bookkeeping re-triggers on every
-            navigation) — so this is a plain nav instead of the primitive,
-            since there's no TabsContent panel to justify it. */}
         <div className={tabsListVariants()}>
           {TABS.map((tab) => (
             <Link
