@@ -8,8 +8,8 @@ const CLASSROOM_TABS: readonly ClassroomTab[] = [
 ]
 
 /**
- * Narrows a `?tab=` search param value to a known classroom tab.
- * @param value - The raw `tab` search param value.
+ * Narrows a classroom route's path segment to a known classroom tab.
+ * @param value - The raw path segment.
  * @returns Whether `value` is a recognized `ClassroomTab`.
  */
 export function isClassroomTab(value: string | null): value is ClassroomTab {
