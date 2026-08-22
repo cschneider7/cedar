@@ -24,7 +24,7 @@ export function PinToggleButton({
 }) {
   const { setPinned, isPending } = usePinClassroom()
   const isPinned = classroom.pinned_at != null
-  const action = isPinned ? "Unpin" : "Pin"
+  const action = isPinned ? "Unpin from Sidebar" : "Pin to Sidebar"
 
   return (
     <Tooltip>

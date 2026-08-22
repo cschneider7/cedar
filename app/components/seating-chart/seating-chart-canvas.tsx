@@ -23,7 +23,6 @@ import {
   MoreHorizontalIcon,
   ShuffleIcon,
   TableIcon,
-  Trash2Icon,
   UserXIcon,
 } from "lucide-react"
 import {
@@ -50,7 +49,6 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"

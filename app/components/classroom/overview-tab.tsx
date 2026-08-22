@@ -1,101 +1,102 @@
-import { Background, ReactFlow, ReactFlowProvider } from "@xyflow/react"
-import { useMemo } from "react"
-import { nodeTypes } from "~/components/seating-chart/seating-chart-canvas"
+import { ArrowUpRightIcon } from "lucide-react"
+import { StudentAvatar } from "~/components/student-avatar"
+import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card"
-import type { Classroom, SeatingChart, Student } from "~/lib/schemas"
 import {
-  buildInitialNodes,
-  getTableGeometry,
-  getUnassignedStudents,
-  GRID_STEP,
-} from "~/lib/seating-chart-utils"
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "~/components/ui/card"
+import type { SeatingChart, Student } from "~/lib/schemas"
+import { SeatingChartPreview } from "./seating-chart-preview"
+
+const AVATAR_DISPLAY_CAP = 16
 
 /**
- * Read-only summary of the classroom: roster stats plus a locked preview of
- * the seating chart, with quick links to the other tabs.
+ * Read-only summary of the classroom: roster/table stat cards (each linking
+ * to the tab that manages it) plus a static preview of the seating chart.
  */
 export function OverviewTab({
-  classroom,
   students,
   seatingChart,
   onNavigateTab,
 }: {
-  classroom: Classroom
   students: Student[]
   seatingChart: SeatingChart
   onNavigateTab: (tab: string) => void
 }) {
-  const studentsById = useMemo(
-    () => new Map(students.map((s) => [s.id, s])),
-    [students]
-  )
-  const previewNodes = useMemo(
-    () => buildInitialNodes(classroom.id, seatingChart, studentsById),
-    [classroom.id, seatingChart, studentsById]
-  )
-  const tableCount = getTableGeometry(previewNodes).length
-  const unassignedCount = getUnassignedStudents(students, previewNodes).length
+  const visibleStudents = students.slice(0, AVATAR_DISPLAY_CAP)
+  const overflowCount = students.length - visibleStudents.length
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card className="h-full">
           <CardHeader>
-            <CardTitle>Students</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              Students
+              <Badge variant="secondary" className="select-none">
+                {students.length}
+              </Badge>
+            </CardTitle>
+            <CardAction>
+              <Button variant="link" onClick={() => onNavigateTab("roster")}>
+                Manage Roster
+                <ArrowUpRightIcon data-icon="inline-end" />
+              </Button>
+            </CardAction>
           </CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            {students.length}
+          <CardContent className="select-none">
+            {students.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No students on this classroom's roster yet.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {visibleStudents.map((student) => (
+                  <StudentAvatar
+                    key={student.id}
+                    student={student}
+                    className="size-9 rounded-full text-xs"
+                  />
+                ))}
+                {overflowCount > 0 && (
+                  <div
+                    aria-hidden="true"
+                    className="flex size-9 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground"
+                  >
+                    +{overflowCount}
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
-        <Card>
+        <Card className="h-full">
           <CardHeader>
             <CardTitle>Tables</CardTitle>
+            <CardAction>
+              <Button
+                variant="link"
+                onClick={() => onNavigateTab("seating-chart")}
+              >
+                Manage Seating Chart
+                <ArrowUpRightIcon data-icon="inline-end" />
+              </Button>
+            </CardAction>
           </CardHeader>
           <CardContent className="text-2xl font-semibold">
-            {tableCount}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Unassigned</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            {unassignedCount}
+            {seatingChart.tables.length}
           </CardContent>
         </Card>
       </div>
-      <ReactFlowProvider>
-        <div className="h-64 overflow-hidden rounded-lg border">
-          <ReactFlow
-            nodes={previewNodes}
-            nodeTypes={nodeTypes}
-            nodesDraggable={false}
-            nodesConnectable={false}
-            elementsSelectable={false}
-            panOnDrag
-            zoomOnScroll
-            minZoom={0.25}
-            maxZoom={2}
-          >
-            <Background gap={GRID_STEP} size={2} />
-          </ReactFlow>
-        </div>
-      </ReactFlowProvider>
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Button variant="secondary" onClick={() => onNavigateTab("roster")}>
-          Manage Roster
-        </Button>
-        <Button
-          variant="secondary"
-          onClick={() => onNavigateTab("seating-chart")}
-        >
-          Edit Seating Chart
-        </Button>
-        <Button variant="secondary" onClick={() => onNavigateTab("cold-call")}>
-          Cold Call
-        </Button>
-      </div>
+      <SeatingChartPreview
+        seatingChart={seatingChart}
+        students={students}
+        onNavigateTab={onNavigateTab}
+      />
     </div>
   )
 }

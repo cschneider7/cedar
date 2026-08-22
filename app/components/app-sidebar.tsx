@@ -10,7 +10,6 @@ import {
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
 import { DeleteClassroomDialog } from "~/components/delete-classroom-dialog"
 import { Button } from "~/components/ui/button"
-import { Wordmark } from "~/components/wordmark"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,6 +30,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "~/components/ui/sidebar"
+import { Wordmark } from "~/components/wordmark"
 import { useClassroomPatch } from "~/hooks/use-classroom-patch"
 import { usePinClassroom } from "~/hooks/use-pin-classroom"
 import { getPinnedClassrooms } from "~/lib/classroom-limit"
@@ -213,7 +213,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Seating Charts</SidebarGroupLabel>
+          <SidebarGroupLabel>Classrooms</SidebarGroupLabel>
           <SidebarGroupContent>
             {classroomsError ? (
               <div className="flex flex-col gap-1 px-2 py-1 text-sm text-muted-foreground">

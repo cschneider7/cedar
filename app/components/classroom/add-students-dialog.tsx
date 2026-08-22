@@ -96,11 +96,11 @@ export function AddStudentsDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="select-none sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Add Students</DialogTitle>
           <DialogDescription>
-            Select students to add to this classroom's roster.
+            Select students to add to the classroom roster.
           </DialogDescription>
         </DialogHeader>
         {error && (
@@ -112,7 +112,7 @@ export function AddStudentsDialog({
           <Empty>
             <EmptyTitle>No students to add</EmptyTitle>
             <EmptyDescription>
-              Every student is already on this classroom's roster.
+              All students are already assigned to this classroom.
             </EmptyDescription>
           </Empty>
         ) : (

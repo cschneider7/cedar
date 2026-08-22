@@ -5,9 +5,17 @@ import {
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useFetcher } from "react-router"
+import { StudentAvatar } from "~/components/student-avatar"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card"
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "~/components/ui/card"
 import {
   Empty,
   EmptyContent,
@@ -121,18 +129,22 @@ export function ColdCallTab({
           <AlertDescription>{fetcher.data.error}</AlertDescription>
         </Alert>
       )}
-      <Card>
+      <Card size="sm" className="flex h-full flex-col">
         <CardHeader>
           <CardTitle>Probabilities</CardTitle>
         </CardHeader>
-        <CardContent>
-          <ScrollArea className="h-64 rounded-md border">
-            <div className="flex flex-col gap-2 p-3">
+        <CardContent className="flex-1">
+          <ScrollArea className="h-64">
+            <div className="flex flex-col gap-2 p-3 select-none">
               {probabilities.map(({ student, probability }) => (
                 <div key={student.id} className="flex items-center gap-2">
+                  <StudentAvatar
+                    student={student}
+                    className="size-6 shrink-0 rounded-full text-[9px]"
+                  />
                   <span
                     className={cn(
-                      "w-24 truncate text-sm",
+                      "w-20 truncate text-sm",
                       student.id === pickedId && "font-semibold"
                     )}
                   >
@@ -147,33 +159,57 @@ export function ColdCallTab({
             </div>
           </ScrollArea>
         </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Selected Student</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex min-h-16 items-center justify-center rounded-md border">
-            {isSubmitting ? (
-              <Spinner />
-            ) : picked ? (
-              <p className="text-lg font-medium">{picked.name}</p>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No student picked yet
-              </p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Actions</CardTitle>
-        </CardHeader>
-        <CardContent className="flex gap-2">
+        <CardFooter className="border-t">
           <Button type="button" variant="outline" onClick={handleReset}>
             Reset
           </Button>
+        </CardFooter>
+      </Card>
+      <Card size="sm" className="flex h-full flex-col">
+        <CardHeader>
+          <CardTitle>Selected Student</CardTitle>
+          <CardAction className="flex gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              disabled
+              aria-label="Good pick"
+            >
+              <ThumbsUpIcon />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              disabled
+              aria-label="Needs improvement"
+            >
+              <ThumbsDownIcon />
+            </Button>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+          {isSubmitting ? (
+            <Spinner className="size-8" />
+          ) : picked ? (
+            <>
+              <StudentAvatar
+                student={picked}
+                className="size-20 rounded-full text-lg"
+              />
+              <p className="text-lg font-medium">{picked.name}</p>
+            </>
+          ) : (
+            <>
+              <MessageCircleQuestionMarkIcon className="size-10 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                No student picked yet
+              </p>
+            </>
+          )}
+        </CardContent>
+        <CardFooter className="border-t">
           <Button
             type="button"
             disabled={isSubmitting || students.length === 0}
@@ -182,30 +218,7 @@ export function ColdCallTab({
             {isSubmitting && <Spinner />}
             {hasPicked ? "Pick Again" : "Pick Student"}
           </Button>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Feedback</CardTitle>
-        </CardHeader>
-        <CardContent className="flex gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="Good answer"
-          >
-            <ThumbsUpIcon />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="Needs improvement"
-          >
-            <ThumbsDownIcon />
-          </Button>
-        </CardContent>
+        </CardFooter>
       </Card>
     </div>
   )

@@ -166,7 +166,6 @@ export default function Component({ loaderData }: Route.ComponentProps) {
         </TabsList>
         <TabsContent value="overview" keepMounted>
           <OverviewTab
-            classroom={classroom}
             students={students}
             seatingChart={seatingChart}
             onNavigateTab={handleTabChange}
