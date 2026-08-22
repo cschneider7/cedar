@@ -29,10 +29,7 @@ import {
 } from "~/components/ui/sidebar"
 import { Wordmark } from "~/components/wordmark"
 import { getPinnedClassrooms } from "~/lib/classroom-limit"
-import {
-  classroomTabFromPathname,
-  type ClassroomTab,
-} from "~/lib/classroom-tabs"
+import type { ClassroomTab } from "~/lib/classroom-tabs"
 import { formatClassroomName } from "~/lib/classroom-term"
 import type { Classroom } from "~/lib/schemas"
 import type { loader as rootLoader } from "~/root"
@@ -59,7 +56,6 @@ function ClassroomRow({ classroom }: { classroom: Classroom }) {
   const isCurrentClassroom = location.pathname.startsWith(
     `/classrooms/${classroom.id}`
   )
-  const activeTab = classroomTabFromPathname(location.pathname, classroom.id)
   const [open, setOpen] = useState(isCurrentClassroom)
 
   // Force-expand when navigation makes this the active classroom (e.g.
@@ -90,7 +86,6 @@ function ClassroomRow({ classroom }: { classroom: Classroom }) {
             {CLASSROOM_TABS.map((tab) => (
               <SidebarMenuSubItem key={tab.value}>
                 <SidebarMenuSubButton
-                  isActive={isCurrentClassroom && activeTab === tab.value}
                   render={
                     <NavLink to={classroomTabPath(classroom.id, tab.value)} />
                   }
