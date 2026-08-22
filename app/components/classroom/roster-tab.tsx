@@ -68,8 +68,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip"
-import type { MutationResult } from "~/lib/action-results"
 import { useDeleteResource } from "~/hooks/use-delete-resource"
+import type { MutationResult } from "~/lib/action-results"
 import { getPageNumbers } from "~/lib/pagination"
 import type { Separation, Student } from "~/lib/schemas"
 import { cn } from "~/lib/utils"
@@ -103,7 +103,7 @@ function SeparationAvoidBadge({
       <TooltipTrigger
         render={
           <Badge
-            variant="destructive"
+            variant="secondary"
             className="h-7 gap-1.5 overflow-visible rounded-full py-1 select-none"
           >
             Avoid
