@@ -1,7 +1,6 @@
-import { UsersRoundIcon, XIcon } from "lucide-react"
-import React, { useEffect, useMemo, useState } from "react"
+import { UsersRoundIcon } from "lucide-react"
+import React, { useEffect, useState } from "react"
 import { useFetcher } from "react-router"
-import { StudentAvatar } from "~/components/student-avatar"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import {
   AlertDialog,
@@ -26,7 +25,6 @@ import {
 } from "~/components/ui/dialog"
 import {
   Field,
-  FieldContent,
   FieldDescription,
   FieldGroup,
   FieldLabel,
@@ -35,41 +33,20 @@ import {
   FieldSet,
 } from "~/components/ui/field"
 import { Input } from "~/components/ui/input"
-import { Progress } from "~/components/ui/progress"
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group"
-import { ScrollArea } from "~/components/ui/scroll-area"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select"
 import { Spinner } from "~/components/ui/spinner"
 import { Switch } from "~/components/ui/switch"
-import { useDeleteResource } from "~/hooks/use-delete-resource"
-import type {
-  ColdCall,
-  RandomizeSeatingChartOptions,
-  SeatingChart,
-  Separation,
-  Student,
-} from "~/lib/schemas"
+import type { RandomizeSeatingChartOptions, SeatingChart } from "~/lib/schemas"
 import {
-  computeColdCallProbabilities,
   computeRandomizeTableCount,
   DEFAULT_TABLE_COLS,
   DEFAULT_TABLE_ROWS,
   getBoundaryMinSize,
   GRID_STEP,
-  INITIAL_WEIGHT,
   MAX_TABLE_DIMENSION,
   RANDOMIZE_TABLE_COUNT_WARNING_THRESHOLD,
   type TableGeometry,
 } from "~/lib/seating-chart-utils"
-import { cn } from "~/lib/utils"
-import type { action as coldCallAction } from "~/routes/classrooms/cold-call"
-import type { action as createSeparationAction } from "~/routes/classrooms/create-separation"
 import type { action as randomizeSeatingChartAction } from "~/routes/classrooms/randomize-seating-chart"
 
 /** Dialog for generating a randomized seating chart, applied as an unsaved canvas edit. */
@@ -144,7 +121,7 @@ export function RandomSeatingChartDialog({
 
   return (
     <Dialog {...props}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="select-none sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Randomize Seating Chart</DialogTitle>
           <DialogDescription>
@@ -255,139 +232,6 @@ export function RandomSeatingChartDialog({
   )
 }
 
-/** Dialog for cold-calling a random student, weighted so recent picks are less likely. */
-export function ColdCallDialog({
-  classroomId,
-  students,
-  weights,
-  onWeightsChange,
-  ...props
-}: React.ComponentProps<typeof Dialog> & {
-  classroomId: string
-  students: Student[]
-  weights: Record<string, number>
-  onWeightsChange: (weights: Record<string, number>) => void
-}) {
-  const fetcher = useFetcher<typeof coldCallAction>()
-  const isSubmitting = fetcher.state !== "idle"
-  const [hasPicked, setHasPicked] = useState(false)
-
-  const studentsById = useMemo(
-    () => new Map(students.map((s) => [s.id, s])),
-    [students]
-  )
-  const probabilities = useMemo(
-    () => computeColdCallProbabilities(students, weights),
-    [students, weights]
-  )
-
-  function submit(currentWeights: Record<string, number>) {
-    const payload: ColdCall = {
-      students: students.map((s) => ({
-        student_id: s.id,
-        weight: currentWeights[s.id] ?? INITIAL_WEIGHT,
-      })),
-    }
-    fetcher.submit(payload, {
-      method: "post",
-      action: `/classrooms/${classroomId}/cold-call`,
-      encType: "application/json",
-    })
-  }
-
-  useEffect(() => {
-    if (!props.open) {
-      return
-    }
-    setHasPicked(false)
-  }, [props.open])
-
-  useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data?.ok) {
-      const nextWeights = Object.fromEntries(
-        fetcher.data.pick.students.map((c) => [c.student_id, c.weight])
-      )
-      onWeightsChange(nextWeights)
-      setHasPicked(true)
-    }
-  }, [fetcher.state, fetcher.data])
-
-  const picked =
-    hasPicked &&
-    fetcher.data?.ok &&
-    studentsById.get(fetcher.data.pick.picked_student_id)
-  const pickedId = picked ? picked.id : null
-
-  function handleReset() {
-    onWeightsChange(
-      Object.fromEntries(students.map((s) => [s.id, INITIAL_WEIGHT]))
-    )
-    setHasPicked(false)
-  }
-
-  return (
-    <Dialog {...props}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Cold Call</DialogTitle>
-          <DialogDescription>
-            Picks a random student, favoring those who haven't been picked
-            recently.
-          </DialogDescription>
-        </DialogHeader>
-        {fetcher.data && !fetcher.data.ok && (
-          <Alert variant="destructive">
-            <AlertDescription>{fetcher.data.error}</AlertDescription>
-          </Alert>
-        )}
-        <ScrollArea className="h-64 rounded-md border">
-          <div className="flex flex-col gap-2 p-3">
-            {probabilities.map(({ student, probability }) => (
-              <div key={student.id} className="flex items-center gap-2">
-                <span
-                  className={cn(
-                    "w-24 truncate text-sm",
-                    student.id === pickedId && "font-semibold"
-                  )}
-                >
-                  {student.name}
-                </span>
-                <Progress value={probability * 100} className="flex-1" />
-                <span className="w-10 text-right text-sm text-muted-foreground tabular-nums">
-                  {Math.round(probability * 100)}%
-                </span>
-              </div>
-            ))}
-          </div>
-        </ScrollArea>
-        <div className="flex min-h-16 items-center justify-center rounded-md border">
-          {isSubmitting ? (
-            <Spinner />
-          ) : (
-            picked && <p className="text-lg font-medium">{picked.name}</p>
-          )}
-        </div>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={handleReset}>
-            Reset
-          </Button>
-          <Button
-            type="button"
-            disabled={isSubmitting || students.length === 0}
-            onClick={() => submit(weights)}
-          >
-            {isSubmitting && <Spinner />}
-            {hasPicked ? "Pick Again" : "Pick Student"}
-          </Button>
-          <DialogClose render={<Button type="button" variant="outline" />}>
-            Close
-          </DialogClose>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 /** Dialog for resizing the seating chart's boundary, floored to fit existing tables. */
 export function BoundarySizeDialog({
   boundary,
@@ -421,45 +265,46 @@ export function BoundarySizeDialog({
 
   return (
     <Dialog {...props}>
-      <DialogContent className="sm:max-w-sm">
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>Boundary Size</DialogTitle>
-            <DialogDescription>
-              Nothing is saved until you click Save.
-            </DialogDescription>
-          </DialogHeader>
+      <DialogContent className="select-none sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Boundary Size</DialogTitle>
+        </DialogHeader>
+        <form id="boundary-size-form" onSubmit={handleSubmit}>
           <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="boundary-width">Width</FieldLabel>
-              <Input
-                id="boundary-width"
-                type="number"
-                min={min.width}
-                step={GRID_STEP}
-                value={width}
-                onChange={(e) => setWidth(Number(e.target.value))}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="boundary-height">Height</FieldLabel>
-              <Input
-                id="boundary-height"
-                type="number"
-                min={min.height}
-                step={GRID_STEP}
-                value={height}
-                onChange={(e) => setHeight(Number(e.target.value))}
-              />
-            </Field>
+            <div className="flex items-center gap-2">
+              <Field>
+                <FieldLabel htmlFor="boundary-width">Width</FieldLabel>
+                <Input
+                  id="boundary-width"
+                  type="number"
+                  min={min.width}
+                  step={GRID_STEP}
+                  value={width}
+                  onChange={(e) => setWidth(Number(e.target.value))}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="boundary-height">Height</FieldLabel>
+                <Input
+                  id="boundary-height"
+                  type="number"
+                  min={min.height}
+                  step={GRID_STEP}
+                  value={height}
+                  onChange={(e) => setHeight(Number(e.target.value))}
+                />
+              </Field>
+            </div>
           </FieldGroup>
-          <DialogFooter>
-            <DialogClose render={<Button type="button" variant="outline" />}>
-              Cancel
-            </DialogClose>
-            <Button type="submit">Save</Button>
-          </DialogFooter>
         </form>
+        <DialogFooter>
+          <DialogClose render={<Button type="button" variant="outline" />}>
+            Cancel
+          </DialogClose>
+          <Button type="submit" form="boundary-size-form">
+            Save
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
@@ -474,7 +319,7 @@ export function UnassignAllDialog({
 }) {
   return (
     <AlertDialog {...props}>
-      <AlertDialogContent size="sm">
+      <AlertDialogContent size="sm" className="select-none">
         <AlertDialogHeader>
           <AlertDialogMedia className="bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive">
             <UsersRoundIcon />
@@ -493,261 +338,5 @@ export function UnassignAllDialog({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  )
-}
-
-/** A student's avatar + name, sized for an inline list row. */
-function StudentTag({ student }: { student?: Student }) {
-  return (
-    <span className="flex min-w-0 flex-1 items-center gap-1.5">
-      {student && (
-        <StudentAvatar
-          student={student}
-          className="size-6 shrink-0 rounded-full text-[9px]"
-        />
-      )}
-      <span className="truncate">{student?.name ?? "Unknown student"}</span>
-    </span>
-  )
-}
-
-/** One "keep apart" pair row, with its own delete flow so removing one pair
- * doesn't block another still in flight. */
-function SeparationRow({
-  separation,
-  studentsById,
-  onRemoved,
-}: {
-  separation: Separation
-  studentsById: Map<string, Student>
-  onRemoved: (id: string) => void
-}) {
-  const { isDeleting, submit } = useDeleteResource({
-    successMessage: "Pair removed",
-    onDeleted: () => onRemoved(separation.id),
-  })
-
-  const studentA = studentsById.get(separation.student_id_a)
-  const studentB = studentsById.get(separation.student_id_b)
-
-  function handleRemove() {
-    submit(null, {
-      method: "post",
-      action: `/classrooms/separations/${separation.id}/delete`,
-    })
-  }
-
-  return (
-    <div className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm">
-      <StudentTag student={studentA} />
-      <span aria-hidden="true" className="shrink-0 text-muted-foreground">
-        ↔
-      </span>
-      <StudentTag student={studentB} />
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        className="shrink-0"
-        disabled={isDeleting}
-        onClick={handleRemove}
-        aria-label={`Remove separation between ${studentA?.name ?? "Unknown student"} and ${studentB?.name ?? "Unknown student"}`}
-      >
-        {isDeleting ? <Spinner /> : <XIcon />}
-      </Button>
-    </div>
-  )
-}
-
-/** Dialog for managing "keep apart" pairs: students who shouldn't be seated
- * at the same table when the chart is randomized. */
-export function KeepApartDialog({
-  students,
-  separations,
-  ...props
-}: React.ComponentProps<typeof Dialog> & {
-  students: Student[]
-  separations: Separation[]
-}) {
-  const [pairs, setPairs] = useState(separations)
-  const [studentAId, setStudentAId] = useState<string | null>(null)
-  const [studentBId, setStudentBId] = useState<string | null>(null)
-  const addFetcher = useFetcher<typeof createSeparationAction>()
-  const isAdding = addFetcher.state !== "idle"
-
-  const studentsById = useMemo(
-    () => new Map(students.map((s) => [s.id, s])),
-    [students]
-  )
-  // Alphabetical, so a roster of 20-30+ students is scannable in both the
-  // picker dropdowns and the pair list below.
-  const sortedStudents = useMemo(
-    () => [...students].sort((a, b) => a.name.localeCompare(b.name)),
-    [students]
-  )
-
-  useEffect(() => {
-    if (!props.open) {
-      return
-    }
-    setPairs(separations)
-    setStudentAId(null)
-    setStudentBId(null)
-  }, [props.open, separations])
-
-  useEffect(() => {
-    const data = addFetcher.data
-    if (addFetcher.state === "idle" && data?.ok) {
-      // Guards against React StrictMode's dev-only double effect invocation
-      // appending the same pair twice.
-      setPairs((prev) =>
-        prev.some((p) => p.id === data.separation.id)
-          ? prev
-          : [...prev, data.separation]
-      )
-      setStudentAId(null)
-      setStudentBId(null)
-    }
-  }, [addFetcher.state, addFetcher.data])
-
-  function handleRemoved(id: string) {
-    setPairs((prev) => prev.filter((p) => p.id !== id))
-  }
-
-  const studentAOptions = sortedStudents.filter((s) => s.id !== studentBId)
-  const studentBOptions = sortedStudents.filter((s) => s.id !== studentAId)
-  const canAdd = !!studentAId && !!studentBId && studentAId !== studentBId
-
-  const sortedPairs = useMemo(
-    () =>
-      [...pairs].sort((a, b) => {
-        const nameA = studentsById.get(a.student_id_a)?.name ?? ""
-        const nameB = studentsById.get(b.student_id_a)?.name ?? ""
-        return nameA.localeCompare(nameB)
-      }),
-    [pairs, studentsById]
-  )
-
-  function handleAdd() {
-    if (!canAdd) {
-      return
-    }
-    addFetcher.submit(
-      { student_id_a: studentAId, student_id_b: studentBId },
-      {
-        method: "post",
-        action: "/classrooms/separations/new",
-        encType: "application/json",
-      }
-    )
-  }
-
-  return (
-    <Dialog {...props}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Keep Apart</DialogTitle>
-          <DialogDescription>
-            Pairs of students who shouldn't be seated at the same table when
-            randomizing.
-          </DialogDescription>
-        </DialogHeader>
-        {addFetcher.data && !addFetcher.data.ok && (
-          <Alert variant="destructive">
-            <AlertDescription>{addFetcher.data.error}</AlertDescription>
-          </Alert>
-        )}
-        <ScrollArea className="h-48 rounded-md border">
-          <div className="flex flex-col gap-1 p-2">
-            {sortedPairs.length === 0 && (
-              <p className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-                No pairs yet.
-              </p>
-            )}
-            {sortedPairs.map((pair) => (
-              <SeparationRow
-                key={pair.id}
-                separation={pair}
-                studentsById={studentsById}
-                onRemoved={handleRemoved}
-              />
-            ))}
-          </div>
-        </ScrollArea>
-        {students.length < 2 ? (
-          <p className="text-sm text-muted-foreground">
-            Add at least two students to this classroom to create a pair.
-          </p>
-        ) : (
-          <div className="flex items-end gap-2">
-            <Field className="flex-1">
-              <FieldLabel>Student</FieldLabel>
-              <Select
-                value={studentAId}
-                onValueChange={setStudentAId}
-                items={studentAOptions.map((s) => ({
-                  label: s.name,
-                  value: s.id,
-                }))}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select student" />
-                </SelectTrigger>
-                <SelectContent className="min-w-56">
-                  {studentAOptions.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      <StudentAvatar
-                        student={s}
-                        className="size-5 shrink-0 rounded-full text-[8px]"
-                      />
-                      <span className="min-w-0 truncate">{s.name}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field className="flex-1">
-              <FieldLabel>Student</FieldLabel>
-              <Select
-                value={studentBId}
-                onValueChange={setStudentBId}
-                items={studentBOptions.map((s) => ({
-                  label: s.name,
-                  value: s.id,
-                }))}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select student" />
-                </SelectTrigger>
-                <SelectContent className="min-w-56">
-                  {studentBOptions.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      <StudentAvatar
-                        student={s}
-                        className="size-5 shrink-0 rounded-full text-[8px]"
-                      />
-                      <span className="min-w-0 truncate">{s.name}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Button
-              type="button"
-              disabled={!canAdd || isAdding}
-              onClick={handleAdd}
-            >
-              {isAdding && <Spinner />}
-              Add
-            </Button>
-          </div>
-        )}
-        <DialogFooter>
-          <DialogClose render={<Button type="button" variant="outline" />}>
-            Close
-          </DialogClose>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   )
 }

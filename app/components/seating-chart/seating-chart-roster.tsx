@@ -5,8 +5,8 @@ import { Badge } from "~/components/ui/badge"
 import { Empty, EmptyDescription } from "~/components/ui/empty"
 import { Item, ItemContent, ItemHeader, ItemTitle } from "~/components/ui/item"
 import { ScrollArea } from "~/components/ui/scroll-area"
-import { cn } from "~/lib/utils"
 import type { Student } from "~/lib/schemas"
+import { cn } from "~/lib/utils"
 
 /** Shared avatar/name markup for a student chip, live or in the drag overlay. */
 function StudentChipCard({ student }: { student: Student }) {
@@ -17,14 +17,6 @@ function StudentChipCard({ student }: { student: Student }) {
           student={student}
           className="aspect-5/4 w-full rounded-sm"
         />
-        {student.seating_preference && (
-          <Badge
-            variant="secondary"
-            className="absolute top-1 left-1 h-4 px-1 text-[9px] leading-none"
-          >
-            {student.seating_preference === "front" ? "Front" : "Back"}
-          </Badge>
-        )}
       </ItemHeader>
       <ItemContent>
         <ItemTitle className="text-xs select-none">{student.name}</ItemTitle>
@@ -92,7 +84,10 @@ export function RosterPanel({
       <ScrollArea className="h-full">
         <div className="h-full min-h-0 w-full shrink-0 p-3 transition-shadow md:w-35">
           <h4 className="mb-4 text-sm leading-none font-medium">
-            Unassigned ({students.length})
+            Unassigned{" "}
+            <Badge variant="secondary" className="select-none">
+              {students.length}
+            </Badge>
           </h4>
           <div className="flex flex-wrap justify-center gap-3">
             {students.length === 0 ? (

@@ -20,13 +20,9 @@ import {
 import {
   Edit2Icon,
   Maximize2Icon,
-  MessageCircleQuestionMarkIcon,
   MoreHorizontalIcon,
   ShuffleIcon,
-  SplitIcon,
   TableIcon,
-  Trash2Icon,
-  UsersIcon,
   UserXIcon,
 } from "lucide-react"
 import {
@@ -37,7 +33,7 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { useFetcher } from "react-router"
+import { useBeforeUnload, useBlocker, useFetcher } from "react-router"
 import { BoundaryNode } from "~/components/seating-chart/boundary-node"
 import { LockedContext } from "~/components/seating-chart/context"
 import { SeatNode } from "~/components/seating-chart/seat-node"
@@ -51,13 +47,12 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"
 import { Spinner } from "~/components/ui/spinner"
 import { toast } from "~/components/ui/toast"
-import type { SeatingChart, Separation, Student } from "~/lib/schemas"
+import type { SeatingChart, Student } from "~/lib/schemas"
 import {
   BOUNDARY_NODE_ID,
   boundaryArea,
@@ -74,7 +69,6 @@ import {
   getTableGeometry,
   getUnassignedStudents,
   GRID_STEP,
-  INITIAL_WEIGHT,
   reorderNodes,
   STUDENT_NODE_SIZE,
   type Point,
@@ -83,17 +77,16 @@ import {
   type SeatingChartStudentNode,
   type SeatingChartTableNode,
 } from "~/lib/seating-chart-utils"
-import type { action as classroomAction } from "~/routes/classrooms/classroom"
+import type { action as classroomAction } from "~/routes/classrooms/classroom-seating-chart"
+import { UnsavedChartChangesDialog } from "../classroom/unsaved-chart-changes-dialog"
 import {
   BoundarySizeDialog,
-  ColdCallDialog,
-  KeepApartDialog,
   RandomSeatingChartDialog,
   UnassignAllDialog,
 } from "./seating-chart-dialogs"
 import { RosterPanel, StudentChipOverlay } from "./seating-chart-roster"
 
-const nodeTypes = {
+export const nodeTypes = {
   table: TableNode,
   seat: SeatNode,
   student: StudentNode,
@@ -128,7 +121,6 @@ interface SeatingChartCanvasProps {
   classroomId: string
   seatingChart: SeatingChart
   students: Student[]
-  separations: Separation[]
 }
 
 type DragSnapshot = { parentId?: string; position: Point }
@@ -140,7 +132,6 @@ function SeatingChartEditor({
   classroomId,
   seatingChart,
   students,
-  separations,
 }: SeatingChartCanvasProps) {
   const {
     getIntersectingNodes,
@@ -173,11 +164,6 @@ function SeatingChartEditor({
   const [randomChartOpen, setRandomChartOpen] = useState(false)
   const [unassignAllOpen, setUnassignAllOpen] = useState(false)
   const [boundarySizeOpen, setBoundarySizeOpen] = useState(false)
-  const [coldCallOpen, setColdCallOpen] = useState(false)
-  const [keepApartOpen, setKeepApartOpen] = useState(false)
-  const [coldCallWeights, setColdCallWeights] = useState<
-    Record<string, number>
-  >(() => Object.fromEntries(students.map((s) => [s.id, INITIAL_WEIGHT])))
 
   const fetcher = useFetcher<typeof classroomAction>()
   const saveError = fetcher.data && !fetcher.data.ok ? fetcher.data.error : null
@@ -192,6 +178,16 @@ function SeatingChartEditor({
     }
     setLocked(fetcher.data.ok)
   }, [fetcher.state, fetcher.data])
+
+  // Keeps the canvas in sync with roster changes made elsewhere (e.g. the
+  // Roster tab assigning/unassigning a student) as long as there's no
+  // in-progress edit here to clobber.
+  useEffect(() => {
+    if (locked) {
+      setNodes(buildInitialNodes(classroomId, seatingChart, studentsById))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locked, seatingChart, studentsById])
 
   const boundary = useMemo(() => getBoundary(nodes), [nodes])
   const canvasArea = useMemo(() => canvasExtent(boundary), [boundary])
@@ -219,6 +215,27 @@ function SeatingChartEditor({
     fitView({ nodes: [{ id: BOUNDARY_NODE_ID }] })
     setLocked(true)
   }
+
+  // Real navigation away from this route (another tab, sidebar link, browser
+  // back/forward) while there's an unsaved edit.
+  const blocker = useBlocker(
+    useCallback(
+      ({ currentLocation, nextLocation }) =>
+        !locked && currentLocation.pathname !== nextLocation.pathname,
+      [locked]
+    )
+  )
+
+  useBeforeUnload(
+    useCallback(
+      (event: BeforeUnloadEvent) => {
+        if (!locked) {
+          event.preventDefault()
+        }
+      },
+      [locked]
+    )
+  )
 
   function handleAddTable() {
     const tableNumber = nodes.filter((n) => n.type === "table").length
@@ -497,16 +514,6 @@ function SeatingChartEditor({
         )}
         <ButtonGroup>
           <ButtonGroup>
-            <Button
-              variant="secondary"
-              disabled={students.length === 0}
-              onClick={() => setColdCallOpen(true)}
-              aria-label="Cold Call"
-            >
-              <MessageCircleQuestionMarkIcon /> Cold Call
-            </Button>
-          </ButtonGroup>
-          <ButtonGroup>
             {locked ? (
               <Button
                 variant="secondary"
@@ -577,15 +584,6 @@ function SeatingChartEditor({
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
-                  <DropdownMenuItem disabled aria-label="Manage Students">
-                    <UsersIcon /> Manage Students
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    aria-label="Keep Apart"
-                    onClick={() => setKeepApartOpen(true)}
-                  >
-                    <SplitIcon /> Keep Apart
-                  </DropdownMenuItem>
                   <DropdownMenuItem
                     disabled={!isEditable}
                     variant="destructive"
@@ -622,19 +620,14 @@ function SeatingChartEditor({
           onOpenChange={setUnassignAllOpen}
           onUnassignAll={handleUnassignAll}
         />
-        <ColdCallDialog
-          open={coldCallOpen}
-          onOpenChange={setColdCallOpen}
-          classroomId={classroomId}
-          students={students}
-          weights={coldCallWeights}
-          onWeightsChange={setColdCallWeights}
-        />
-        <KeepApartDialog
-          open={keepApartOpen}
-          onOpenChange={setKeepApartOpen}
-          students={students}
-          separations={separations}
+        <UnsavedChartChangesDialog
+          open={blocker.state === "blocked"}
+          onOpenChange={(open) => {
+            if (!open) {
+              blocker.reset?.()
+            }
+          }}
+          onConfirmLeave={() => blocker.proceed?.()}
         />
       </div>
       <DndContext

@@ -13,6 +13,7 @@ import {
   useRouteLoaderData,
 } from "react-router"
 import { DeleteConfirmDialog } from "~/components/delete-confirm-dialog"
+import { SearchInput } from "~/components/search-input"
 import { StudentAvatar } from "~/components/student-avatar"
 import { StudentFormDialog } from "~/components/student-form-dialog"
 import { Alert, AlertDescription } from "~/components/ui/alert"
@@ -26,11 +27,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "~/components/ui/empty"
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "~/components/ui/input-group"
 import {
   Item,
   ItemContent,
@@ -66,6 +62,7 @@ import {
 import { getClassrooms, getStudentsPage } from "~/lib/api"
 import { tokenFromRequest } from "~/lib/auth"
 import { formatClassroomName } from "~/lib/classroom-term"
+import { getPageNumbers } from "~/lib/pagination"
 import type { Classroom, Student } from "~/lib/schemas"
 import { isAtStudentLimit } from "~/lib/student-limit"
 import { cn } from "~/lib/utils"
@@ -123,28 +120,6 @@ export async function loader(args: Route.LoaderArgs) {
     sortBy,
     sortDir,
   }
-}
-
-function SearchInput({
-  value,
-  onChange,
-}: {
-  value: string
-  onChange: (value: string) => void
-}) {
-  return (
-    <InputGroup className="max-w-xs">
-      <InputGroupInput
-        aria-label="Search students"
-        placeholder="Search students..."
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      <InputGroupAddon>
-        <Search />
-      </InputGroupAddon>
-    </InputGroup>
-  )
 }
 
 function ViewToggle({
@@ -242,33 +217,6 @@ function EmptySearchNoResults({ onClear }: { onClear: () => void }) {
       </EmptyContent>
     </Empty>
   )
-}
-
-function getPageNumbers(
-  current: number,
-  total: number
-): (number | "ellipsis")[] {
-  if (total <= 1) return [1]
-  const delta = 1
-  const range: number[] = []
-  for (
-    let i = Math.max(2, current - delta);
-    i <= Math.min(total - 1, current + delta);
-    i++
-  ) {
-    range.push(i)
-  }
-
-  const pages: (number | "ellipsis")[] = [1]
-  if (range[0] > 2) pages.push("ellipsis")
-  pages.push(...range)
-  if (range.length > 0 && range[range.length - 1] < total - 1) {
-    pages.push("ellipsis")
-  } else if (range.length === 0 && total > 2) {
-    pages.push("ellipsis")
-  }
-  pages.push(total)
-  return pages
 }
 
 function PaginationControl({
@@ -512,7 +460,12 @@ export default function Component({ loaderData }: Route.ComponentProps) {
           </Alert>
         )}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <SearchInput value={searchInput} onChange={setSearchInput} />
+        <SearchInput
+          value={searchInput}
+          onChange={setSearchInput}
+          placeholder="Search students..."
+          aria-label="Search students"
+        />
         <ViewToggle value={viewMode} onChange={handleViewModeChange} />
         <Button className="ml-auto" onClick={handleOpenCreate}>
           <Plus />

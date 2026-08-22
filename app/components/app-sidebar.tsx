@@ -1,5 +1,5 @@
-import { ClipboardList, Home, MoreHorizontal, UsersRound } from "lucide-react"
-import { useMemo, useState } from "react"
+import { ChevronRight, ClipboardList, Home, UsersRound } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Link,
   NavLink,
@@ -7,18 +7,12 @@ import {
   useRevalidator,
   useRouteLoaderData,
 } from "react-router"
-import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
-import { DeleteClassroomDialog } from "~/components/delete-classroom-dialog"
 import { Button } from "~/components/ui/button"
-import { Wordmark } from "~/components/wordmark"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "~/components/ui/dropdown-menu"
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "~/components/ui/collapsible"
 import {
   Sidebar,
   SidebarContent,
@@ -27,139 +21,95 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
 } from "~/components/ui/sidebar"
-import { useClassroomPatch } from "~/hooks/use-classroom-patch"
-import { usePinClassroom } from "~/hooks/use-pin-classroom"
+import { Wordmark } from "~/components/wordmark"
 import { getPinnedClassrooms } from "~/lib/classroom-limit"
+import type { ClassroomTab } from "~/lib/classroom-tabs"
 import { formatClassroomName } from "~/lib/classroom-term"
 import type { Classroom } from "~/lib/schemas"
 import type { loader as rootLoader } from "~/root"
 
-/**
- * Swaps `pinned_at` between two pinned classrooms via two independent
- * `useClassroomPatch` fetchers — there's no dedicated reorder endpoint.
- * React Router's automatic post-action revalidation refreshes the sidebar
- * once both writes land, so no manual revalidate is needed here. If the
- * second write fails after the first succeeds, the pinned order can end up
- * slightly wrong — not worth transactional reorder machinery for a 10-item
- * cosmetic ordering.
- */
-function useReorderPinnedClassrooms() {
-  const a = useClassroomPatch()
-  const b = useClassroomPatch()
-  const isSwapping = a.fetcher.state !== "idle" || b.fetcher.state !== "idle"
+const CLASSROOM_TABS: { value: ClassroomTab; label: string }[] = [
+  { value: "overview", label: "Overview" },
+  { value: "roster", label: "Roster" },
+  { value: "seating-chart", label: "Seating Chart" },
+  { value: "cold-call", label: "Cold Call" },
+]
 
-  function swap(
-    x: { id: string; pinned_at: string },
-    y: { id: string; pinned_at: string }
-  ) {
-    a.submit(x.id, { pinned_at: y.pinned_at })
-    b.submit(y.id, { pinned_at: x.pinned_at })
-  }
-
-  return { swap, isSwapping }
+function classroomTabPath(classroomId: string, tab: ClassroomTab) {
+  return tab === "overview"
+    ? `/classrooms/${classroomId}`
+    : `/classrooms/${classroomId}/${tab}`
 }
 
 /**
- * One pinned classroom's row in the sidebar, with a
- * view/edit/pin/reorder/delete actions menu.
+ * One pinned classroom's row in the sidebar: a collapsible submenu linking
+ * to its four tabs.
  */
-function ClassroomRow({
-  classroom,
-  pinnedCount,
-  canMoveUp,
-  canMoveDown,
-  onMoveUp,
-  onMoveDown,
-  onRequestDelete,
-}: {
-  classroom: Classroom
-  pinnedCount: number
-  canMoveUp: boolean
-  canMoveDown: boolean
-  onMoveUp: () => void
-  onMoveDown: () => void
-  onRequestDelete: () => void
-}) {
-  const [editOpen, setEditOpen] = useState(false)
+function ClassroomRow({ classroom }: { classroom: Classroom }) {
   const location = useLocation()
-  const { setPinned, isPending: isPinPending } = usePinClassroom()
-  const isPinned = classroom.pinned_at != null
+  const isCurrentClassroom = location.pathname.startsWith(
+    `/classrooms/${classroom.id}`
+  )
+  const [open, setOpen] = useState(isCurrentClassroom)
+
+  // Force-expand when navigation makes this the active classroom (e.g.
+  // clicking into it from elsewhere) without fighting a manual collapse
+  // afterwards — a plain `defaultOpen` would warn since this row stays
+  // mounted (and thus already-initialized) across sidebar navigations.
+  useEffect(() => {
+    if (isCurrentClassroom) setOpen(true)
+  }, [isCurrentClassroom])
 
   return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        isActive={location.pathname === `/classrooms/${classroom.id}`}
-        render={<NavLink to={`/classrooms/${classroom.id}`} />}
-      >
-        <span className="truncate">{formatClassroomName(classroom)}</span>
-      </SidebarMenuButton>
-      <DropdownMenu>
-        <DropdownMenuTrigger
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="group/collapsible"
+    >
+      <SidebarMenuItem>
+        <CollapsibleTrigger
           render={
-            <SidebarMenuAction aria-label="Classroom actions" showOnHover>
-              <MoreHorizontal />
-            </SidebarMenuAction>
+            <SidebarMenuButton isActive={isCurrentClassroom}>
+              <span className="truncate">{formatClassroomName(classroom)}</span>
+              <ChevronRight className="ml-auto transition-transform group-data-open/collapsible:rotate-90" />
+            </SidebarMenuButton>
           }
         />
-        <DropdownMenuContent side="right" align="start">
-          <DropdownMenuGroup>
-            <DropdownMenuItem
-              render={<Link to={`/classrooms/${classroom.id}`} />}
-            >
-              View
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setEditOpen(true)}>
-              Edit
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            <DropdownMenuItem
-              disabled={isPinPending}
-              onClick={() => setPinned(classroom.id, !isPinned, pinnedCount)}
-            >
-              {isPinned ? "Unpin" : "Pin"}
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={!canMoveUp} onClick={onMoveUp}>
-              Move Up
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={!canMoveDown} onClick={onMoveDown}>
-              Move Down
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onClick={onRequestDelete}>
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <ClassroomFormDialog
-        mode="edit"
-        classroom={classroom}
-        open={editOpen}
-        onOpenChange={setEditOpen}
-      />
-    </SidebarMenuItem>
+        <CollapsibleContent>
+          <SidebarMenuSub>
+            {CLASSROOM_TABS.map((tab) => (
+              <SidebarMenuSubItem key={tab.value}>
+                <SidebarMenuSubButton
+                  render={
+                    <NavLink to={classroomTabPath(classroom.id, tab.value)} />
+                  }
+                >
+                  {tab.label}
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            ))}
+          </SidebarMenuSub>
+        </CollapsibleContent>
+      </SidebarMenuItem>
+    </Collapsible>
   )
 }
 
 /**
- * Primary nav sidebar: Home/Students/Classrooms links, the classroom list, and their create/edit/delete dialogs.
+ * Primary nav sidebar: Home/Students/Classrooms links and the pinned classroom list.
  */
 export function AppSidebar() {
   const rootData = useRouteLoaderData<typeof rootLoader>("root")
   const classrooms = rootData?.classrooms ?? []
   const classroomsError = rootData?.classroomsError ?? false
-  const [deletingClassroom, setDeletingClassroom] = useState<Classroom | null>(
-    null
-  )
   const location = useLocation()
   const revalidator = useRevalidator()
-  const { swap, isSwapping } = useReorderPinnedClassrooms()
 
   const pinnedClassrooms = useMemo(
     () => getPinnedClassrooms(classrooms),
@@ -175,7 +125,6 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Organization</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
               <SidebarMenuItem>
@@ -213,7 +162,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Seating Charts</SidebarGroupLabel>
+          <SidebarGroupLabel>Classrooms</SidebarGroupLabel>
           <SidebarGroupContent>
             {classroomsError ? (
               <div className="flex flex-col gap-1 px-2 py-1 text-sm text-muted-foreground">
@@ -234,43 +183,14 @@ export function AppSidebar() {
               </div>
             ) : (
               <SidebarMenu className="gap-1">
-                {pinnedClassrooms.map((classroom, index) => (
-                  <ClassroomRow
-                    key={classroom.id}
-                    classroom={classroom}
-                    pinnedCount={pinnedClassrooms.length}
-                    canMoveUp={index > 0 && !isSwapping}
-                    canMoveDown={
-                      index < pinnedClassrooms.length - 1 && !isSwapping
-                    }
-                    onMoveUp={() =>
-                      swap(classroom, pinnedClassrooms[index - 1])
-                    }
-                    onMoveDown={() =>
-                      swap(classroom, pinnedClassrooms[index + 1])
-                    }
-                    onRequestDelete={() => setDeletingClassroom(classroom)}
-                  />
+                {pinnedClassrooms.map((classroom) => (
+                  <ClassroomRow key={classroom.id} classroom={classroom} />
                 ))}
               </SidebarMenu>
             )}
           </SidebarGroupContent>
         </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Tools (Coming Soon)</SidebarGroupLabel>
-          <SidebarGroupContent></SidebarGroupContent>
-        </SidebarGroup>
       </SidebarContent>
-      {deletingClassroom && (
-        <DeleteClassroomDialog
-          classroom={deletingClassroom}
-          open={true}
-          onOpenChange={(open) => {
-            if (!open) setDeletingClassroom(null)
-          }}
-        />
-      )}
     </Sidebar>
   )
 }

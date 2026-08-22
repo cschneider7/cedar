@@ -23,7 +23,6 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
-  FieldSeparator,
 } from "~/components/ui/field"
 import { Input } from "~/components/ui/input"
 import {
@@ -40,7 +39,8 @@ import type { Classroom, Student } from "~/lib/schemas"
 import { CreateStudentSchema, UpdateStudentSchema } from "~/lib/schemas"
 
 type StudentFormDialogProps = (
-  { mode: "create" } | { mode: "edit"; student: Student }
+  | { mode: "create"; defaultClassroomId?: string | null }
+  | { mode: "edit"; student: Student }
 ) & {
   trigger?: React.ReactElement
   open?: boolean
@@ -83,12 +83,14 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
 
   const defaultValues =
     mode === "create"
-      ? { name: "", classroom_id: null, seating_preference: null }
+      ? {
+          name: "",
+          classroom_id: props.defaultClassroomId ?? null,
+        }
       : {
           name: props.student.name,
           student_id: props.student.student_id,
           classroom_id: props.student.classroom_id,
-          seating_preference: props.student.seating_preference ?? null,
         }
 
   const form = useForm<z.infer<typeof schema>>({
@@ -183,15 +185,6 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
       value: classroom.id,
     })
   })
-
-  const seatingPreferenceOptions: {
-    label: string
-    value: "front" | "back" | null
-  }[] = [
-    { label: "No preference", value: null },
-    { label: "Front", value: "front" },
-    { label: "Back", value: "back" },
-  ]
 
   return (
     <Dialog
@@ -297,39 +290,6 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
                 )}
               />
             </div>
-            <FieldSeparator />
-            <Controller
-              name="seating_preference"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field className="flex-1" data-invalid={fieldState.invalid}>
-                  <FieldLabel>Seating Preferences</FieldLabel>
-                  <Select
-                    name={field.name}
-                    value={field.value}
-                    onValueChange={field.onChange}
-                    items={seatingPreferenceOptions}
-                  >
-                    <SelectTrigger
-                      aria-invalid={fieldState.invalid}
-                      className="w-full"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {seatingPreferenceOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {fieldState.invalid && (
-                    <FieldError errors={[fieldState.error]} />
-                  )}
-                </Field>
-              )}
-            />
           </FieldGroup>
         </form>
         <DialogFooter>

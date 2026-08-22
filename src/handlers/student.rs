@@ -267,6 +267,8 @@ pub async fn update_student_handler(
 
     check_classroom_ownership(&data.db, new_classroom_id, &user_id).await?;
 
+    let mut tx = data.db.begin().await?;
+
     let updated_student: StudentModel = sqlx::query_as(
         "UPDATE students SET
             classroom_id = $1,
@@ -283,8 +285,25 @@ pub async fn update_student_handler(
     .bind(new_image_url)
     .bind(new_seating_preference)
     .bind(student.id)
-    .fetch_one(&data.db)
+    .fetch_one(&mut *tx)
     .await?;
+
+    // A student leaving a classroom (reassigned elsewhere or unassigned)
+    // must give up their seat there too, or the old chart keeps showing
+    // them seated indefinitely.
+    if student.classroom_id.is_some() && new_classroom_id != student.classroom_id {
+        sqlx::query(
+            "UPDATE seats SET student_id = NULL
+            WHERE student_id = $1
+              AND table_id IN (SELECT id FROM tables WHERE classroom_id = $2)",
+        )
+        .bind(student.id)
+        .bind(student.classroom_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    tx.commit().await?;
 
     if student.image_url != updated_student.image_url
         && let Some(old_url) = student.image_url
@@ -357,10 +376,55 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+    use crate::model::{SeatModel, TableModel};
     use crate::test_support::{
         RecordingBlobDeleter, app, app_with_blob_deleter, authenticated_json_request,
         authenticated_request, body_json, insert_classroom, test_user_id,
     };
+
+    async fn insert_table(
+        pool: &sqlx::PgPool,
+        classroom_id: Uuid,
+        table_number: i32,
+    ) -> TableModel {
+        sqlx::query_as(
+            "INSERT INTO tables (classroom_id, table_number, rows, cols, x_pos, y_pos)
+            VALUES ($1, $2, 2, 2, 0, 0)
+            RETURNING *",
+        )
+        .bind(classroom_id)
+        .bind(table_number)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    }
+
+    async fn insert_seat(
+        pool: &sqlx::PgPool,
+        table_id: Uuid,
+        student_id: Option<Uuid>,
+        seat_number: i16,
+    ) -> SeatModel {
+        sqlx::query_as(
+            "INSERT INTO seats (table_id, student_id, seat_number)
+            VALUES ($1, $2, $3)
+            RETURNING *",
+        )
+        .bind(table_id)
+        .bind(student_id)
+        .bind(seat_number)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    }
+
+    async fn fetch_seat(pool: &sqlx::PgPool, id: Uuid) -> SeatModel {
+        sqlx::query_as("SELECT * FROM seats WHERE id = $1")
+            .bind(id)
+            .fetch_one(pool)
+            .await
+            .unwrap()
+    }
 
     async fn insert_student(
         pool: &sqlx::PgPool,
@@ -1043,6 +1107,94 @@ mod tests {
 
         let json = body_json(response).await;
         assert_eq!(json["data"]["seating_preference"], "back");
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn update_student_unassign_clears_seat_in_old_classroom(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let classroom = insert_classroom(&pool, &user_id, "Math", 1).await;
+        let table = insert_table(&pool, classroom.id, 1).await;
+        let student = insert_student(&pool, &user_id, Some(classroom.id), 1, "Alice").await;
+        let seat = insert_seat(&pool, table.id, Some(student.id), 0).await;
+
+        let body = json!({"classroom_id": null});
+        let response = app
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                &format!("/api/v1/students/{}", student.id),
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let updated_seat = fetch_seat(&pool, seat.id).await;
+        assert_eq!(updated_seat.student_id, None);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn update_student_moved_to_new_classroom_clears_seat_in_old_classroom(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let old_classroom = insert_classroom(&pool, &user_id, "Math", 1).await;
+        let new_classroom = insert_classroom(&pool, &user_id, "Science", 2).await;
+        let table = insert_table(&pool, old_classroom.id, 1).await;
+        let student = insert_student(&pool, &user_id, Some(old_classroom.id), 1, "Alice").await;
+        let seat = insert_seat(&pool, table.id, Some(student.id), 0).await;
+
+        let body = json!({"classroom_id": new_classroom.id});
+        let response = app
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                &format!("/api/v1/students/{}", student.id),
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let updated_seat = fetch_seat(&pool, seat.id).await;
+        assert_eq!(updated_seat.student_id, None);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn update_student_same_classroom_id_does_not_clear_seat(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let classroom = insert_classroom(&pool, &user_id, "Math", 1).await;
+        let table = insert_table(&pool, classroom.id, 1).await;
+        let student = insert_student(&pool, &user_id, Some(classroom.id), 1, "Alice").await;
+        let seat = insert_seat(&pool, table.id, Some(student.id), 0).await;
+
+        let body = json!({"classroom_id": classroom.id, "name": "Alice R."});
+        let response = app
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                &format!("/api/v1/students/{}", student.id),
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let updated_seat = fetch_seat(&pool, seat.id).await;
+        assert_eq!(updated_seat.student_id, Some(student.id));
 
         Ok(())
     }
