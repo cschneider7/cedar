@@ -26,10 +26,8 @@ import {
   UserXIcon,
 } from "lucide-react"
 import {
-  forwardRef,
   useCallback,
   useEffect,
-  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -79,7 +77,7 @@ import {
   type SeatingChartStudentNode,
   type SeatingChartTableNode,
 } from "~/lib/seating-chart-utils"
-import type { action as classroomAction } from "~/routes/classrooms/classroom"
+import type { action as classroomAction } from "~/routes/classrooms/classroom-seating-chart"
 import { UnsavedChartChangesDialog } from "../classroom/unsaved-chart-changes-dialog"
 import {
   BoundarySizeDialog,
@@ -123,23 +121,18 @@ interface SeatingChartCanvasProps {
   classroomId: string
   seatingChart: SeatingChart
   students: Student[]
-  onLockedChange?: (locked: boolean) => void
 }
-
-export type SeatingChartCanvasHandle = { discardChanges: () => void }
 
 type DragSnapshot = { parentId?: string; position: Point }
 
 /**
  * The interactive seating chart editor: toolbar, dialogs, roster, and canvas.
  */
-const SeatingChartEditor = forwardRef<
-  SeatingChartCanvasHandle,
-  SeatingChartCanvasProps
->(function SeatingChartEditor(
-  { classroomId, seatingChart, students, onLockedChange },
-  ref
-) {
+function SeatingChartEditor({
+  classroomId,
+  seatingChart,
+  students,
+}: SeatingChartCanvasProps) {
   const {
     getIntersectingNodes,
     getInternalNode,
@@ -186,12 +179,6 @@ const SeatingChartEditor = forwardRef<
     setLocked(fetcher.data.ok)
   }, [fetcher.state, fetcher.data])
 
-  // Mirrors `locked` up to the classroom page so it can guard switching away
-  // to another tab while a chart edit is in progress.
-  useEffect(() => {
-    onLockedChange?.(locked)
-  }, [locked, onLockedChange])
-
   // Keeps the canvas in sync with roster changes made elsewhere (e.g. the
   // Roster tab assigning/unassigning a student) as long as there's no
   // in-progress edit here to clobber.
@@ -229,14 +216,8 @@ const SeatingChartEditor = forwardRef<
     setLocked(true)
   }
 
-  useImperativeHandle(ref, () => ({ discardChanges: handleCancel }), [
-    handleCancel,
-  ])
-
-  // Real navigation away from this route (sidebar link, browser back/forward)
-  // while there's an unsaved edit. Only fires on an actual pathname change —
-  // not a same-route `?tab=` switch, which the classroom page's own guard
-  // handles explicitly instead (see UnsavedChartChangesDialog usage below).
+  // Real navigation away from this route (another tab, sidebar link, browser
+  // back/forward) while there's an unsaved edit.
   const blocker = useBlocker(
     useCallback(
       ({ currentLocation, nextLocation }) =>
@@ -700,18 +681,15 @@ const SeatingChartEditor = forwardRef<
       </DndContext>
     </div>
   )
-})
+}
 
 /**
  * Thin `ReactFlowProvider` wrapper around the seating chart editor.
  */
-export const SeatingChartCanvas = forwardRef<
-  SeatingChartCanvasHandle,
-  SeatingChartCanvasProps
->(function SeatingChartCanvas(props, ref) {
+export function SeatingChartCanvas(props: SeatingChartCanvasProps) {
   return (
     <ReactFlowProvider>
-      <SeatingChartEditor {...props} ref={ref} />
+      <SeatingChartEditor {...props} />
     </ReactFlowProvider>
   )
-})
+}

@@ -4,7 +4,7 @@ import {
   ThumbsUpIcon,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
-import { useFetcher } from "react-router"
+import { Link, useFetcher } from "react-router"
 import { StudentAvatar } from "~/components/student-avatar"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
@@ -44,13 +44,11 @@ export function ColdCallTab({
   students,
   weights,
   onWeightsChange,
-  onNavigateTab,
 }: {
   classroomId: string
   students: Student[]
   weights: Record<string, number>
   onWeightsChange: (weights: Record<string, number>) => void
-  onNavigateTab: (tab: string) => void
 }) {
   const fetcher = useFetcher<typeof coldCallAction>()
   const isSubmitting = fetcher.state !== "idle"
@@ -116,7 +114,9 @@ export function ColdCallTab({
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent className="flex-row justify-center gap-2">
-          <Button onClick={() => onNavigateTab("roster")}>Go to Roster</Button>
+          <Button render={<Link to={`/classrooms/${classroomId}/roster`} />}>
+            Go to Roster
+          </Button>
         </EmptyContent>
       </Empty>
     )

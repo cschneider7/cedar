@@ -1,5 +1,9 @@
+import { useOutletContext } from "react-router"
+import { ColdCallTab } from "~/components/classroom/cold-call-tab"
 import { pickColdCallStudent } from "~/lib/api"
 import { tokenFromRequest } from "~/lib/auth"
+import type { ClassroomOutletContext } from "~/routes/classrooms/classroom"
+import { useClassroomData } from "~/lib/classroom-route-data"
 import type { ColdCallPick } from "~/lib/schemas"
 import type { Route } from "./+types/cold-call"
 
@@ -21,4 +25,18 @@ export async function action(
   } catch (error) {
     return { ok: false, error: (error as Error).message }
   }
+}
+
+export default function Component() {
+  const { classroom, students } = useClassroomData()
+  const { coldCallWeights, setColdCallWeights } =
+    useOutletContext<ClassroomOutletContext>()
+  return (
+    <ColdCallTab
+      classroomId={classroom.id}
+      students={students}
+      weights={coldCallWeights}
+      onWeightsChange={setColdCallWeights}
+    />
+  )
 }

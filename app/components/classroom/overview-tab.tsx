@@ -1,4 +1,5 @@
 import { ArrowUpRightIcon } from "lucide-react"
+import { Link } from "react-router"
 import { StudentAvatar } from "~/components/student-avatar"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
@@ -19,13 +20,13 @@ const AVATAR_DISPLAY_CAP = 16
  * to the tab that manages it) plus a static preview of the seating chart.
  */
 export function OverviewTab({
+  classroomId,
   students,
   seatingChart,
-  onNavigateTab,
 }: {
+  classroomId: string
   students: Student[]
   seatingChart: SeatingChart
-  onNavigateTab: (tab: string) => void
 }) {
   const visibleStudents = students.slice(0, AVATAR_DISPLAY_CAP)
   const overflowCount = students.length - visibleStudents.length
@@ -42,7 +43,10 @@ export function OverviewTab({
               </Badge>
             </CardTitle>
             <CardAction>
-              <Button variant="link" onClick={() => onNavigateTab("roster")}>
+              <Button
+                variant="link"
+                render={<Link to={`/classrooms/${classroomId}/roster`} />}
+              >
                 Manage Roster
                 <ArrowUpRightIcon data-icon="inline-end" />
               </Button>
@@ -80,7 +84,9 @@ export function OverviewTab({
             <CardAction>
               <Button
                 variant="link"
-                onClick={() => onNavigateTab("seating-chart")}
+                render={
+                  <Link to={`/classrooms/${classroomId}/seating-chart`} />
+                }
               >
                 Manage Seating Chart
                 <ArrowUpRightIcon data-icon="inline-end" />
@@ -95,7 +101,7 @@ export function OverviewTab({
       <SeatingChartPreview
         seatingChart={seatingChart}
         students={students}
-        onNavigateTab={onNavigateTab}
+        classroomId={classroomId}
       />
     </div>
   )

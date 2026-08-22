@@ -1,4 +1,5 @@
 import { ArrowUpRightIcon, Maximize2Icon } from "lucide-react"
+import { Link } from "react-router"
 import { StudentAvatar } from "~/components/student-avatar"
 import { Button } from "~/components/ui/button"
 import type { SeatingChart, Student } from "~/lib/schemas"
@@ -16,11 +17,11 @@ import {
 export function SeatingChartPreview({
   seatingChart,
   students,
-  onNavigateTab,
+  classroomId,
 }: {
   seatingChart: SeatingChart
   students: Student[]
-  onNavigateTab: (tab: string) => void
+  classroomId: string
 }) {
   const studentsById = new Map(students.map((s) => [s.id, s]))
 
@@ -31,7 +32,7 @@ export function SeatingChartPreview({
         variant="link"
         aria-label="Edit seating chart"
         className="absolute top-2 right-2 z-10"
-        onClick={() => onNavigateTab("seating-chart")}
+        render={<Link to={`/classrooms/${classroomId}/seating-chart`} />}
       >
         Edit <ArrowUpRightIcon data-icon="inline-end" />
       </Button>

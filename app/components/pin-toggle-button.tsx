@@ -1,5 +1,5 @@
-import { Pin, PinOff } from "lucide-react"
-import { Button } from "~/components/ui/button"
+import { Bookmark } from "lucide-react"
+import { Toggle } from "~/components/ui/toggle"
 import {
   Tooltip,
   TooltipContent,
@@ -24,21 +24,24 @@ export function PinToggleButton({
 }) {
   const { setPinned, isPending } = usePinClassroom()
   const isPinned = classroom.pinned_at != null
-  const action = isPinned ? "Unpin from Sidebar" : "Pin to Sidebar"
+  const action = isPinned ? "Remove from Sidebar" : "Add to Sidebar"
 
   return (
     <Tooltip>
       <TooltipTrigger
         render={
-          <Button
-            variant="ghost"
-            size="icon-sm"
+          <Toggle
+            size="sm"
+            className="aria-pressed:bg-transparent"
             aria-label={`${action} ${label ?? "classroom"}`}
             disabled={isPending}
-            onClick={() => setPinned(classroom.id, !isPinned, pinnedCount)}
+            pressed={isPinned}
+            onPressedChange={(pressed) =>
+              setPinned(classroom.id, pressed, pinnedCount)
+            }
           >
-            {isPinned ? <PinOff /> : <Pin />}
-          </Button>
+            <Bookmark fill={isPinned ? "currentColor" : "none"} />
+          </Toggle>
         }
       />
       <TooltipContent>{action}</TooltipContent>

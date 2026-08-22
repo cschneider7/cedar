@@ -12,8 +12,8 @@ import {
 } from "~/components/ui/alert-dialog"
 
 /**
- * Shared "you have unsaved seating chart changes" confirmation, used both by
- * real-navigation blocking and by the classroom page's own tab-switch guard.
+ * "You have unsaved seating chart changes" confirmation shown when
+ * navigating away from the seating chart while it's unlocked.
  */
 export function UnsavedChartChangesDialog({
   open,
@@ -31,16 +31,16 @@ export function UnsavedChartChangesDialog({
           <AlertDialogMedia className="bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive">
             <TriangleAlertIcon />
           </AlertDialogMedia>
-          <AlertDialogTitle>Leave and discard changes?</AlertDialogTitle>
+          <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
           <AlertDialogDescription>
             You have unsaved seating chart changes. Leaving now will discard
             them.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel variant="outline">Stay</AlertDialogCancel>
+          <AlertDialogCancel variant="outline">Cancel</AlertDialogCancel>
           <AlertDialogAction variant="destructive" onClick={onConfirmLeave}>
-            Leave and discard changes
+            Discard
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -1,18 +1,13 @@
-import { useRef, useState } from "react"
-import { useLocation, useNavigate, useRouteLoaderData } from "react-router"
-import { OverviewTab } from "~/components/classroom/overview-tab"
-import { RosterTab } from "~/components/classroom/roster-tab"
-import { ColdCallTab } from "~/components/classroom/cold-call-tab"
-import { UnsavedChartChangesDialog } from "~/components/classroom/unsaved-chart-changes-dialog"
+import { useMemo, useState } from "react"
+import { Link, Outlet, useLocation, useRouteLoaderData } from "react-router"
 import { PinToggleButton } from "~/components/pin-toggle-button"
-import {
-  SeatingChartCanvas,
-  type SeatingChartCanvasHandle,
-} from "~/components/seating-chart/seating-chart-canvas"
 import { Separator } from "~/components/ui/separator"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs"
+import { tabsListVariants } from "~/components/ui/tabs"
 import { getPinnedClassrooms } from "~/lib/classroom-limit"
-import { isClassroomTab, type ClassroomTab } from "~/lib/classroom-tabs"
+import {
+  classroomTabFromPathname,
+  type ClassroomTab,
+} from "~/lib/classroom-tabs"
 import { formatClassroomName, formatTerm } from "~/lib/classroom-term"
 import {
   getClassroom,
@@ -20,14 +15,25 @@ import {
   getSeparations,
   getStudents,
   toRouteError,
-  updateClassroomSeatingChart,
 } from "~/lib/api"
 import { tokenFromRequest } from "~/lib/auth"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
-import { SeatingChartSchema } from "~/lib/schemas"
 import { INITIAL_WEIGHT } from "~/lib/seating-chart-utils"
 import type { loader as rootLoader } from "~/root"
 import type { Route } from "./+types/classroom"
+
+const TABS: { value: ClassroomTab; label: string }[] = [
+  { value: "overview", label: "Overview" },
+  { value: "roster", label: "Roster" },
+  { value: "seating-chart", label: "Seating Chart" },
+  { value: "cold-call", label: "Cold Call" },
+]
+
+// Mirrors ~/components/ui/tabs.tsx's TabsTrigger styling (including its
+// data-active-driven active state) — duplicated rather than imported since
+// this nav can't use the Tabs.Tab primitive itself (see comment below).
+const TAB_TRIGGER_CLASSES =
+  "relative inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-2xl border border-transparent! px-1.5 py-0.5 text-sm font-medium whitespace-nowrap text-foreground/60 transition-all hover:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring data-active:bg-background data-active:text-foreground dark:text-muted-foreground dark:hover:text-foreground dark:data-active:border-input dark:data-active:bg-input/30 dark:data-active:text-foreground"
 
 export const handle: BreadcrumbHandle = {
   breadcrumb: (data: Route.ComponentProps["loaderData"] | undefined) =>
@@ -71,69 +77,29 @@ export async function loader(args: Route.LoaderArgs) {
   }
 }
 
-export async function action(args: Route.ActionArgs) {
-  const rawData = await args.request.json()
-  const result = SeatingChartSchema.safeParse(rawData)
-
-  if (!result.success) {
-    return { ok: false, error: "Please check the seating chart and try again." }
-  }
-
-  try {
-    await updateClassroomSeatingChart(
-      args.params.classroomId,
-      result.data,
-      await tokenFromRequest(args)
-    )
-  } catch (error) {
-    return { ok: false, error: (error as Error).message }
-  }
-
-  return { ok: true }
+export type ClassroomOutletContext = {
+  coldCallWeights: Record<string, number>
+  setColdCallWeights: (weights: Record<string, number>) => void
 }
 
 export default function Component({ loaderData }: Route.ComponentProps) {
-  const { classroom, students, eligibleStudents, seatingChart, separations } =
-    loaderData
+  const { classroom, students } = loaderData
   const rootData = useRouteLoaderData<typeof rootLoader>("root")
   const pinnedCount = getPinnedClassrooms(rootData?.classrooms ?? []).length
 
   const location = useLocation()
-  const navigate = useNavigate()
-  const tabParam = new URLSearchParams(location.search).get("tab")
-  const tab: ClassroomTab = isClassroomTab(tabParam) ? tabParam : "overview"
+  const activeTab = classroomTabFromPathname(location.pathname, classroom.id)
 
-  const [chartLocked, setChartLocked] = useState(true)
-  const [pendingTab, setPendingTab] = useState<ClassroomTab | null>(null)
-  const chartRef = useRef<SeatingChartCanvasHandle>(null)
+  // Lifted here (rather than living in the Cold Call tab itself) so these
+  // ephemeral weights survive navigating away and back to that tab — this
+  // layout route doesn't unmount across its children's navigations.
   const [coldCallWeights, setColdCallWeights] = useState<
     Record<string, number>
   >(() => Object.fromEntries(students.map((s) => [s.id, INITIAL_WEIGHT])))
-
-  function updateParams(mutate: (p: URLSearchParams) => void) {
-    const params = new URLSearchParams(location.search)
-    mutate(params)
-    navigate(`?${params.toString()}`)
-  }
-
-  function handleTabChange(next: string) {
-    if (!isClassroomTab(next)) {
-      return
-    }
-    if (!chartLocked && next !== "seating-chart") {
-      setPendingTab(next)
-      return
-    }
-    updateParams((p) => p.set("tab", next))
-  }
-
-  function handleConfirmLeaveChart() {
-    chartRef.current?.discardChanges()
-    if (pendingTab) {
-      updateParams((p) => p.set("tab", pendingTab))
-    }
-    setPendingTab(null)
-  }
+  const outletContext = useMemo<ClassroomOutletContext>(
+    () => ({ coldCallWeights, setColdCallWeights }),
+    [coldCallWeights]
+  )
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -153,68 +119,27 @@ export default function Component({ loaderData }: Route.ComponentProps) {
         </h3>
         <PinToggleButton classroom={classroom} pinnedCount={pinnedCount} />
       </div>
-      <Tabs
-        value={tab}
-        onValueChange={handleTabChange}
-        className="flex min-h-0 flex-1 flex-col gap-4"
-      >
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="roster">Roster</TabsTrigger>
-          <TabsTrigger value="seating-chart">Seating Chart</TabsTrigger>
-          <TabsTrigger value="cold-call">Cold Call</TabsTrigger>
-        </TabsList>
-        <TabsContent value="overview" keepMounted>
-          <OverviewTab
-            students={students}
-            seatingChart={seatingChart}
-            onNavigateTab={handleTabChange}
-          />
-        </TabsContent>
-        <TabsContent
-          value="roster"
-          keepMounted
-          className="flex min-h-0 flex-1 flex-col"
-        >
-          <RosterTab
-            classroomId={classroom.id}
-            students={students}
-            eligibleStudents={eligibleStudents}
-            separations={separations}
-          />
-        </TabsContent>
-        <TabsContent
-          value="seating-chart"
-          keepMounted
-          className="flex min-h-0 flex-1 flex-col"
-        >
-          <SeatingChartCanvas
-            ref={chartRef}
-            classroomId={classroom.id}
-            seatingChart={seatingChart}
-            students={students}
-            onLockedChange={setChartLocked}
-          />
-        </TabsContent>
-        <TabsContent value="cold-call" keepMounted>
-          <ColdCallTab
-            classroomId={classroom.id}
-            students={students}
-            weights={coldCallWeights}
-            onWeightsChange={setColdCallWeights}
-            onNavigateTab={handleTabChange}
-          />
-        </TabsContent>
-      </Tabs>
-      <UnsavedChartChangesDialog
-        open={pendingTab !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setPendingTab(null)
-          }
-        }}
-        onConfirmLeave={handleConfirmLeaveChart}
-      />
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
+        {/* Base UI's Tabs.Tab, composed with a Link `render` prop, loops
+            infinitely (its active-tab bookkeeping re-triggers on every
+            navigation) — so this is a plain nav instead of the primitive,
+            since there's no TabsContent panel to justify it. */}
+        <div className={tabsListVariants()}>
+          {TABS.map((tab) => (
+            <Link
+              key={tab.value}
+              to={`/classrooms/${classroom.id}${tab.value === "overview" ? "" : `/${tab.value}`}`}
+              data-active={activeTab === tab.value || undefined}
+              className={TAB_TRIGGER_CLASSES}
+            >
+              {tab.label}
+            </Link>
+          ))}
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <Outlet context={outletContext} />
+        </div>
+      </div>
     </div>
   )
 }
