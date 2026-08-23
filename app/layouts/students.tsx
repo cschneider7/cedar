@@ -15,7 +15,10 @@ export const handle: BreadcrumbHandle = {
 export function meta({}: Route.MetaArgs) {
   return [
     { title: "Students" },
-    { name: "description", content: "Seating chart app" },
+    {
+      name: "description",
+      content: "Cedar — organize classrooms and seating charts.",
+    },
   ]
 }
 

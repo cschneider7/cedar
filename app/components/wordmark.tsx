@@ -59,7 +59,7 @@ function Logomark({ className }: { className?: string }) {
 
 /**
  * The app's wordmark: a small logomark (one filled seat in a 2x3 grid) next
- * to the "Seating Chart" name. Used in the sidebar, topbar, and auth pages.
+ * to the "Cedar" name. Used in the sidebar, topbar, and auth pages.
  */
 export function Wordmark({
   className,
@@ -71,7 +71,7 @@ export function Wordmark({
   return (
     <span className={cn("inline-flex items-center gap-2", className)}>
       <Logomark />
-      <span className={cn("font-heading", textClassName)}>Seating Chart</span>
+      <span className={cn("font-heading", textClassName)}>Cedar</span>
     </span>
   )
 }

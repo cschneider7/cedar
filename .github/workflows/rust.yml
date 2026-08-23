@@ -20,12 +20,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/seating_chart_test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/cedar_test
     services:
       postgres:
         image: postgres:18
         env:
-          POSTGRES_DB: seating_chart_test
+          POSTGRES_DB: cedar_test
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
         ports:
