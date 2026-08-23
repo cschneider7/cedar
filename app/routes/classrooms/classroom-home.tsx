@@ -56,7 +56,10 @@ const CLASSROOMS_PAGE_SIZE = 10
 export function meta({}: Route.MetaArgs) {
   return [
     { title: "Classrooms" },
-    { name: "description", content: "Seating chart app" },
+    {
+      name: "description",
+      content: "Cedar — organize classrooms and seating charts.",
+    },
   ]
 }
 

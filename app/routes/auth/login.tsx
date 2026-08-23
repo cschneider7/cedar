@@ -7,7 +7,7 @@ import { useClerkAppearance } from "~/hooks/use-clerk-appearance"
 import type { Route } from "./+types/login"
 
 export function meta({}: Route.MetaArgs) {
-  return [{ title: "Sign in - Seating Chart" }]
+  return [{ title: "Sign in - Cedar" }]
 }
 
 export async function loader(args: Route.LoaderArgs) {

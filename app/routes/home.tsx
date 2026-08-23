@@ -17,8 +17,11 @@ import type { Route } from "./+types/home"
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Seating Chart" },
-    { name: "description", content: "Seating chart app" },
+    { title: "Cedar" },
+    {
+      name: "description",
+      content: "Cedar — organize classrooms and seating charts.",
+    },
   ]
 }
 
@@ -131,7 +134,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   return (
     <div className="flex h-full min-h-0 flex-col items-center gap-8 overflow-y-auto p-6">
       <div className="text-center">
-        <h1 className="font-heading text-2xl font-medium">Seating Chart</h1>
+        <h1 className="font-heading text-2xl font-medium">Cedar</h1>
         <p className="text-muted-foreground">
           Manage your students, classrooms, and seating charts.
         </p>

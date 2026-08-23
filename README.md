@@ -1,6 +1,6 @@
-# Welcome to seating-chart-app!
+# Welcome to Cedar!
 
-A modern web application for creating seating charts and organizing classrooms.
+Cedar is a modern web application for creating seating charts and organizing classrooms.
 
 ## Features
 
