@@ -39,8 +39,29 @@ pub trait BlobUploader: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = Option<String>> + Send>>;
 }
 
-/// Deletes objects from an S3-compatible bucket (MinIO locally, Cloudflare
-/// R2 in Preview/Production) via `aws-sdk-s3`.
+/// Builds an S3-compatible client (MinIO locally, Cloudflare R2 in
+/// Preview/Production) against the given endpoint. Shared by
+/// `S3BlobDeleter`/`S3Presigner`, which differ only in which endpoint they
+/// target (see `S3Presigner`'s doc comment).
+fn build_s3_client(
+    endpoint: &str,
+    region: &str,
+    access_key_id: &str,
+    secret_access_key: &str,
+) -> aws_sdk_s3::Client {
+    let credentials = Credentials::new(access_key_id, secret_access_key, None, None, "static");
+    let config = aws_sdk_s3::Config::builder()
+        .behavior_version(BehaviorVersion::latest())
+        .region(Region::new(region.to_string()))
+        .endpoint_url(endpoint)
+        .credentials_provider(credentials)
+        .force_path_style(true)
+        .build();
+
+    aws_sdk_s3::Client::from_conf(config)
+}
+
+/// Deletes/fetches objects from an S3-compatible bucket via `aws-sdk-s3`.
 pub struct S3BlobDeleter {
     client: aws_sdk_s3::Client,
     bucket: String,
@@ -54,17 +75,8 @@ impl S3BlobDeleter {
         access_key_id: &str,
         secret_access_key: &str,
     ) -> Self {
-        let credentials = Credentials::new(access_key_id, secret_access_key, None, None, "static");
-        let config = aws_sdk_s3::Config::builder()
-            .behavior_version(BehaviorVersion::latest())
-            .region(Region::new(region.to_string()))
-            .endpoint_url(endpoint)
-            .credentials_provider(credentials)
-            .force_path_style(true)
-            .build();
-
         Self {
-            client: aws_sdk_s3::Client::from_conf(config),
+            client: build_s3_client(endpoint, region, access_key_id, secret_access_key),
             bucket,
         }
     }
@@ -112,7 +124,7 @@ impl BlobReader for S3BlobDeleter {
     }
 }
 
-const PRESIGNED_URL_EXPIRES_IN: Duration = Duration::from_secs(60);
+const PRESIGNED_URL_EXPIRES_IN: Duration = Duration::from_secs(300);
 
 /// Presigns S3 PUT URLs against a *browser*-reachable endpoint, which can
 /// differ from the endpoint the backend itself uses (`S3BlobDeleter`'s
@@ -132,17 +144,8 @@ impl S3Presigner {
         access_key_id: &str,
         secret_access_key: &str,
     ) -> Self {
-        let credentials = Credentials::new(access_key_id, secret_access_key, None, None, "static");
-        let config = aws_sdk_s3::Config::builder()
-            .behavior_version(BehaviorVersion::latest())
-            .region(Region::new(region.to_string()))
-            .endpoint_url(public_endpoint)
-            .credentials_provider(credentials)
-            .force_path_style(true)
-            .build();
-
         Self {
-            client: aws_sdk_s3::Client::from_conf(config),
+            client: build_s3_client(public_endpoint, region, access_key_id, secret_access_key),
             bucket,
         }
     }

@@ -214,16 +214,14 @@ pub async fn get_student_image_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let student: StudentModel =
-        sqlx::query_as("SELECT * FROM students WHERE id = $1 AND user_id = $2")
+    let image_url: Option<String> =
+        sqlx::query_scalar("SELECT image_url FROM students WHERE id = $1 AND user_id = $2")
             .bind(id)
             .bind(&user_id)
             .fetch_one(&data.db)
             .await?;
 
-    let key = student
-        .image_url
-        .ok_or_else(|| AppError::NotFound("Student has no photo".to_string()))?;
+    let key = image_url.ok_or_else(|| AppError::NotFound("Student has no photo".to_string()))?;
     // Defense in depth alongside `check_image_url_ownership` (enforced on
     // write) — a row written before that check existed, or by any future
     // code path that forgets it, must still not let a key outside the
