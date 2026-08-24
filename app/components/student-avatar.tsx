@@ -1,6 +1,6 @@
 import { useState } from "react"
+import { useStudentImage } from "~/hooks/use-student-image"
 import { cn } from "~/lib/utils"
-import { studentImageProxyUrl } from "~/lib/image-utils"
 import type { Student } from "~/lib/schemas"
 
 const AVATAR_PALETTE = [
@@ -60,11 +60,13 @@ export function StudentAvatar({
   className?: string
 }) {
   const [imageFailed, setImageFailed] = useState(false)
+  const hasPhoto = Boolean(student.image_url) && !imageFailed
+  const objectUrl = useStudentImage(student.id, hasPhoto)
 
-  if (student.image_url && !imageFailed) {
+  if (hasPhoto && objectUrl) {
     return (
       <img
-        src={studentImageProxyUrl(student.image_url)}
+        src={objectUrl}
         alt=""
         draggable="false"
         loading="lazy"

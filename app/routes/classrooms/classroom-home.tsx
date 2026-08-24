@@ -3,6 +3,7 @@ import { ClipboardList, Plus, Search } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
+import { RouteHydrateFallback } from "~/components/route-hydrate-fallback"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
 import {
@@ -37,7 +38,7 @@ import {
 } from "~/components/ui/table"
 import { toast } from "~/components/ui/toast"
 import { getClassrooms, getStudents } from "~/lib/api"
-import { tokenFromRequest } from "~/lib/auth"
+import { getBearerToken } from "~/lib/auth-client"
 import {
   MAX_CLASSROOMS_PER_USER,
   getPinnedClassrooms,
@@ -63,8 +64,8 @@ export function meta({}: Route.MetaArgs) {
   ]
 }
 
-export async function loader(args: Route.LoaderArgs) {
-  const token = await tokenFromRequest(args)
+export async function clientLoader() {
+  const token = await getBearerToken()
   const [classrooms, studentsResult] = await Promise.all([
     getClassrooms(token),
     // Student counts are supplementary — a failure here degrades to "—"
@@ -87,6 +88,10 @@ export async function loader(args: Route.LoaderArgs) {
     studentCounts: Object.fromEntries(studentCounts),
     studentsError: studentsResult.failed,
   }
+}
+
+export function HydrateFallback() {
+  return <RouteHydrateFallback />
 }
 
 function EmptyClassrooms() {

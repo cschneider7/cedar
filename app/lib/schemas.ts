@@ -47,6 +47,12 @@ export const StudentLimitStatusSchema = z.object({
 })
 export type StudentLimitStatus = z.infer<typeof StudentLimitStatusSchema>
 
+export const ImageUploadUrlSchema = z.object({
+  url: z.string(),
+  key: z.string(),
+})
+export type ImageUploadUrl = z.infer<typeof ImageUploadUrlSchema>
+
 export const UpdateStudentSchema = z.object({
   classroom_id: z.uuidv4().nullish(),
   student_id: z.optional(

@@ -1,5 +1,3 @@
-import { ClerkProvider } from "@clerk/react-router"
-import { clerkMiddleware, rootAuthLoader } from "@clerk/react-router/server"
 import {
   Link,
   Links,
@@ -25,56 +23,12 @@ import {
 import { Toaster } from "~/components/ui/toast"
 import { ThemeProvider } from "~/components/ui/theme-provider"
 import { TooltipProvider } from "~/components/ui/tooltip"
-import { getClassrooms, getStudentLimitStatus } from "~/lib/api"
 import type { Route } from "./+types/root"
 import "./app.css"
-
-export const middleware: Route.MiddlewareFunction[] = [clerkMiddleware()]
 
 export const links: Route.LinksFunction = () => [
   { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
 ]
-
-export async function loader(args: Route.LoaderArgs) {
-  return rootAuthLoader(args, async ({ request }) => {
-    const { isAuthenticated, getToken } = request.auth
-    // Anonymous visitors (public pages like `/`) have no session to scope a
-    // classroom list to, and `/api/v1/classrooms` now 401s without one.
-    if (!isAuthenticated) {
-      return {
-        classrooms: [],
-        classroomsError: false,
-        studentCount: null,
-        studentLimit: null,
-      }
-    }
-    // This loader runs on every navigation/revalidation — a transient
-    // failure here must not take down the whole shell, so degrade instead.
-    // The student-limit fetch fails open (see student-limit.ts) on the same
-    // failure, since either fetch failing means the account's limit status
-    // can't be trusted.
-    try {
-      const token = await getToken()
-      const [classrooms, limitStatus] = await Promise.all([
-        getClassrooms(token),
-        getStudentLimitStatus(token),
-      ])
-      return {
-        classrooms,
-        classroomsError: false,
-        studentCount: limitStatus.count,
-        studentLimit: limitStatus.limit,
-      }
-    } catch {
-      return {
-        classrooms: [],
-        classroomsError: true,
-        studentCount: null,
-        studentLimit: null,
-      }
-    }
-  })
-}
 
 export function HydrateFallback() {
   return (
@@ -124,15 +78,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
   )
 }
 
-export default function App({ loaderData }: Route.ComponentProps) {
+export default function App() {
   return (
-    <ClerkProvider loaderData={loaderData}>
-      <TooltipProvider delay={200}>
-        <div className="flex h-dvh flex-col overflow-hidden [--header-height:calc(--spacing(14))]">
-          <Outlet />
-        </div>
-      </TooltipProvider>
-    </ClerkProvider>
+    <TooltipProvider delay={200}>
+      <div className="flex h-dvh flex-col overflow-hidden [--header-height:calc(--spacing(14))]">
+        <Outlet />
+      </div>
+    </TooltipProvider>
   )
 }
 

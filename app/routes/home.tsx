@@ -1,7 +1,7 @@
-import { getAuth } from "@clerk/react-router/server"
 import { ArrowUpRightIcon, ClipboardList, UsersRound } from "lucide-react"
 import { useEffect } from "react"
 import { Link } from "react-router"
+import { RouteHydrateFallback } from "~/components/route-hydrate-fallback"
 import {
   Item,
   ItemActions,
@@ -12,6 +12,7 @@ import {
   ItemTitle,
 } from "~/components/ui/item"
 import { toast } from "~/components/ui/toast"
+import { authClient, getBearerToken } from "~/lib/auth-client"
 import { getClassrooms, getStudents } from "~/lib/api"
 import type { Route } from "./+types/home"
 
@@ -25,20 +26,20 @@ export function meta({}: Route.MetaArgs) {
   ]
 }
 
-export async function loader(args: Route.LoaderArgs) {
-  const { isAuthenticated, getToken } = await getAuth(args)
-  // `/` is a public route (unlike students/classrooms, it has no `requireAuth`
-  // middleware) — an anonymous visitor has no session to scope data to, and
-  // the backend 401s without one, so skip the calls entirely rather than
-  // surfacing that 401 as an error toast.
-  if (!isAuthenticated) {
+export async function clientLoader() {
+  const { data: session } = await authClient.getSession()
+  // `/` is a public route (unlike students/classrooms, it has no auth gate)
+  // — an anonymous visitor has no session to scope data to, and the backend
+  // 401s without one, so skip the calls entirely rather than surfacing that
+  // 401 as an error toast.
+  if (!session) {
     return {
       isAuthenticated: false as const,
       classroomsError: false,
       studentsError: false,
     }
   }
-  const token = await getToken()
+  const token = await getBearerToken()
   // Classrooms/students are only fetched to detect a reachability failure
   // for the toasts below — the dashboard doesn't display their data itself.
   const [classroomsFailed, studentsFailed] = await Promise.all([
@@ -56,6 +57,10 @@ export async function loader(args: Route.LoaderArgs) {
     classroomsError: classroomsFailed,
     studentsError: studentsFailed,
   }
+}
+
+export function HydrateFallback() {
+  return <RouteHydrateFallback />
 }
 
 /**

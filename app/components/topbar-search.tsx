@@ -1,7 +1,6 @@
-import { Show } from "@clerk/react-router"
 import { Search } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Link, useFetcher, useRouteLoaderData } from "react-router"
+import { Link, useFetcher } from "react-router"
 import { Badge } from "~/components/ui/badge"
 import {
   InputGroup,
@@ -10,9 +9,10 @@ import {
 } from "~/components/ui/input-group"
 import { Item, ItemContent, ItemTitle } from "~/components/ui/item"
 import { Popover, PopoverContent } from "~/components/ui/popover"
+import { useRootData } from "~/hooks/use-root-data"
+import { authClient } from "~/lib/auth-client"
 import { formatClassroomName } from "~/lib/classroom-term"
-import type { loader as quickSearchLoader } from "~/routes/api/quick-search"
-import type { loader as rootLoader } from "~/root"
+import type { clientLoader as quickSearchLoader } from "~/routes/api/quick-search"
 
 const SEARCH_DEBOUNCE_MS = 300
 const MAX_CLASSROOM_MATCHES = 5
@@ -22,8 +22,8 @@ const MAX_CLASSROOM_MATCHES = 5
  * students with a short debounce.
  */
 function SearchDropdown() {
-  const rootData = useRouteLoaderData<typeof rootLoader>("root")
-  const classrooms = rootData?.classrooms ?? []
+  const rootData = useRootData()
+  const classrooms = rootData.classrooms
   const fetcher = useFetcher<typeof quickSearchLoader>()
   const inputRef = useRef<HTMLInputElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -163,9 +163,7 @@ function SearchDropdown() {
  * Wraps `SearchDropdown` so it doesn't render for a signed-out visitor.
  */
 export function TopbarSearch() {
-  return (
-    <Show when="signed-in">
-      <SearchDropdown />
-    </Show>
-  )
+  const session = authClient.useSession()
+  if (!session.data) return null
+  return <SearchDropdown />
 }

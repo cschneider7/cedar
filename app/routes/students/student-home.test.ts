@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import type { Classroom, StudentsPage } from "~/lib/schemas"
 import { makeArgs, stubFetch } from "~/lib/test-utils"
-import { loader } from "./student-home"
+import { clientLoader as loader } from "./student-home"
 
 function jsonResponse(data: unknown) {
   return new Response(JSON.stringify({ data }), { status: 200 })
@@ -61,12 +61,11 @@ describe("student-home loader", () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(jsonResponse({ ...emptyPage, page_size: 20 }))
       .mockResolvedValueOnce(jsonResponse(noClassrooms))
+    // clientLoader reads document.cookie directly (no server Request headers
+    // anymore) — stub a minimal document for this one Node-env test.
+    vi.stubGlobal("document", { cookie: "students-view-mode=list" })
 
-    const result = await loader(
-      makeArgs("http://test/students", {
-        headers: { Cookie: "students-view-mode=list" },
-      })
-    )
+    const result = await loader(makeArgs("http://test/students"))
 
     expect(result.viewMode).toBe("list")
     const [url] = vi.mocked(fetch).mock.calls[0]

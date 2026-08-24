@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::{
     Json,
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{StatusCode, header},
     response::IntoResponse,
 };
 use serde_json::json;
@@ -57,6 +57,23 @@ async fn check_classroom_ownership(
     .await?;
     if !exists {
         return Err(AppError::NotFound("Classroom not found".to_string()));
+    }
+    Ok(())
+}
+
+/// Confirms an `image_url` (an S3 key), if present, falls under the calling
+/// user's own `students/{user_id}/` prefix — `image_url` is client-supplied
+/// on create/update with no other server-side check tying it to the caller,
+/// so without this a malicious user could point their own student's
+/// `image_url` at another user's real photo key and either read it back via
+/// `get_student_image_handler` or trigger its deletion via a later
+/// update/delete of their own row.
+fn check_image_url_ownership(image_url: &Option<String>, user_id: &str) -> Result<(), AppError> {
+    let Some(image_url) = image_url else {
+        return Ok(());
+    };
+    if !image_url.starts_with(&format!("students/{user_id}/")) {
+        return Err(AppError::BadRequest("Invalid image_url".to_string()));
     }
     Ok(())
 }
@@ -186,6 +203,98 @@ pub async fn get_student_handler(
     Ok((StatusCode::OK, Json(json!({"data": student}))))
 }
 
+/// Streams a student's private photo, scoped to the current user. Replaces
+/// the old Node-side `/api/student-image` proxy — Neon Auth's session
+/// cookie isn't sent to the frontend's own origin, so that proxy had no way
+/// left to authenticate the request; this handler reuses the same JWT
+/// verification every other endpoint already goes through instead of a
+/// second, Node-side JWT verifier.
+pub async fn get_student_image_handler(
+    CurrentUserId(user_id): CurrentUserId,
+    Path(id): Path<Uuid>,
+    State(data): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, AppError> {
+    let student: StudentModel =
+        sqlx::query_as("SELECT * FROM students WHERE id = $1 AND user_id = $2")
+            .bind(id)
+            .bind(&user_id)
+            .fetch_one(&data.db)
+            .await?;
+
+    let key = student
+        .image_url
+        .ok_or_else(|| AppError::NotFound("Student has no photo".to_string()))?;
+    // Defense in depth alongside `check_image_url_ownership` (enforced on
+    // write) — a row written before that check existed, or by any future
+    // code path that forgets it, must still not let a key outside the
+    // caller's own prefix be read back.
+    if !key.starts_with(&format!("students/{user_id}/")) {
+        return Err(AppError::NotFound("Photo not found".to_string()));
+    }
+
+    let object = data
+        .blob_reader
+        .get(key)
+        .await
+        .ok_or_else(|| AppError::NotFound("Photo not found".to_string()))?;
+
+    let content_type = object
+        .content_type
+        .unwrap_or_else(|| "application/octet-stream".to_string());
+
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, content_type),
+            (header::CACHE_CONTROL, "private, max-age=3600".to_string()),
+        ],
+        object.bytes,
+    ))
+}
+
+const ALLOWED_UPLOAD_CONTENT_TYPE: &str = "image/webp";
+const MAX_UPLOAD_SIZE_BYTES: i64 = 5 * 1024 * 1024;
+
+#[derive(serde::Deserialize)]
+pub struct ImageUploadUrlSchema {
+    content_length: i64,
+}
+
+/// Issues a presigned S3 PUT URL for a student photo upload, scoped to the
+/// current user — `image_url` itself is saved separately, via the normal
+/// create/update student call. Not scoped by `student_id` since an upload
+/// can happen before the student record exists (new-student creation).
+/// Replaces the old Node-side `/api/student-image-upload` route, which
+/// can no longer authenticate a request itself (see `get_student_image_handler`)
+/// and, independently, could never have become a browser-side `clientAction`
+/// either — presigning requires the S3 secret key, which must stay
+/// server-side.
+pub async fn create_student_image_upload_url_handler(
+    CurrentUserId(user_id): CurrentUserId,
+    State(data): State<Arc<AppState>>,
+    Json(body): Json<ImageUploadUrlSchema>,
+) -> Result<impl IntoResponse, AppError> {
+    if body.content_length <= 0 || body.content_length > MAX_UPLOAD_SIZE_BYTES {
+        return Err(AppError::BadRequest("Invalid content length".to_string()));
+    }
+
+    let key = format!("students/{user_id}/{}.webp", uuid::Uuid::new_v4());
+    let url = data
+        .blob_uploader
+        .presign_put(
+            key.clone(),
+            ALLOWED_UPLOAD_CONTENT_TYPE.to_string(),
+            body.content_length,
+        )
+        .await
+        .ok_or_else(|| AppError::Internal("Failed to presign upload URL".to_string()))?;
+
+    Ok((
+        StatusCode::OK,
+        Json(json!({"data": {"url": url, "key": key}})),
+    ))
+}
+
 /// Creates a new student owned by the current user, optionally assigned to
 /// one of their classrooms.
 pub async fn create_student_handler(
@@ -195,6 +304,7 @@ pub async fn create_student_handler(
 ) -> Result<impl IntoResponse, AppError> {
     check_student_limit(&data.db, &user_id).await?;
     check_classroom_ownership(&data.db, body.classroom_id, &user_id).await?;
+    check_image_url_ownership(&body.image_url, &user_id)?;
 
     let student: StudentModel = sqlx::query_as(
         "INSERT INTO students (
@@ -266,6 +376,7 @@ pub async fn update_student_handler(
     };
 
     check_classroom_ownership(&data.db, new_classroom_id, &user_id).await?;
+    check_image_url_ownership(&new_image_url, &user_id)?;
 
     let mut tx = data.db.begin().await?;
 
@@ -510,6 +621,30 @@ mod tests {
     }
 
     #[sqlx::test]
+    async fn image_upload_url_rejects_invalid_content_length(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+
+        for content_length in [0, -1, MAX_UPLOAD_SIZE_BYTES + 1] {
+            let response = app
+                .clone()
+                .oneshot(authenticated_json_request(
+                    "POST",
+                    "/api/v1/students/image-upload-url",
+                    json!({"content_length": content_length}),
+                    &user_id,
+                ))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        }
+
+        Ok(())
+    }
+
+    #[sqlx::test]
     async fn create_student_success(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
@@ -634,11 +769,12 @@ mod tests {
     async fn create_student_with_image_url_success(pool: sqlx::PgPool) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
+        let image_url = format!("students/{user_id}/bob.jpg");
         let body = json!({
             "student_id": 1,
             "name": "Bob Burger",
             "classroom_id": null,
-            "image_url": "students/user_1/bob.jpg",
+            "image_url": image_url,
         });
 
         let response = app
@@ -653,7 +789,35 @@ mod tests {
         assert_eq!(response.status(), StatusCode::CREATED);
 
         let json = body_json(response).await;
-        assert_eq!(json["data"]["image_url"], "students/user_1/bob.jpg");
+        assert_eq!(json["data"]["image_url"], image_url);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn create_student_rejects_image_url_outside_own_prefix(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let other_id = test_user_id();
+        let body = json!({
+            "student_id": 1,
+            "name": "Bob Burger",
+            "classroom_id": null,
+            "image_url": format!("students/{other_id}/bob.jpg"),
+        });
+
+        let response = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                "/api/v1/students",
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
         Ok(())
     }
@@ -971,6 +1135,30 @@ mod tests {
         Ok(())
     }
 
+    #[sqlx::test]
+    async fn update_student_rejects_image_url_outside_own_prefix(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let other_id = test_user_id();
+        let existing = insert_student(&pool, &user_id, None, 1, "Bob").await;
+
+        let body = json!({"image_url": format!("students/{other_id}/bob.jpg")});
+        let response = app
+            .oneshot(authenticated_json_request(
+                "PATCH",
+                &format!("/api/v1/students/{}", existing.id),
+                body,
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        Ok(())
+    }
+
     // Double-Option deserialization for image_url: omitted keeps, explicit
     // null clears — same pattern as classroom_id above.
     #[sqlx::test]
@@ -979,9 +1167,8 @@ mod tests {
     ) -> sqlx::Result<()> {
         let app = app(pool.clone());
         let user_id = test_user_id();
-        let existing =
-            insert_student_with_image_url(&pool, &user_id, 1, "Bob", "students/user_1/bob.jpg")
-                .await;
+        let image_url = format!("students/{user_id}/bob.jpg");
+        let existing = insert_student_with_image_url(&pool, &user_id, 1, "Bob", &image_url).await;
 
         let body = json!({"name": "Bob Updated"});
         let response = app
@@ -996,7 +1183,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         let json = body_json(response).await;
-        assert_eq!(json["data"]["image_url"], "students/user_1/bob.jpg");
+        assert_eq!(json["data"]["image_url"], image_url);
 
         Ok(())
     }
@@ -1206,11 +1393,10 @@ mod tests {
         let recorder = std::sync::Arc::new(RecordingBlobDeleter::default());
         let app = app_with_blob_deleter(pool.clone(), recorder.clone());
         let user_id = test_user_id();
-        let existing =
-            insert_student_with_image_url(&pool, &user_id, 1, "Bob", "students/user_1/old.jpg")
-                .await;
+        let old_url = format!("students/{user_id}/old.jpg");
+        let existing = insert_student_with_image_url(&pool, &user_id, 1, "Bob", &old_url).await;
 
-        let body = json!({"image_url": "students/user_1/new.jpg"});
+        let body = json!({"image_url": format!("students/{user_id}/new.jpg")});
         let response = app
             .oneshot(authenticated_json_request(
                 "PATCH",
@@ -1222,10 +1408,7 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        assert_eq!(
-            *recorder.0.lock().unwrap(),
-            vec!["students/user_1/old.jpg".to_string()]
-        );
+        assert_eq!(*recorder.0.lock().unwrap(), vec![old_url]);
 
         Ok(())
     }
@@ -1237,9 +1420,8 @@ mod tests {
         let recorder = std::sync::Arc::new(RecordingBlobDeleter::default());
         let app = app_with_blob_deleter(pool.clone(), recorder.clone());
         let user_id = test_user_id();
-        let existing =
-            insert_student_with_image_url(&pool, &user_id, 1, "Bob", "students/user_1/bob.jpg")
-                .await;
+        let image_url = format!("students/{user_id}/bob.jpg");
+        let existing = insert_student_with_image_url(&pool, &user_id, 1, "Bob", &image_url).await;
 
         let body = json!({"name": "Bob Updated"});
         let response = app
@@ -1341,6 +1523,8 @@ mod tests {
             ("GET", "/api/v1/students".to_string()),
             ("POST", "/api/v1/students".to_string()),
             ("GET", format!("/api/v1/students/{student_id}")),
+            ("GET", format!("/api/v1/students/{student_id}/image")),
+            ("POST", "/api/v1/students/image-upload-url".to_string()),
             ("PATCH", format!("/api/v1/students/{student_id}")),
             ("DELETE", format!("/api/v1/students/{student_id}")),
         ] {
@@ -1409,6 +1593,80 @@ mod tests {
         assert_eq!(delete_response.status(), StatusCode::NOT_FOUND);
 
         assert!(fetch_student(&pool, student.id).await.is_some());
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn get_student_image_without_photo_returns_404(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let student = insert_student(&pool, &user_id, None, 1, "Bob").await;
+
+        let response = app
+            .oneshot(authenticated_request(
+                "GET",
+                &format!("/api/v1/students/{}/image", student.id),
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn get_student_image_scoped_to_owner(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let app = app(pool.clone());
+        let owner_id = test_user_id();
+        let other_id = test_user_id();
+        let student =
+            insert_student_with_image_url(&pool, &owner_id, 1, "Bob", "students/owner/bob.jpg")
+                .await;
+
+        let response = app
+            .oneshot(authenticated_request(
+                "GET",
+                &format!("/api/v1/students/{}/image", student.id),
+                &other_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn get_student_image_rejects_key_outside_own_prefix(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        // A row with a mismatched image_url can't be produced through the
+        // API anymore (see check_image_url_ownership), but this defends a
+        // pre-existing row (or a future write path that forgets the check)
+        // from ever being read back.
+        let app = app(pool.clone());
+        let user_id = test_user_id();
+        let victim_id = test_user_id();
+        let student = insert_student_with_image_url(
+            &pool,
+            &user_id,
+            1,
+            "Bob",
+            &format!("students/{victim_id}/photo.jpg"),
+        )
+        .await;
+
+        let response = app
+            .oneshot(authenticated_request(
+                "GET",
+                &format!("/api/v1/students/{}/image", student.id),
+                &user_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
         Ok(())
     }

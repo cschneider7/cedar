@@ -1,8 +1,9 @@
 import { defineConfig, devices } from "@playwright/test"
 
-// @clerk/testing reads VITE_CLERK_PUBLISHABLE_KEY/CLERK_SECRET_KEY straight
-// off process.env — load .env the same way docker-compose's env_file does,
-// since Playwright doesn't read it automatically.
+// NEON_AUTH_TEST_EMAIL/PASSWORD (a real seeded Neon Auth account) are read
+// directly off process.env by tests/e2e/auth.spec.ts — load .env the same
+// way docker-compose's env_file does, since Playwright doesn't read it
+// automatically.
 try {
   process.loadEnvFile(".env")
 } catch {
@@ -14,7 +15,6 @@ try {
 // the Rust backend + Postgres, not just the Vite dev server.
 export default defineConfig({
   testDir: "./tests/e2e",
-  globalSetup: "./tests/e2e/global-setup.ts",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

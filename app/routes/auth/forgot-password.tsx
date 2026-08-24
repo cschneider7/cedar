@@ -5,13 +5,13 @@ import { NeonAuthUI } from "~/components/neon-auth-ui-provider"
 import { ThemeToggle } from "~/components/ui/theme-toggle"
 import { Wordmark } from "~/components/wordmark"
 import { authClient } from "~/lib/auth-client"
-import type { Route } from "./+types/login"
+import type { Route } from "./+types/forgot-password"
 
 export function meta({}: Route.MetaArgs) {
-  return [{ title: "Sign in - Cedar" }]
+  return [{ title: "Forgot password - Cedar" }]
 }
 
-export default function Login() {
+export default function ForgotPassword() {
   const session = authClient.useSession()
   const navigate = useNavigate()
 
@@ -28,7 +28,7 @@ export default function Login() {
       </div>
       <Wordmark textClassName="font-medium" />
       <NeonAuthUI>
-        <AuthView view="SIGN_IN" />
+        <AuthView view="FORGOT_PASSWORD" />
       </NeonAuthUI>
     </div>
   )

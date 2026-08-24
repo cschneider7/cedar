@@ -25,6 +25,8 @@ const MAX_CONNECTIONS: u32 = 4;
 pub struct AppState {
     db: PgPool,
     blob_deleter: Arc<dyn blob::BlobDeleter>,
+    blob_reader: Arc<dyn blob::BlobReader>,
+    blob_uploader: Arc<dyn blob::BlobUploader>,
 }
 
 impl AppState {
@@ -41,6 +43,12 @@ impl AppState {
             std::env::var("S3_ACCESS_KEY_ID").expect("S3_ACCESS_KEY_ID must be set");
         let s3_secret_access_key =
             std::env::var("S3_SECRET_ACCESS_KEY").expect("S3_SECRET_ACCESS_KEY must be set");
+        // Browser-reachable endpoint for presigned upload URLs — can differ
+        // from S3_ENDPOINT (e.g. MinIO's docker-network hostname isn't
+        // resolvable from the host locally); falls back to S3_ENDPOINT when
+        // unset, since they're the same real endpoint in Preview/Production.
+        let s3_public_endpoint =
+            std::env::var("S3_PUBLIC_ENDPOINT").unwrap_or_else(|_| s3_endpoint.clone());
 
         // Disables sqlx's client-side prepared-statement cache: Neon's pooled
         // (PgBouncer transaction-mode) connection string can route different
@@ -69,15 +77,26 @@ impl AppState {
             }
         };
 
+        let blob = Arc::new(blob::S3BlobDeleter::new(
+            &s3_endpoint,
+            &s3_region,
+            s3_bucket.clone(),
+            &s3_access_key_id,
+            &s3_secret_access_key,
+        ));
+        let presigner = Arc::new(blob::S3Presigner::new(
+            &s3_public_endpoint,
+            &s3_region,
+            s3_bucket,
+            &s3_access_key_id,
+            &s3_secret_access_key,
+        ));
+
         Arc::new(AppState {
             db: pool,
-            blob_deleter: Arc::new(blob::S3BlobDeleter::new(
-                &s3_endpoint,
-                &s3_region,
-                s3_bucket,
-                &s3_access_key_id,
-                &s3_secret_access_key,
-            )),
+            blob_deleter: blob.clone(),
+            blob_reader: blob,
+            blob_uploader: presigner,
         })
     }
 }

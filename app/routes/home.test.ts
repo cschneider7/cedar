@@ -1,10 +1,8 @@
-import { getAuth } from "@clerk/react-router/server"
 import { describe, expect, it, vi } from "vitest"
+import { authClient } from "~/lib/auth-client"
 import type { Classroom, Student } from "~/lib/schemas"
-import { makeArgs, stubFetch } from "~/lib/test-utils"
-import { loader } from "./home"
-
-const loaderArgs = () => makeArgs("http://test/")
+import { stubFetch } from "~/lib/test-utils"
+import { clientLoader as loader } from "./home"
 
 function jsonResponse(data: unknown) {
   return new Response(JSON.stringify({ data }), { status: 200 })
@@ -55,12 +53,13 @@ stubFetch()
 
 describe("home loader", () => {
   it("skips the API calls and returns empty defaults for an anonymous visitor", async () => {
-    vi.mocked(getAuth).mockResolvedValueOnce({
-      isAuthenticated: false,
-      getToken: async () => null,
-    } as Awaited<ReturnType<typeof getAuth>>)
+    vi.mocked(authClient.getSession).mockResolvedValueOnce({
+      data: null,
+      error: null,
+      isPending: false,
+    } as Awaited<ReturnType<typeof authClient.getSession>>)
 
-    const result = await loader(loaderArgs())
+    const result = await loader()
 
     expect(fetch).not.toHaveBeenCalled()
     expect(result).toEqual({
@@ -75,7 +74,7 @@ describe("home loader", () => {
       .mockResolvedValueOnce(jsonResponse(classrooms))
       .mockResolvedValueOnce(jsonResponse(students))
 
-    const result = await loader(loaderArgs())
+    const result = await loader()
 
     expect(result).toEqual({
       isAuthenticated: true,
@@ -89,7 +88,7 @@ describe("home loader", () => {
       .mockResolvedValueOnce(new Response(null, { status: 500 }))
       .mockResolvedValueOnce(jsonResponse(students))
 
-    const result = await loader(loaderArgs())
+    const result = await loader()
 
     expect(result.classroomsError).toBe(true)
     expect(result.studentsError).toBe(false)
@@ -100,7 +99,7 @@ describe("home loader", () => {
       .mockResolvedValueOnce(jsonResponse(classrooms))
       .mockResolvedValueOnce(new Response(null, { status: 500 }))
 
-    const result = await loader(loaderArgs())
+    const result = await loader()
 
     expect(result.classroomsError).toBe(false)
     expect(result.studentsError).toBe(true)

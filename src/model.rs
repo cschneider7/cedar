@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// Row shape of the `classrooms` table. `user_id` is a Clerk user id (e.g.
-/// `user_2NNyzz...`), not a UUID — Clerk owns user identity now.
+/// Row shape of the `classrooms` table. `user_id` is a Neon Auth user id
+/// (the JWT's `sub` claim, a UUID string), stored as `TEXT` rather than a
+/// `UUID` column/foreign key since it's owned by Neon Auth, not this schema.
 #[derive(Debug, Deserialize, Serialize, sqlx::FromRow)]
 pub struct ClassroomModel {
     pub id: Uuid,
@@ -17,7 +18,8 @@ pub struct ClassroomModel {
     pub pinned_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-/// Row shape of the `students` table. `user_id` is a Clerk user id, not a UUID.
+/// Row shape of the `students` table. `user_id` is a Neon Auth user id (see
+/// `ClassroomModel` above), not a UUID.
 #[derive(Debug, Deserialize, Serialize, sqlx::FromRow)]
 pub struct StudentModel {
     pub id: Uuid,

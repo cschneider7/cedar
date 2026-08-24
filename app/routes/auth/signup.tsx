@@ -1,22 +1,25 @@
-import { SignUp } from "@clerk/react-router"
-import { getAuth } from "@clerk/react-router/server"
-import { redirect } from "react-router"
+import { AuthView } from "@neondatabase/auth-ui"
+import { useEffect } from "react"
+import { useNavigate } from "react-router"
+import { NeonAuthUI } from "~/components/neon-auth-ui-provider"
 import { ThemeToggle } from "~/components/ui/theme-toggle"
 import { Wordmark } from "~/components/wordmark"
-import { useClerkAppearance } from "~/hooks/use-clerk-appearance"
+import { authClient } from "~/lib/auth-client"
 import type { Route } from "./+types/signup"
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "Sign up - Cedar" }]
 }
 
-export async function loader(args: Route.LoaderArgs) {
-  const { isAuthenticated } = await getAuth(args)
-  if (isAuthenticated) throw redirect("/")
-}
-
 export default function Signup() {
-  const appearance = useClerkAppearance()
+  const session = authClient.useSession()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (session.data) {
+      navigate("/", { replace: true })
+    }
+  }, [session.data, navigate])
 
   return (
     <div className="relative flex h-full flex-col items-center justify-center gap-6 p-6">
@@ -24,12 +27,9 @@ export default function Signup() {
         <ThemeToggle />
       </div>
       <Wordmark textClassName="font-medium" />
-      <SignUp
-        routing="hash"
-        fallbackRedirectUrl="/"
-        signInUrl="/login"
-        appearance={appearance}
-      />
+      <NeonAuthUI>
+        <AuthView view="SIGN_UP" />
+      </NeonAuthUI>
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { useRouteLoaderData } from "react-router"
-import type { loader as classroomLoader } from "~/routes/classrooms/classroom"
+import type { clientLoader as classroomLoader } from "~/routes/classrooms/classroom"
 
 export const CLASSROOM_ROUTE_ID = "classroom"
 

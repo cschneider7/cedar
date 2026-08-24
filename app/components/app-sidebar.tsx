@@ -1,12 +1,6 @@
 import { ChevronRight, ClipboardList, Home, UsersRound } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
-import {
-  Link,
-  NavLink,
-  useLocation,
-  useRevalidator,
-  useRouteLoaderData,
-} from "react-router"
+import { Link, NavLink, useLocation } from "react-router"
 import { Button } from "~/components/ui/button"
 import {
   Collapsible,
@@ -28,11 +22,11 @@ import {
   SidebarMenuSubItem,
 } from "~/components/ui/sidebar"
 import { Wordmark } from "~/components/wordmark"
+import { useRootData } from "~/hooks/use-root-data"
 import { getPinnedClassrooms } from "~/lib/classroom-limit"
 import type { ClassroomTab } from "~/lib/classroom-tabs"
 import { formatClassroomName } from "~/lib/classroom-term"
 import type { Classroom } from "~/lib/schemas"
-import type { loader as rootLoader } from "~/root"
 
 const CLASSROOM_TABS: { value: ClassroomTab; label: string }[] = [
   { value: "overview", label: "Overview" },
@@ -105,11 +99,10 @@ function ClassroomRow({ classroom }: { classroom: Classroom }) {
  * Primary nav sidebar: Home/Students/Classrooms links and the pinned classroom list.
  */
 export function AppSidebar() {
-  const rootData = useRouteLoaderData<typeof rootLoader>("root")
-  const classrooms = rootData?.classrooms ?? []
-  const classroomsError = rootData?.classroomsError ?? false
+  const rootData = useRootData()
+  const classrooms = rootData.classrooms
+  const classroomsError = rootData.classroomsError
   const location = useLocation()
-  const revalidator = useRevalidator()
 
   const pinnedClassrooms = useMemo(
     () => getPinnedClassrooms(classrooms),
@@ -171,8 +164,8 @@ export function AppSidebar() {
                   variant="ghost"
                   size="sm"
                   className="h-auto w-fit px-1 py-0.5"
-                  disabled={revalidator.state !== "idle"}
-                  onClick={() => revalidator.revalidate()}
+                  disabled={rootData.isRefetching}
+                  onClick={rootData.refetch}
                 >
                   Retry
                 </Button>

@@ -408,8 +408,9 @@ pub async fn randomize_seating_chart_handler(
 /// to scope, since all data comes from the request body, which the caller
 /// already fetched for their own classroom. It still extracts
 /// `CurrentUserId` (ignoring the value) purely to require authentication,
-/// since every route is otherwise protected by the outer Clerk layer in
-/// production but that layer is bypassed in tests (see `test_support.rs`) —
+/// since every route is otherwise protected by the outer Neon Auth
+/// middleware in production but that middleware is bypassed in tests (see
+/// `test_support.rs`) —
 /// without an extractor of its own, this handler would be reachable
 /// unauthenticated in tests even though production requests still 401.
 /// `classroom_id` is accepted for REST consistency with the other

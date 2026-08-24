@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import type { SeatingChart } from "~/lib/schemas"
 import { makeArgs, stubFetch } from "~/lib/test-utils"
-import { action } from "./randomize-seating-chart"
+import { clientAction as action } from "./randomize-seating-chart"
 
 const classroomId = "classroom-1"
 

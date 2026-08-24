@@ -6,7 +6,7 @@ import type {
   Student,
 } from "~/lib/schemas"
 import { makeArgs, stubFetch } from "~/lib/test-utils"
-import { loader } from "./classroom"
+import { clientLoader as loader } from "./classroom"
 
 const classroomId = "classroom-1"
 

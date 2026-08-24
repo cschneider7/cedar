@@ -7,21 +7,21 @@ use axum::{
     middleware::from_fn,
     routing::{delete, get, patch, post, put},
 };
-use clerk_rs::validators::{axum::ClerkLayer, jwks::MemoryCacheJwksProvider};
 use serde_json::json;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
+use crate::auth::JwksVerifier;
 use crate::error::log_app_errors;
 use crate::{AppState, handlers};
 
 /// Builds the full `/api/v1/*` router, wiring every handler to its route and
-/// attaching shared state plus Clerk-auth/CORS/tracing/error-logging
-/// middleware. `clerk_layer` is `None` in tests, which bypass Clerk JWT
+/// attaching shared state plus Neon-Auth/CORS/tracing/error-logging
+/// middleware. `jwks_verifier` is `None` in tests, which bypass JWT
 /// verification while still exercising every handler's own auth-extractor
 /// logic (see `test_support.rs`).
 pub fn create_router(
     app_state: Arc<AppState>,
-    clerk_layer: Option<ClerkLayer<MemoryCacheJwksProvider>>,
+    jwks_verifier: Option<JwksVerifier>,
     frontend_origin: String,
 ) -> Router {
     let cors_layer = CorsLayer::new()
@@ -63,6 +63,14 @@ pub fn create_router(
         .route(
             "/api/v1/students/{student_id}",
             get(handlers::student::get_student_handler),
+        )
+        .route(
+            "/api/v1/students/{student_id}/image",
+            get(handlers::student::get_student_image_handler),
+        )
+        .route(
+            "/api/v1/students/image-upload-url",
+            post(handlers::student::create_student_image_upload_url_handler),
         )
         .route(
             "/api/v1/students/{student_id}",
@@ -121,8 +129,11 @@ pub fn create_router(
             delete(handlers::separation::delete_separation_handler),
         );
 
-    let app_routes = match clerk_layer {
-        Some(clerk_layer) => app_routes.layer(clerk_layer),
+    let app_routes = match jwks_verifier {
+        Some(jwks_verifier) => app_routes.layer(axum::middleware::from_fn_with_state(
+            jwks_verifier,
+            crate::auth::neon_auth_middleware,
+        )),
         None => app_routes,
     };
 

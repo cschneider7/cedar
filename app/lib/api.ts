@@ -7,6 +7,7 @@ import {
   CreateClassroomSchema,
   CreateSeparationSchema,
   CreateStudentSchema,
+  ImageUploadUrlSchema,
   RandomizeSeatingChartOptionsSchema,
   SeatingChartSchema,
   SeparationSchema,
@@ -19,6 +20,7 @@ import {
   type Classroom,
   type ColdCall,
   type ColdCallPick,
+  type ImageUploadUrl,
   type RandomizeSeatingChartOptions,
   type SeatingChart,
   type Separation,
@@ -106,7 +108,7 @@ async function getErrorMessage(
 }
 
 /**
- * Attaches the Clerk session token as a bearer `Authorization` header —
+ * Attaches the Neon Auth session token as a bearer `Authorization` header —
  * every caller passes its own token; there's no ambient shared credential.
  * @param token - The session token, if any.
  * @returns Headers with the bearer token, or `undefined` if no token.
@@ -270,6 +272,23 @@ export async function getStudentLimitStatus(
   token?: string | null
 ): Promise<StudentLimitStatus> {
   return apiFetch(`/students/count`, StudentLimitStatusSchema, { token })
+}
+
+/**
+ * Requests a presigned S3 PUT URL for a student photo upload.
+ * @param contentLength - The file's byte size.
+ * @param token - The caller's session token, if any.
+ * @returns The presigned PUT URL and the S3 key it will land at.
+ */
+export async function requestStudentImageUploadUrl(
+  contentLength: number,
+  token?: string | null
+): Promise<ImageUploadUrl> {
+  return apiFetch(`/students/image-upload-url`, ImageUploadUrlSchema, {
+    method: "POST",
+    token,
+    body: { content_length: contentLength },
+  })
 }
 
 /**

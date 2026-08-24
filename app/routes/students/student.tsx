@@ -17,10 +17,11 @@ import {
 import { ArrowLeft } from "lucide-react"
 import { Link } from "react-router"
 import { DeleteStudentDialog } from "~/components/delete-student-dialog"
+import { RouteHydrateFallback } from "~/components/route-hydrate-fallback"
 import { StudentAvatar } from "~/components/student-avatar"
 import { StudentFormDialog } from "~/components/student-form-dialog"
 import { getClassroom, getStudent, toRouteError } from "~/lib/api"
-import { tokenFromRequest } from "~/lib/auth"
+import { getBearerToken } from "~/lib/auth-client"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 import { formatClassroomName } from "~/lib/classroom-term"
 import type { Route } from "./+types/student"
@@ -32,9 +33,8 @@ export const handle: BreadcrumbHandle = {
     data ? `/students/${data.student.id}` : "/students",
 }
 
-export async function loader(args: Route.LoaderArgs) {
-  const token = await tokenFromRequest(args)
-  const { params } = args
+export async function clientLoader({ params }: Route.ClientLoaderArgs) {
+  const token = await getBearerToken()
   try {
     const student = await getStudent(params.studentId, token)
     const classroom = student.classroom_id
@@ -48,6 +48,10 @@ export async function loader(args: Route.LoaderArgs) {
   } catch (error) {
     toRouteError(error)
   }
+}
+
+export function HydrateFallback() {
+  return <RouteHydrateFallback />
 }
 
 export default function Component({ loaderData }: Route.ComponentProps) {

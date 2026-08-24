@@ -5,14 +5,9 @@ import {
 } from "@tanstack/react-table"
 import { LayoutGrid, List, Plus, Search, UsersIcon } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import {
-  Link,
-  useLocation,
-  useNavigate,
-  useNavigation,
-  useRouteLoaderData,
-} from "react-router"
+import { Link, useLocation, useNavigate, useNavigation } from "react-router"
 import { DeleteConfirmDialog } from "~/components/delete-confirm-dialog"
+import { RouteHydrateFallback } from "~/components/route-hydrate-fallback"
 import { SearchInput } from "~/components/search-input"
 import { StudentAvatar } from "~/components/student-avatar"
 import { StudentFormDialog } from "~/components/student-form-dialog"
@@ -60,14 +55,14 @@ import {
   type StudentViewMode,
 } from "~/hooks/use-student-view-mode"
 import { getClassrooms, getStudentsPage } from "~/lib/api"
-import { tokenFromRequest } from "~/lib/auth"
+import { getBearerToken } from "~/lib/auth-client"
 import { formatClassroomName } from "~/lib/classroom-term"
+import { useRootData } from "~/hooks/use-root-data"
 import { getPageNumbers } from "~/lib/pagination"
 import type { Classroom, Student } from "~/lib/schemas"
 import { isAtStudentLimit } from "~/lib/student-limit"
 import { cn } from "~/lib/utils"
 import { parseViewModeCookie } from "~/lib/view-mode-cookie"
-import type { loader as rootLoader } from "~/root"
 import {
   getStudentColumns,
   studentTableFeatures,
@@ -76,19 +71,21 @@ import {
 } from "./student-columns"
 import type { Route } from "./+types/student-home"
 
-export async function loader(args: Route.LoaderArgs) {
-  const token = await tokenFromRequest(args)
-  const { request } = args
+export async function clientLoader({ request }: Route.ClientLoaderArgs) {
+  const token = await getBearerToken()
   const url = new URL(request.url)
   const page = Math.max(1, Number(url.searchParams.get("page")) || 1)
   const q = url.searchParams.get("q") ?? ""
   const viewParam = url.searchParams.get("view")
   // An explicit `?view=` always wins; otherwise fall back to the stored
-  // cookie preference so it's server-rendered on first paint, no flash.
+  // cookie preference — no longer server-rendered on first paint (this is a
+  // clientLoader now), so there's a brief flash to the stored mode instead.
   const viewMode: StudentViewMode =
     viewParam === "list" || viewParam === "grid"
       ? viewParam
-      : parseViewModeCookie(request.headers.get("Cookie"))
+      : parseViewModeCookie(
+          typeof document === "undefined" ? null : document.cookie
+        )
   const pageSize = viewMode === "list" ? 20 : 24
   const sortByParam = url.searchParams.get("sort_by")
   const sortBy: StudentSortKey =
@@ -120,6 +117,10 @@ export async function loader(args: Route.LoaderArgs) {
     sortBy,
     sortDir,
   }
+}
+
+export function HydrateFallback() {
+  return <RouteHydrateFallback />
 }
 
 function ViewToggle({
@@ -308,9 +309,9 @@ export default function Component({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const navigation = useNavigation()
-  const rootData = useRouteLoaderData<typeof rootLoader>("root")
-  const studentCount = rootData?.studentCount ?? null
-  const studentLimit = rootData?.studentLimit ?? null
+  const rootData = useRootData()
+  const studentCount = rootData.studentCount
+  const studentLimit = rootData.studentLimit
   // Scoped to same-page param changes — cross-page navigation is already
   // covered by the global `NavLoadingIndicator`.
   const isLoading =

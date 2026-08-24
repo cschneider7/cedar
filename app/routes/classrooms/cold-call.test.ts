@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import type { ColdCall, ColdCallPick } from "~/lib/schemas"
 import { makeArgs, stubFetch } from "~/lib/test-utils"
-import { action } from "./cold-call"
+import { clientAction as action } from "./cold-call"
 
 const classroomId = "classroom-1"
 

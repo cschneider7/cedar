@@ -1,7 +1,6 @@
-import { Show, useClerk, useUser } from "@clerk/react-router"
 import { LogOut, Menu, Plus, Settings } from "lucide-react"
 import { Fragment, useState } from "react"
-import { Link, useMatches, useRouteLoaderData } from "react-router"
+import { Link, useMatches, useNavigate } from "react-router"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
 import { StudentFormDialog } from "~/components/student-form-dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar"
@@ -36,13 +35,14 @@ import { isTheme, themeIcons, ThemeToggle } from "~/components/ui/theme-toggle"
 import { toast } from "~/components/ui/toast"
 import { TopbarSearch } from "~/components/topbar-search"
 import { Wordmark } from "~/components/wordmark"
+import { useRootData } from "~/hooks/use-root-data"
+import { authClient } from "~/lib/auth-client"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 import {
   MAX_CLASSROOMS_PER_USER,
   isAtClassroomLimit,
 } from "~/lib/classroom-limit"
 import { isAtStudentLimit } from "~/lib/student-limit"
-import type { loader as rootLoader } from "~/root"
 
 /**
  * Breadcrumb trail entries built from matched routes' `handle.breadcrumb`.
@@ -109,7 +109,7 @@ function Breadcrumbs({
 function CreateDropdown() {
   const [studentOpen, setStudentOpen] = useState(false)
   const [classroomOpen, setClassroomOpen] = useState(false)
-  const rootData = useRouteLoaderData<typeof rootLoader>("root")
+  const rootData = useRootData()
 
   function handleNewStudent() {
     if (
@@ -178,31 +178,31 @@ function CreateDropdown() {
  * Signed-in account menu: profile, theme switcher, and sign out.
  */
 function UserMenu() {
-  const { user } = useUser()
-  const { signOut, openUserProfile } = useClerk()
+  const session = authClient.useSession()
+  const navigate = useNavigate()
   const { theme, setTheme } = useTheme()
 
+  const user = session.data?.user
   if (!user) return null
 
-  const displayName =
-    user.fullName || user.primaryEmailAddress?.emailAddress || "Account"
-  const email = user.primaryEmailAddress?.emailAddress
+  const displayName = user.name || user.email || "Account"
+  const email = user.email
   const initials =
-    `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase() ||
-    displayName.slice(0, 2).toUpperCase()
+    displayName
+      .split(" ")
+      .map((part) => part[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || displayName.slice(0, 2).toUpperCase()
 
-  // Avatar renders at size-8 (32px) — request a 2x-retina-sized crop
-  // instead of Clerk's full-size default image.
-  let avatarImageUrl: string | undefined
-  if (user.imageUrl) {
-    const url = new URL(user.imageUrl)
-    url.searchParams.set("width", "64")
-    url.searchParams.set("height", "64")
-    url.searchParams.set("fit", "crop")
-    avatarImageUrl = url.toString()
-  }
+  const avatarImageUrl = user.image ?? undefined
 
   const ThemeIcon = themeIcons[theme]
+
+  async function handleSignOut() {
+    await authClient.signOut()
+    navigate("/")
+  }
 
   return (
     <DropdownMenu>
@@ -231,7 +231,7 @@ function UserMenu() {
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => openUserProfile()}>
+        <DropdownMenuItem render={<Link to="/account" />}>
           <Settings />
           Account
         </DropdownMenuItem>
@@ -260,10 +260,7 @@ function UserMenu() {
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          variant="destructive"
-          onClick={() => signOut({ redirectUrl: "/" })}
-        >
+        <DropdownMenuItem variant="destructive" onClick={handleSignOut}>
           <LogOut />
           Sign out
         </DropdownMenuItem>
@@ -276,9 +273,13 @@ function UserMenu() {
  * Signed-out (theme toggle + sign in) or signed-in (account menu) controls.
  */
 function AuthControl() {
-  return (
-    <>
-      <Show when="signed-out">
+  const session = authClient.useSession()
+
+  if (session.isPending) return null
+
+  if (!session.data) {
+    return (
+      <>
         <ThemeToggle />
         <Button
           variant="default"
@@ -287,12 +288,11 @@ function AuthControl() {
         >
           Sign in
         </Button>
-      </Show>
-      <Show when="signed-in">
-        <UserMenu />
-      </Show>
-    </>
-  )
+      </>
+    )
+  }
+
+  return <UserMenu />
 }
 
 /**
