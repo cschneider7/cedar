@@ -12,8 +12,8 @@ import {
   ItemTitle,
 } from "~/components/ui/item"
 import { toast } from "~/components/ui/toast"
-import { authClient, getBearerToken } from "~/lib/auth-client"
 import { getClassrooms, getStudents } from "~/lib/api"
+import { authClient, getAuthToken } from "~/lib/auth-client"
 import type { Route } from "./+types/home"
 
 export function meta({}: Route.MetaArgs) {
@@ -39,7 +39,7 @@ export async function clientLoader() {
       studentsError: false,
     }
   }
-  const token = await getBearerToken()
+  const token = await getAuthToken()
   // Classrooms/students are only fetched to detect a reachability failure
   // for the toasts below — the dashboard doesn't display their data itself.
   const [classroomsFailed, studentsFailed] = await Promise.all([

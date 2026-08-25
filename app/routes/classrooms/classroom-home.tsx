@@ -38,7 +38,7 @@ import {
 } from "~/components/ui/table"
 import { toast } from "~/components/ui/toast"
 import { getClassrooms, getStudents } from "~/lib/api"
-import { getBearerToken } from "~/lib/auth-client"
+import { getAuthToken } from "~/lib/auth-client"
 import {
   MAX_CLASSROOMS_PER_USER,
   getPinnedClassrooms,
@@ -46,11 +46,11 @@ import {
 } from "~/lib/classroom-limit"
 import { formatTerm } from "~/lib/classroom-term"
 import type { Student } from "~/lib/schemas"
+import type { Route } from "./+types/classroom-home"
 import {
   classroomTableFeatures,
   getClassroomColumns,
 } from "./classroom-columns"
-import type { Route } from "./+types/classroom-home"
 
 const CLASSROOMS_PAGE_SIZE = 10
 
@@ -65,7 +65,7 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function clientLoader() {
-  const token = await getBearerToken()
+  const token = await getAuthToken()
   const [classrooms, studentsResult] = await Promise.all([
     getClassrooms(token),
     // Student counts are supplementary — a failure here degrades to "—"

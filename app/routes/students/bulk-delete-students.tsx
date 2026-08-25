@@ -1,6 +1,6 @@
 import * as z from "zod"
 import { bulkDeleteStudents } from "~/lib/api"
-import { getBearerToken } from "~/lib/auth-client"
+import { getAuthToken } from "~/lib/auth-client"
 import type { Route } from "./+types/bulk-delete-students"
 
 const BulkDeleteInputSchema = z.object({
@@ -16,7 +16,7 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
   }
 
   try {
-    await bulkDeleteStudents(result.data.ids, await getBearerToken())
+    await bulkDeleteStudents(result.data.ids, await getAuthToken())
     return { ok: true }
   } catch (error) {
     return { ok: false, error: (error as Error).message }

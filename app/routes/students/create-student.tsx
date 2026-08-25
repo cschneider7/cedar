@@ -1,12 +1,12 @@
 import { Navigate } from "react-router"
 import type { MutationResult } from "~/lib/action-results"
 import { createStudent, getClassrooms } from "~/lib/api"
-import { getBearerToken } from "~/lib/auth-client"
+import { getAuthToken } from "~/lib/auth-client"
 import { CreateStudentSchema } from "~/lib/schemas"
 import type { Route } from "./+types/create-student"
 
 export async function clientLoader() {
-  const token = await getBearerToken()
+  const token = await getAuthToken()
   const classrooms = await getClassrooms(token)
   return { classrooms: classrooms }
 }
@@ -28,7 +28,7 @@ export async function clientAction({
   }
 
   try {
-    const student = await createStudent(result.data, await getBearerToken())
+    const student = await createStudent(result.data, await getAuthToken())
     return { ok: true, id: student.id }
   } catch (error) {
     return { ok: false, error: (error as Error).message }

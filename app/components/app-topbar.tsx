@@ -1,9 +1,9 @@
-import { LogOut, Menu, Plus, Settings } from "lucide-react"
+import { SignedIn, SignedOut, UserButton } from "@neondatabase/auth-ui"
+import { Menu, Plus, Settings } from "lucide-react"
 import { Fragment, useState } from "react"
-import { Link, useMatches, useNavigate } from "react-router"
+import { Link, useMatches } from "react-router"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
 import { StudentFormDialog } from "~/components/student-form-dialog"
-import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -16,27 +16,17 @@ import { Button } from "~/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"
 import { NavLoadingIndicator } from "~/components/nav-loading-indicator"
 import { Separator } from "~/components/ui/separator"
 import { useSidebar } from "~/components/ui/sidebar"
-import { useTheme } from "~/components/ui/theme-provider"
-import { isTheme, themeIcons, ThemeToggle } from "~/components/ui/theme-toggle"
+import { ThemeToggle } from "~/components/theme-toggle"
 import { toast } from "~/components/ui/toast"
 import { TopbarSearch } from "~/components/topbar-search"
 import { Wordmark } from "~/components/wordmark"
 import { useRootData } from "~/hooks/use-root-data"
-import { authClient } from "~/lib/auth-client"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 import {
   MAX_CLASSROOMS_PER_USER,
@@ -175,124 +165,39 @@ function CreateDropdown() {
 }
 
 /**
- * Signed-in account menu: profile, theme switcher, and sign out.
- */
-function UserMenu() {
-  const session = authClient.useSession()
-  const navigate = useNavigate()
-  const { theme, setTheme } = useTheme()
-
-  const user = session.data?.user
-  if (!user) return null
-
-  const displayName = user.name || user.email || "Account"
-  const email = user.email
-  const initials =
-    displayName
-      .split(" ")
-      .map((part) => part[0])
-      .slice(0, 2)
-      .join("")
-      .toUpperCase() || displayName.slice(0, 2).toUpperCase()
-
-  const avatarImageUrl = user.image ?? undefined
-
-  const ThemeIcon = themeIcons[theme]
-
-  async function handleSignOut() {
-    await authClient.signOut()
-    navigate("/")
-  }
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <button
-            type="button"
-            aria-label="Account menu"
-            className="rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
-          >
-            <Avatar>
-              <AvatarImage src={avatarImageUrl} alt={displayName} />
-              <AvatarFallback>{initials}</AvatarFallback>
-            </Avatar>
-          </button>
-        }
-      />
-      <DropdownMenuContent align="end" className="w-max max-w-45">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>
-            {email && (
-              <div className="truncate text-sm font-normal text-muted-foreground">
-                {email}
-              </div>
-            )}
-          </DropdownMenuLabel>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem render={<Link to="/account" />}>
-          <Settings />
-          Account
-        </DropdownMenuItem>
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <ThemeIcon />
-            <span>Theme</span>
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuRadioGroup
-              value={theme}
-              onValueChange={(value) => {
-                if (isTheme(value)) setTheme(value)
-              }}
-            >
-              <DropdownMenuRadioItem value="light" closeOnClick>
-                Light
-              </DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="dark" closeOnClick>
-                Dark
-              </DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="system" closeOnClick>
-                System
-              </DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onClick={handleSignOut}>
-          <LogOut />
-          Sign out
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-/**
- * Signed-out (theme toggle + sign in) or signed-in (account menu) controls.
+ * Signed-out (sign in button) or signed-in (account menu) controls, plus an
+ * always-visible theme toggle. The account menu is auth-ui's own
+ * `UserButton` rather than a hand-rolled dropdown — `disableDefaultLinks`
+ * turns off its built-in "Settings" link (which targets
+ * `accountViewPaths.SETTINGS`, i.e. `/settings`, not this app's actual
+ * `/account` page) in favor of an explicit `additionalLinks` entry. Its
+ * built-in "Sign out" link is not similarly overridable (see
+ * `routes/auth/sign-out.tsx`), and isn't gated by `disableDefaultLinks`.
  */
 function AuthControl() {
-  const session = authClient.useSession()
-
-  if (session.isPending) return null
-
-  if (!session.data) {
-    return (
-      <>
-        <ThemeToggle />
+  return (
+    <>
+      <ThemeToggle />
+      <SignedOut>
         <Button
           variant="default"
           nativeButton={false}
-          render={<Link to="/login" />}
+          render={<Link to="/auth/sign-in" />}
         >
           Sign in
         </Button>
-      </>
-    )
-  }
-
-  return <UserMenu />
+      </SignedOut>
+      <SignedIn>
+        <UserButton
+          size="icon"
+          disableDefaultLinks
+          additionalLinks={[
+            { href: "/account", icon: <Settings />, label: "Account" },
+          ]}
+        />
+      </SignedIn>
+    </>
+  )
 }
 
 /**

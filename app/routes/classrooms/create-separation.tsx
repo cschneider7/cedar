@@ -1,6 +1,6 @@
 import { Navigate } from "react-router"
 import { createSeparation } from "~/lib/api"
-import { getBearerToken } from "~/lib/auth-client"
+import { getAuthToken } from "~/lib/auth-client"
 import { CreateSeparationSchema, type Separation } from "~/lib/schemas"
 import type { Route } from "./+types/create-separation"
 
@@ -24,10 +24,7 @@ export async function clientAction({
   }
 
   try {
-    const separation = await createSeparation(
-      result.data,
-      await getBearerToken()
-    )
+    const separation = await createSeparation(result.data, await getAuthToken())
     return { ok: true, separation }
   } catch (error) {
     return { ok: false, error: (error as Error).message }

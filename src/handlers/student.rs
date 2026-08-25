@@ -20,16 +20,16 @@ use crate::{
     },
 };
 
-/// Cost/infra protection ceiling: a flat cap on students per user account,
-/// counted across all of their classrooms (including unassigned students).
 const MAX_STUDENTS_PER_USER: i64 = 850;
 
 /// Rejects a new student if `user_id` is already at `MAX_STUDENTS_PER_USER`.
 async fn check_student_limit(db: &sqlx::PgPool, user_id: &str) -> Result<(), AppError> {
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM students WHERE user_id = $1")
-        .bind(user_id)
-        .fetch_one(db)
-        .await?;
+    let count = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) AS "count!" FROM students WHERE user_id = $1"#,
+        user_id
+    )
+    .fetch_one(db)
+    .await?;
     if count >= MAX_STUDENTS_PER_USER {
         return Err(AppError::BadRequest(
             "Student limit reached (850 students per account).".to_string(),
@@ -38,8 +38,7 @@ async fn check_student_limit(db: &sqlx::PgPool, user_id: &str) -> Result<(), App
     Ok(())
 }
 
-/// Confirms `classroom_id` (if present) is owned by `user_id`, so a student
-/// can't be assigned into another user's classroom.
+/// Confirms that a classroom is owned by the user
 async fn check_classroom_ownership(
     db: &sqlx::PgPool,
     classroom_id: Option<Uuid>,
@@ -48,11 +47,11 @@ async fn check_classroom_ownership(
     let Some(classroom_id) = classroom_id else {
         return Ok(());
     };
-    let exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM classrooms WHERE id = $1 AND user_id = $2)",
+    let exists = sqlx::query_scalar!(
+        r#"SELECT EXISTS(SELECT 1 FROM classrooms WHERE id = $1 AND user_id = $2) AS "exists!""#,
+        classroom_id,
+        user_id
     )
-    .bind(classroom_id)
-    .bind(user_id)
     .fetch_one(db)
     .await?;
     if !exists {
@@ -61,33 +60,23 @@ async fn check_classroom_ownership(
     Ok(())
 }
 
-/// Confirms an `image_url` (an S3 key), if present, falls under the calling
-/// user's own `students/{user_id}/` prefix — `image_url` is client-supplied
-/// on create/update with no other server-side check tying it to the caller,
-/// so without this a malicious user could point their own student's
-/// `image_url` at another user's real photo key and either read it back via
-/// `get_student_image_handler` or trigger its deletion via a later
-/// update/delete of their own row.
+/// The blob-storage key prefix under which a user's student photos live
+fn student_image_prefix(user_id: &str) -> String {
+    format!("students/{user_id}/")
+}
+
+/// Confirms that an image is owned by the user
 fn check_image_url_ownership(image_url: &Option<String>, user_id: &str) -> Result<(), AppError> {
     let Some(image_url) = image_url else {
         return Ok(());
     };
-    if !image_url.starts_with(&format!("students/{user_id}/")) {
+    if !image_url.starts_with(&student_image_prefix(user_id)) {
         return Err(AppError::BadRequest("Invalid image_url".to_string()));
     }
     Ok(())
 }
 
-/// Lists students owned by the current user, ordered by name. With no query
-/// params, returns the full unpaginated roster (today's exact behavior,
-/// still consumed unchanged by classroom pages). With any of
-/// `page`/`page_size`/`q`/`sort_by`/`sort_dir` present, returns a paginated
-/// `{students, page, page_size, total_count, total_pages}` envelope instead,
-/// filtering `name` via case-insensitive `ILIKE` when `q` is set and
-/// ordering by `sort_by`/`sort_dir` (default: name ascending). Sorting by
-/// `classroom` orders by period, with unassigned students always last
-/// regardless of direction. Out-of-range `page` is clamped server-side to
-/// `[1, total_pages]`.
+/// Lists students owned by the current user, ordered by name
 pub async fn student_list_handler(
     CurrentUserId(user_id): CurrentUserId,
     State(data): State<Arc<AppState>>,
@@ -99,11 +88,13 @@ pub async fn student_list_handler(
         && params.sort_by.is_none()
         && params.sort_dir.is_none()
     {
-        let students: Vec<StudentModel> =
-            sqlx::query_as("SELECT * FROM students WHERE user_id = $1 ORDER BY name")
-                .bind(user_id)
-                .fetch_all(&data.db)
-                .await?;
+        let students = sqlx::query_as!(
+            StudentModel,
+            "SELECT * FROM students WHERE user_id = $1 ORDER BY name",
+            user_id
+        )
+        .fetch_all(&data.db)
+        .await?;
         return Ok((StatusCode::OK, Json(json!({"data": students}))));
     }
 
@@ -114,21 +105,24 @@ pub async fn student_list_handler(
     let sort_by = params.sort_by.unwrap_or(StudentSortBy::Name);
     let sort_dir = params.sort_dir.unwrap_or(SortDir::Asc);
 
-    let total_count: i64 = match &like_pattern {
-        Some(pattern) => {
-            sqlx::query_scalar("SELECT COUNT(*) FROM students WHERE user_id = $1 AND name ILIKE $2")
-                .bind(&user_id)
-                .bind(pattern)
+    let total_count =
+        match &like_pattern {
+            Some(pattern) => sqlx::query_scalar!(
+                r#"SELECT COUNT(*) AS "count!" FROM students WHERE user_id = $1 AND name ILIKE $2"#,
+                &user_id,
+                pattern
+            )
+            .fetch_one(&data.db)
+            .await?,
+            None => {
+                sqlx::query_scalar!(
+                    r#"SELECT COUNT(*) AS "count!" FROM students WHERE user_id = $1"#,
+                    &user_id
+                )
                 .fetch_one(&data.db)
                 .await?
-        }
-        None => {
-            sqlx::query_scalar("SELECT COUNT(*) FROM students WHERE user_id = $1")
-                .bind(&user_id)
-                .fetch_one(&data.db)
-                .await?
-        }
-    };
+            }
+        };
 
     let total_pages = ((total_count as f64) / (page_size as f64)).ceil().max(1.0) as i64;
     let page = requested_page.min(total_pages);
@@ -193,40 +187,34 @@ pub async fn get_student_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let student: StudentModel =
-        sqlx::query_as("SELECT * FROM students WHERE id = $1 AND user_id = $2")
-            .bind(id)
-            .bind(user_id)
-            .fetch_one(&data.db)
-            .await?;
+    let student = sqlx::query_as!(
+        StudentModel,
+        "SELECT * FROM students WHERE id = $1 AND user_id = $2",
+        id,
+        user_id
+    )
+    .fetch_one(&data.db)
+    .await?;
 
     Ok((StatusCode::OK, Json(json!({"data": student}))))
 }
 
-/// Streams a student's private photo, scoped to the current user. Replaces
-/// the old Node-side `/api/student-image` proxy — Neon Auth's session
-/// cookie isn't sent to the frontend's own origin, so that proxy had no way
-/// left to authenticate the request; this handler reuses the same JWT
-/// verification every other endpoint already goes through instead of a
-/// second, Node-side JWT verifier.
+/// Streams a student's private photo, scoped to the current user
 pub async fn get_student_image_handler(
     CurrentUserId(user_id): CurrentUserId,
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let image_url: Option<String> =
-        sqlx::query_scalar("SELECT image_url FROM students WHERE id = $1 AND user_id = $2")
-            .bind(id)
-            .bind(&user_id)
-            .fetch_one(&data.db)
-            .await?;
+    let image_url = sqlx::query_scalar!(
+        "SELECT image_url FROM students WHERE id = $1 AND user_id = $2",
+        id,
+        &user_id
+    )
+    .fetch_one(&data.db)
+    .await?;
 
     let key = image_url.ok_or_else(|| AppError::NotFound("Student has no photo".to_string()))?;
-    // Defense in depth alongside `check_image_url_ownership` (enforced on
-    // write) — a row written before that check existed, or by any future
-    // code path that forgets it, must still not let a key outside the
-    // caller's own prefix be read back.
-    if !key.starts_with(&format!("students/{user_id}/")) {
+    if !key.starts_with(&student_image_prefix(&user_id)) {
         return Err(AppError::NotFound("Photo not found".to_string()));
     }
 
@@ -258,15 +246,7 @@ pub struct ImageUploadUrlSchema {
     content_length: i64,
 }
 
-/// Issues a presigned S3 PUT URL for a student photo upload, scoped to the
-/// current user — `image_url` itself is saved separately, via the normal
-/// create/update student call. Not scoped by `student_id` since an upload
-/// can happen before the student record exists (new-student creation).
-/// Replaces the old Node-side `/api/student-image-upload` route, which
-/// can no longer authenticate a request itself (see `get_student_image_handler`)
-/// and, independently, could never have become a browser-side `clientAction`
-/// either — presigning requires the S3 secret key, which must stay
-/// server-side.
+/// Issues a presigned S3 URL for a student photo upload, scoped to the current user
 pub async fn create_student_image_upload_url_handler(
     CurrentUserId(user_id): CurrentUserId,
     State(data): State<Arc<AppState>>,
@@ -276,7 +256,11 @@ pub async fn create_student_image_upload_url_handler(
         return Err(AppError::BadRequest("Invalid content length".to_string()));
     }
 
-    let key = format!("students/{user_id}/{}.webp", uuid::Uuid::new_v4());
+    let key = format!(
+        "{}{}.webp",
+        student_image_prefix(&user_id),
+        uuid::Uuid::new_v4()
+    );
     let url = data
         .blob_uploader
         .presign_put(
@@ -293,8 +277,7 @@ pub async fn create_student_image_upload_url_handler(
     ))
 }
 
-/// Creates a new student owned by the current user, optionally assigned to
-/// one of their classrooms.
+/// Creates a new student owned by the current user
 pub async fn create_student_handler(
     CurrentUserId(user_id): CurrentUserId,
     State(data): State<Arc<AppState>>,
@@ -304,7 +287,9 @@ pub async fn create_student_handler(
     check_classroom_ownership(&data.db, body.classroom_id, &user_id).await?;
     check_image_url_ownership(&body.image_url, &user_id)?;
 
-    let student: StudentModel = sqlx::query_as(
+    let seating_preference = body.seating_preference.map(|p| p.as_str());
+    let student = sqlx::query_as!(
+        StudentModel,
         "INSERT INTO students (
             user_id,
             classroom_id,
@@ -315,30 +300,30 @@ pub async fn create_student_handler(
         )
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *",
+        user_id,
+        body.classroom_id,
+        body.student_id,
+        body.name,
+        body.image_url,
+        seating_preference
     )
-    .bind(user_id)
-    .bind(body.classroom_id)
-    .bind(body.student_id)
-    .bind(&body.name)
-    .bind(body.image_url)
-    .bind(body.seating_preference.map(|p| p.as_str()))
     .fetch_one(&data.db)
     .await?;
 
     Ok((StatusCode::CREATED, Json(json!({"data": student}))))
 }
 
-/// Returns the current user's total student count alongside the account cap
-/// (`MAX_STUDENTS_PER_USER`), so the frontend can warn/block near the limit
-/// ahead of a create actually failing.
+/// Returns the current user's total student count
 pub async fn count_students_handler(
     CurrentUserId(user_id): CurrentUserId,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM students WHERE user_id = $1")
-        .bind(user_id)
-        .fetch_one(&data.db)
-        .await?;
+    let count = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) AS "count!" FROM students WHERE user_id = $1"#,
+        user_id
+    )
+    .fetch_one(&data.db)
+    .await?;
 
     Ok((
         StatusCode::OK,
@@ -346,20 +331,21 @@ pub async fn count_students_handler(
     ))
 }
 
-/// Partially updates a student, merging provided fields over its existing
-/// values before writing them back. Scoped to the current user.
+/// Partially updates a student
 pub async fn update_student_handler(
     CurrentUserId(user_id): CurrentUserId,
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
     Json(body): Json<UpdateStudentSchema>,
 ) -> Result<impl IntoResponse, AppError> {
-    let student: StudentModel =
-        sqlx::query_as("SELECT * FROM students WHERE id = $1 AND user_id = $2")
-            .bind(id)
-            .bind(&user_id)
-            .fetch_one(&data.db)
-            .await?;
+    let student = sqlx::query_as!(
+        StudentModel,
+        "SELECT * FROM students WHERE id = $1 AND user_id = $2",
+        id,
+        &user_id
+    )
+    .fetch_one(&data.db)
+    .await?;
 
     let new_classroom_id = body.classroom_id.unwrap_or(student.classroom_id);
     let new_student_id = body.student_id.unwrap_or(student.student_id);
@@ -378,7 +364,8 @@ pub async fn update_student_handler(
 
     let mut tx = data.db.begin().await?;
 
-    let updated_student: StudentModel = sqlx::query_as(
+    let updated_student = sqlx::query_as!(
+        StudentModel,
         "UPDATE students SET
             classroom_id = $1,
             student_id = $2,
@@ -387,27 +374,25 @@ pub async fn update_student_handler(
             seating_preference = $5
         WHERE id = $6
         RETURNING *",
+        new_classroom_id,
+        new_student_id,
+        new_name,
+        new_image_url,
+        new_seating_preference,
+        student.id
     )
-    .bind(new_classroom_id)
-    .bind(new_student_id)
-    .bind(new_name)
-    .bind(new_image_url)
-    .bind(new_seating_preference)
-    .bind(student.id)
     .fetch_one(&mut *tx)
     .await?;
 
-    // A student leaving a classroom (reassigned elsewhere or unassigned)
-    // must give up their seat there too, or the old chart keeps showing
-    // them seated indefinitely.
+    // Mark the deleted student's seat as empty
     if student.classroom_id.is_some() && new_classroom_id != student.classroom_id {
-        sqlx::query(
+        sqlx::query!(
             "UPDATE seats SET student_id = NULL
             WHERE student_id = $1
               AND table_id IN (SELECT id FROM tables WHERE classroom_id = $2)",
+            student.id,
+            student.classroom_id
         )
-        .bind(student.id)
-        .bind(student.classroom_id)
         .execute(&mut *tx)
         .await?;
     }
@@ -429,12 +414,14 @@ pub async fn delete_student_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let student: StudentModel =
-        sqlx::query_as("DELETE FROM students WHERE id = $1 AND user_id = $2 RETURNING *")
-            .bind(id)
-            .bind(user_id)
-            .fetch_one(&data.db)
-            .await?;
+    let student = sqlx::query_as!(
+        StudentModel,
+        "DELETE FROM students WHERE id = $1 AND user_id = $2 RETURNING *",
+        id,
+        user_id
+    )
+    .fetch_one(&data.db)
+    .await?;
 
     if let Some(url) = student.image_url.clone() {
         data.blob_deleter.delete(url).await;
@@ -443,25 +430,17 @@ pub async fn delete_student_handler(
     Ok((StatusCode::OK, Json(json!({"data": student}))))
 }
 
-/// Deletes multiple students by uuid in one statement, scoped to the
-/// current user. IDs that don't exist or aren't owned by the caller are
-/// silently skipped (not an error) — `deleted_count` reflects how many
-/// rows actually matched.
+/// Deletes multiple students
 pub async fn bulk_delete_students_handler(
     CurrentUserId(user_id): CurrentUserId,
     State(data): State<Arc<AppState>>,
     Json(body): Json<BulkDeleteStudentsSchema>,
 ) -> Result<impl IntoResponse, AppError> {
-    #[derive(sqlx::FromRow)]
-    struct DeletedImageUrl {
-        image_url: Option<String>,
-    }
-
-    let deleted: Vec<DeletedImageUrl> = sqlx::query_as(
+    let deleted = sqlx::query!(
         "DELETE FROM students WHERE user_id = $1 AND id = ANY($2) RETURNING image_url",
+        user_id,
+        &body.ids
     )
-    .bind(user_id)
-    .bind(&body.ids)
     .fetch_all(&data.db)
     .await?;
 

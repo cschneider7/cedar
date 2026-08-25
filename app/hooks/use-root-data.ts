@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
-import { authClient, getBearerToken } from "~/lib/auth-client"
 import { getClassrooms, getStudentLimitStatus } from "~/lib/api"
+import { authClient, getAuthToken } from "~/lib/auth-client"
 import type { Classroom } from "~/lib/schemas"
 
 export type RootDataFields = {
@@ -81,7 +81,7 @@ export function useRootData(): RootData {
     let cancelled = false
     setIsRefetching(true)
     ;(async () => {
-      const token = await getBearerToken()
+      const token = await getAuthToken()
       const result = await fetchRootData(token)
       if (!cancelled) {
         setData(result)

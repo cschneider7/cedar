@@ -1,5 +1,5 @@
 import { generateRandomSeatingChart } from "~/lib/api"
-import { getBearerToken } from "~/lib/auth-client"
+import { getAuthToken } from "~/lib/auth-client"
 import type { SeatingChart } from "~/lib/schemas"
 import type { Route } from "./+types/randomize-seating-chart"
 
@@ -15,7 +15,7 @@ export async function clientAction(
     const seatingChart = await generateRandomSeatingChart(
       args.params.classroomId,
       options,
-      await getBearerToken()
+      await getAuthToken()
     )
     return { ok: true, seatingChart }
   } catch (error) {

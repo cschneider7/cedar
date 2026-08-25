@@ -1,5 +1,5 @@
 import { getStudentsPage } from "~/lib/api"
-import { getBearerToken } from "~/lib/auth-client"
+import { getAuthToken } from "~/lib/auth-client"
 import type { Route } from "./+types/quick-search"
 
 /**
@@ -8,7 +8,7 @@ import type { Route } from "./+types/quick-search"
  * @returns The matching students, or an empty list if `q` is missing or the lookup fails.
  */
 export async function clientLoader(args: Route.ClientLoaderArgs) {
-  const token = await getBearerToken()
+  const token = await getAuthToken()
   const q = new URL(args.request.url).searchParams.get("q")?.trim()
   if (!q) return { students: [] }
 

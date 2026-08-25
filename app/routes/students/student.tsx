@@ -21,7 +21,7 @@ import { RouteHydrateFallback } from "~/components/route-hydrate-fallback"
 import { StudentAvatar } from "~/components/student-avatar"
 import { StudentFormDialog } from "~/components/student-form-dialog"
 import { getClassroom, getStudent, toRouteError } from "~/lib/api"
-import { getBearerToken } from "~/lib/auth-client"
+import { getAuthToken } from "~/lib/auth-client"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 import { formatClassroomName } from "~/lib/classroom-term"
 import type { Route } from "./+types/student"
@@ -34,7 +34,7 @@ export const handle: BreadcrumbHandle = {
 }
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
-  const token = await getBearerToken()
+  const token = await getAuthToken()
   try {
     const student = await getStudent(params.studentId, token)
     const classroom = student.classroom_id

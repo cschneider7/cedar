@@ -1,7 +1,7 @@
 import type { Route } from "./+types/students"
 
+import { RedirectToSignIn, SignedIn } from "@neondatabase/auth/react"
 import { Outlet } from "react-router"
-import { RequireAuth } from "~/components/require-auth"
 import { RouteErrorCard } from "~/components/route-error-card"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 
@@ -22,11 +22,14 @@ export function meta({}: Route.MetaArgs) {
 
 export default function Layout() {
   return (
-    <RequireAuth>
-      <div className="h-full min-h-0 overflow-y-auto px-10 py-8">
-        <Outlet />
-      </div>
-    </RequireAuth>
+    <>
+      <RedirectToSignIn />
+      <SignedIn>
+        <div className="h-full min-h-0 overflow-y-auto px-10 py-8">
+          <Outlet />
+        </div>
+      </SignedIn>
+    </>
   )
 }
 

@@ -2,7 +2,7 @@ import { vi } from "vitest"
 
 // Global mock for `~/lib/auth-client`, via vitest's `setupFiles`. Defaults
 // to authenticated with a fixed token; override per-test with
-// `vi.mocked(getBearerToken).mockResolvedValueOnce(...)` or
+// `vi.mocked(getAuthToken).mockResolvedValueOnce(...)` or
 // `vi.mocked(authClient.getSession).mockResolvedValueOnce(...)`.
 vi.mock("~/lib/auth-client", () => {
   const fakeSession = {
@@ -15,7 +15,7 @@ vi.mock("~/lib/auth-client", () => {
   }
 
   const getSession = vi.fn(async () => fakeSession)
-  const getBearerToken = vi.fn(async () => "test-token")
+  const getAuthToken = vi.fn(async () => "test-token")
 
   return {
     authClient: {
@@ -25,6 +25,6 @@ vi.mock("~/lib/auth-client", () => {
       signUp: { email: vi.fn() },
       signOut: vi.fn(),
     },
-    getBearerToken,
+    getAuthToken,
   }
 })

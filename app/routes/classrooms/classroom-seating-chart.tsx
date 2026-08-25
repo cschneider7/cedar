@@ -1,6 +1,6 @@
 import { SeatingChartCanvas } from "~/components/seating-chart/seating-chart-canvas"
 import { updateClassroomSeatingChart } from "~/lib/api"
-import { getBearerToken } from "~/lib/auth-client"
+import { getAuthToken } from "~/lib/auth-client"
 import { useClassroomData } from "~/lib/classroom-route-data"
 import { SeatingChartSchema } from "~/lib/schemas"
 import type { Route } from "./+types/classroom-seating-chart"
@@ -17,7 +17,7 @@ export async function clientAction(args: Route.ClientActionArgs) {
     await updateClassroomSeatingChart(
       args.params.classroomId,
       result.data,
-      await getBearerToken()
+      await getAuthToken()
     )
   } catch (error) {
     return { ok: false, error: (error as Error).message }

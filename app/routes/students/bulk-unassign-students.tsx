@@ -1,6 +1,6 @@
 import * as z from "zod"
 import { updateStudent } from "~/lib/api"
-import { getBearerToken } from "~/lib/auth-client"
+import { getAuthToken } from "~/lib/auth-client"
 import type { Route } from "./+types/bulk-unassign-students"
 
 const BulkUnassignInputSchema = z.object({
@@ -15,7 +15,7 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
     return { ok: false, error: "Please check your selection and try again." }
   }
 
-  const token = await getBearerToken()
+  const token = await getAuthToken()
 
   try {
     await Promise.all(

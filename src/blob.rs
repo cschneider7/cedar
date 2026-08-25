@@ -6,10 +6,7 @@ use aws_sdk_s3::{
 };
 use tracing::warn;
 
-/// Deletes an object at the given key, best-effort. Implementations must
-/// never propagate a failure to the caller — handlers treat object cleanup
-/// as fire-and-forget: correctness of the Postgres row matters more than
-/// storage tidiness, so implementations log and swallow errors internally.
+/// Deletes an object at the given key
 pub trait BlobDeleter: Send + Sync {
     fn delete(&self, key: String) -> Pin<Box<dyn Future<Output = ()> + Send>>;
 }
@@ -20,16 +17,12 @@ pub struct BlobObject {
     pub content_type: Option<String>,
 }
 
-/// Fetches an object at the given key. `None` covers both "doesn't exist"
-/// and any fetch failure — student photos are capped small (see
-/// `MAX_UPLOAD_SIZE_BYTES` in the frontend's upload route), so buffering the
-/// whole object in memory here is fine; callers map a miss to a 404.
+/// Fetches an object at the given key
 pub trait BlobReader: Send + Sync {
     fn get(&self, key: String) -> Pin<Box<dyn Future<Output = Option<BlobObject>> + Send>>;
 }
 
-/// Presigns a browser-uploadable PUT URL for the given key. `None` on any
-/// presigning failure (e.g. a misconfigured public endpoint).
+/// Presigns a browser-uploadable PUT URL for the given key
 pub trait BlobUploader: Send + Sync {
     fn presign_put(
         &self,
@@ -39,10 +32,7 @@ pub trait BlobUploader: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = Option<String>> + Send>>;
 }
 
-/// Builds an S3-compatible client (MinIO locally, Cloudflare R2 in
-/// Preview/Production) against the given endpoint. Shared by
-/// `S3BlobDeleter`/`S3Presigner`, which differ only in which endpoint they
-/// target (see `S3Presigner`'s doc comment).
+/// Builds an S3-compatible client
 fn build_s3_client(
     endpoint: &str,
     region: &str,
@@ -126,32 +116,7 @@ impl BlobReader for S3BlobDeleter {
 
 const PRESIGNED_URL_EXPIRES_IN: Duration = Duration::from_secs(300);
 
-/// Presigns S3 PUT URLs against a *browser*-reachable endpoint, which can
-/// differ from the endpoint the backend itself uses (`S3BlobDeleter`'s
-/// client) — MinIO's docker-network hostname isn't resolvable from the host
-/// locally, matching the frontend's old `s3PublicClient`/`S3_PUBLIC_ENDPOINT`
-/// split.
-pub struct S3Presigner {
-    client: aws_sdk_s3::Client,
-    bucket: String,
-}
-
-impl S3Presigner {
-    pub fn new(
-        public_endpoint: &str,
-        region: &str,
-        bucket: String,
-        access_key_id: &str,
-        secret_access_key: &str,
-    ) -> Self {
-        Self {
-            client: build_s3_client(public_endpoint, region, access_key_id, secret_access_key),
-            bucket,
-        }
-    }
-}
-
-impl BlobUploader for S3Presigner {
+impl BlobUploader for S3BlobDeleter {
     fn presign_put(
         &self,
         key: String,

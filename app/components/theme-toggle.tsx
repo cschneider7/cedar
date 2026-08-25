@@ -1,4 +1,6 @@
 import { Monitor, Moon, Sun } from "lucide-react"
+import { useTheme } from "next-themes"
+import { useEffect, useState } from "react"
 import { Button } from "~/components/ui/button"
 import {
   DropdownMenu,
@@ -7,7 +9,8 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"
-import { useTheme, type Theme } from "~/components/ui/theme-provider"
+
+export type Theme = "light" | "dark" | "system"
 
 export const themeIcons = {
   light: Sun,
@@ -30,7 +33,12 @@ export function isTheme(value: unknown): value is Theme {
  */
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme()
-  const ThemeIcon = themeIcons[theme]
+  // next-themes only knows the real theme once mounted (it's undefined on
+  // the server and on the first client render, by design) — fall back to a
+  // stable icon until then so this doesn't itself cause a hydration mismatch.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  const ThemeIcon = mounted && isTheme(theme) ? themeIcons[theme] : Monitor
 
   return (
     <DropdownMenu>
@@ -43,7 +51,7 @@ export function ThemeToggle() {
       />
       <DropdownMenuContent align="end">
         <DropdownMenuRadioGroup
-          value={theme}
+          value={mounted && isTheme(theme) ? theme : "system"}
           onValueChange={(value) => {
             if (isTheme(value)) setTheme(value)
           }}

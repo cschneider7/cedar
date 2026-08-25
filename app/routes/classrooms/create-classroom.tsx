@@ -1,7 +1,7 @@
 import { Navigate } from "react-router"
 import type { MutationResult } from "~/lib/action-results"
 import { createClassroom } from "~/lib/api"
-import { getBearerToken } from "~/lib/auth-client"
+import { getAuthToken } from "~/lib/auth-client"
 import { CreateClassroomSchema } from "~/lib/schemas"
 import type { Route } from "./+types/create-classroom"
 
@@ -16,7 +16,7 @@ export async function clientAction({
   }
 
   try {
-    const classroom = await createClassroom(result.data, await getBearerToken())
+    const classroom = await createClassroom(result.data, await getAuthToken())
     return { ok: true, id: classroom.id }
   } catch (error) {
     return { ok: false, error: (error as Error).message }

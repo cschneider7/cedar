@@ -1,15 +1,15 @@
 import { AuthView } from "@neondatabase/auth-ui"
 import { AuthPageLayout } from "~/components/auth-page-layout"
-import type { Route } from "./+types/forgot-password"
+import type { Route } from "./+types/sign-in"
 
 export function meta({}: Route.MetaArgs) {
-  return [{ title: "Forgot Password - Cedar" }]
+  return [{ title: "Sign In - Cedar" }]
 }
 
-export default function ForgotPassword() {
+export default function SignIn() {
   return (
     <AuthPageLayout>
-      <AuthView view="FORGOT_PASSWORD" />
+      <AuthView view="SIGN_IN" />
     </AuthPageLayout>
   )
 }

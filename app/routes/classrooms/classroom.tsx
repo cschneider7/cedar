@@ -7,6 +7,7 @@ import { RouteHydrateFallback } from "~/components/route-hydrate-fallback"
 import { Button } from "~/components/ui/button"
 import { Separator } from "~/components/ui/separator"
 import { tabsListVariants } from "~/components/ui/tabs"
+import { useRootData } from "~/hooks/use-root-data"
 import {
   getClassroom,
   getClassroomSeatingChart,
@@ -14,7 +15,7 @@ import {
   getStudents,
   toRouteError,
 } from "~/lib/api"
-import { getBearerToken } from "~/lib/auth-client"
+import { getAuthToken } from "~/lib/auth-client"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 import { getPinnedClassrooms } from "~/lib/classroom-limit"
 import {
@@ -22,7 +23,6 @@ import {
   type ClassroomTab,
 } from "~/lib/classroom-tabs"
 import { formatClassroomName, formatTerm } from "~/lib/classroom-term"
-import { useRootData } from "~/hooks/use-root-data"
 import { INITIAL_WEIGHT } from "~/lib/seating-chart-utils"
 import type { Route } from "./+types/classroom"
 
@@ -57,7 +57,7 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
-  const token = await getBearerToken()
+  const token = await getAuthToken()
   // Unlike other loaders here, failures are NOT degraded gracefully — a
   // seating chart can't render meaningfully with a partial roster/chart.
   try {

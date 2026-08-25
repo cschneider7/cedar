@@ -1,15 +1,15 @@
 import { AuthView } from "@neondatabase/auth-ui"
 import { AuthPageLayout } from "~/components/auth-page-layout"
-import type { Route } from "./+types/forgot-password"
+import type { Route } from "./+types/email-verification"
 
 export function meta({}: Route.MetaArgs) {
-  return [{ title: "Forgot Password - Cedar" }]
+  return [{ title: "Email Verification - Cedar" }]
 }
 
-export default function ForgotPassword() {
+export default function EmailVerification() {
   return (
     <AuthPageLayout>
-      <AuthView view="FORGOT_PASSWORD" />
+      <AuthView view="EMAIL_VERIFICATION" />
     </AuthPageLayout>
   )
 }

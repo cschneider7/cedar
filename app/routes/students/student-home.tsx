@@ -50,29 +50,29 @@ import {
 } from "~/components/ui/table"
 import { toast } from "~/components/ui/toast"
 import { useDeleteResource } from "~/hooks/use-delete-resource"
+import { useRootData } from "~/hooks/use-root-data"
 import {
   useStudentViewMode,
   type StudentViewMode,
 } from "~/hooks/use-student-view-mode"
 import { getClassrooms, getStudentsPage } from "~/lib/api"
-import { getBearerToken } from "~/lib/auth-client"
+import { getAuthToken } from "~/lib/auth-client"
 import { formatClassroomName } from "~/lib/classroom-term"
-import { useRootData } from "~/hooks/use-root-data"
 import { getPageNumbers } from "~/lib/pagination"
 import type { Classroom, Student } from "~/lib/schemas"
 import { isAtStudentLimit } from "~/lib/student-limit"
 import { cn } from "~/lib/utils"
 import { parseViewModeCookie } from "~/lib/view-mode-cookie"
+import type { Route } from "./+types/student-home"
 import {
   getStudentColumns,
   studentTableFeatures,
   type StudentSortDir,
   type StudentSortKey,
 } from "./student-columns"
-import type { Route } from "./+types/student-home"
 
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
-  const token = await getBearerToken()
+  const token = await getAuthToken()
   const url = new URL(request.url)
   const page = Math.max(1, Number(url.searchParams.get("page")) || 1)
   const q = url.searchParams.get("q") ?? ""

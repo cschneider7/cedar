@@ -1,14 +1,14 @@
 import { Navigate } from "react-router"
 import type { MutationResult } from "~/lib/action-results"
 import { deleteStudent } from "~/lib/api"
-import { getBearerToken } from "~/lib/auth-client"
+import { getAuthToken } from "~/lib/auth-client"
 import type { Route } from "./+types/delete-student"
 
 export async function clientAction(
   args: Route.ClientActionArgs
 ): Promise<MutationResult> {
   try {
-    await deleteStudent(args.params.studentId, await getBearerToken())
+    await deleteStudent(args.params.studentId, await getAuthToken())
     return { ok: true, id: args.params.studentId }
   } catch (error) {
     return { ok: false, error: (error as Error).message }

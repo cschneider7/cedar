@@ -7,11 +7,12 @@ import {
 } from "@react-router/dev/routes"
 
 export default [
-  route("login", "routes/auth/login.tsx"),
-  route("signup", "routes/auth/signup.tsx"),
-  route("forgot-password", "routes/auth/forgot-password.tsx"),
-  route("reset-password", "routes/auth/reset-password.tsx"),
-  route("email-verification", "routes/auth/verify-email.tsx"),
+  route("auth/sign-in", "routes/auth/sign-in.tsx"),
+  route("auth/sign-up", "routes/auth/sign-up.tsx"),
+  route("auth/forgot-password", "routes/auth/forgot-password.tsx"),
+  route("auth/reset-password", "routes/auth/reset-password.tsx"),
+  route("auth/email-verification", "routes/auth/email-verification.tsx"),
+  route("auth/sign-out", "routes/auth/sign-out.tsx"),
   route("api/quick-search", "routes/api/quick-search.tsx"),
   layout("layouts/app-shell.tsx", [
     index("routes/home.tsx"),

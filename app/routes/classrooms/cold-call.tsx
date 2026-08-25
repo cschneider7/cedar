@@ -1,10 +1,10 @@
 import { useOutletContext } from "react-router"
 import { ColdCallTab } from "~/components/classroom/cold-call-tab"
 import { pickColdCallStudent } from "~/lib/api"
-import { getBearerToken } from "~/lib/auth-client"
-import type { ClassroomOutletContext } from "~/routes/classrooms/classroom"
+import { getAuthToken } from "~/lib/auth-client"
 import { useClassroomData } from "~/lib/classroom-route-data"
 import type { ColdCallPick } from "~/lib/schemas"
+import type { ClassroomOutletContext } from "~/routes/classrooms/classroom"
 import type { Route } from "./+types/cold-call"
 
 export type ColdCallActionResult =
@@ -19,7 +19,7 @@ export async function clientAction(
     const pick = await pickColdCallStudent(
       args.params.classroomId,
       payload,
-      await getBearerToken()
+      await getAuthToken()
     )
     return { ok: true, pick }
   } catch (error) {
