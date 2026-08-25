@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "cargo install sqlx-cli --version 0.9.0 --no-default-features --features postgres,rustls --locked && DATABASE_URL=$DATABASE_URL_UNPOOLED sqlx migrate run && npm run build",
+  "buildCommand": "cargo install sqlx-cli --version 0.9.0 --no-default-features --features postgres,rustls --locked && export DATABASE_URL=$DATABASE_URL_UNPOOLED && sqlx migrate run && npm run build",
   "rewrites": [
     { "source": "/api/v1/:path*", "destination": "/api/index" },
     { "source": "/health", "destination": "/api/index" }
