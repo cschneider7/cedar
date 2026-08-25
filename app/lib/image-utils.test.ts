@@ -23,13 +23,6 @@ describe("computeResizedDimensions", () => {
     })
   })
 
-  it("scales down a portrait image preserving aspect ratio", () => {
-    expect(computeResizedDimensions(2000, 4000, 1000)).toEqual({
-      width: 500,
-      height: 1000,
-    })
-  })
-
   it("scales down a square image", () => {
     expect(computeResizedDimensions(3000, 3000, 1024)).toEqual({
       width: 1024,

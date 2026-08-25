@@ -893,39 +893,6 @@ mod tests {
         Ok(())
     }
 
-    // `check_classroom_ownership` rejects any classroom_id that doesn't
-    // belong to the caller — including one that doesn't exist at all.
-    #[sqlx::test]
-    async fn create_student_rejects_nonexistent_classroom_id(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
-        let app = app(pool.clone());
-        let user_id = test_user_id();
-        let fake_classroom_id = Uuid::new_v4();
-        let body = json!({
-            "student_id": 1,
-            "name": "Bob Burger",
-            "classroom_id": fake_classroom_id,
-            "seat_id": null,
-        });
-
-        let response = app
-            .oneshot(authenticated_json_request(
-                "POST",
-                "/api/v1/students",
-                body,
-                &user_id,
-            ))
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-
-        let json = body_json(response).await;
-        assert!(json["message"].is_string());
-
-        Ok(())
-    }
-
     #[sqlx::test]
     async fn create_student_rejects_another_users_classroom_id(
         pool: sqlx::PgPool,

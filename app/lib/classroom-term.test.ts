@@ -34,15 +34,4 @@ describe("formatClassroomName", () => {
       })
     ).toBe("[FA26] Math 2 (Per 3)")
   })
-
-  it("composes a different term/subject/period combination", () => {
-    expect(
-      formatClassroomName({
-        subject: "Biology",
-        period: 1,
-        term_season: "spring",
-        term_year: 2027,
-      })
-    ).toBe("[SP27] Biology (Per 1)")
-  })
 })

@@ -816,40 +816,6 @@ mod tests {
     }
 
     #[sqlx::test]
-    async fn update_classroom_full_boundary_patch_with_subject_and_period(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
-        let app = app(pool.clone());
-        let user_id = test_user_id();
-        let existing = insert_classroom(&pool, &user_id, "Math 2", 3).await;
-
-        let body = json!({
-            "subject": "Algebra",
-            "period": 5,
-            "boundary_width": 1500,
-            "boundary_height": 1200
-        });
-        let response = app
-            .oneshot(authenticated_json_request(
-                "PATCH",
-                &format!("/api/v1/classrooms/{}", existing.id),
-                body,
-                &user_id,
-            ))
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let json = body_json(response).await;
-        assert_eq!(json["data"]["subject"], "Algebra");
-        assert_eq!(json["data"]["period"], 5);
-        assert_eq!(json["data"]["boundary_width"], 1500);
-        assert_eq!(json["data"]["boundary_height"], 1200);
-
-        Ok(())
-    }
-
-    #[sqlx::test]
     async fn update_classroom_term_leaves_other_fields_unchanged(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {

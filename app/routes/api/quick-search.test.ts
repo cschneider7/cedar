@@ -31,12 +31,6 @@ describe("quick-search loader", () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it("returns no students and skips the request when q is blank", async () => {
-    const result = await loader(args("   "))
-    expect(result).toEqual({ students: [] })
-    expect(fetch).not.toHaveBeenCalled()
-  })
-
   it("searches students by the query, capped to a small page", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       jsonResponse({

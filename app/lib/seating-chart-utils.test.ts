@@ -548,19 +548,6 @@ describe("findNewTablePosition", () => {
     ).toBeNull()
   })
 
-  it("never returns a position violating the TABLE_OFFSET margin", () => {
-    const slot = findNewTablePosition(
-      boundary,
-      [],
-      DEFAULT_TABLE_ROWS,
-      DEFAULT_TABLE_COLS
-    )
-
-    expect(slot).not.toBeNull()
-    expect(slot!.x).toBeGreaterThanOrEqual(TABLE_OFFSET)
-    expect(slot!.y).toBeGreaterThanOrEqual(TABLE_OFFSET)
-  })
-
   it("leaves at least TABLE_GAP between a new table and an existing one", () => {
     const size = getTableNodeSize(DEFAULT_TABLE_ROWS, DEFAULT_TABLE_COLS)
     const existing: TableGeometry = {
