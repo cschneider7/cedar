@@ -27,12 +27,10 @@ const MAX_PINNED_CLASSROOMS_PER_USER: i64 = 10;
 
 /// Rejects a new classroom if `user_id` is already at `MAX_CLASSROOMS_PER_USER`.
 async fn check_classroom_limit(db: &sqlx::PgPool, user_id: &str) -> Result<(), AppError> {
-    let count = sqlx::query_scalar!(
-        r#"SELECT COUNT(*) AS "count!" FROM classrooms WHERE user_id = $1"#,
-        user_id
-    )
-    .fetch_one(db)
-    .await?;
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM classrooms WHERE user_id = $1")
+        .bind(user_id)
+        .fetch_one(db)
+        .await?;
     if count >= MAX_CLASSROOMS_PER_USER {
         return Err(AppError::BadRequest(
             "Classroom limit reached (50 classrooms per account).".to_string(),
@@ -43,10 +41,10 @@ async fn check_classroom_limit(db: &sqlx::PgPool, user_id: &str) -> Result<(), A
 
 /// Rejects newly pinning a classroom if user reached maximum pinned number
 async fn check_pinned_classroom_limit(db: &sqlx::PgPool, user_id: &str) -> Result<(), AppError> {
-    let count = sqlx::query_scalar!(
-        r#"SELECT COUNT(*) AS "count!" FROM classrooms WHERE user_id = $1 AND pinned_at IS NOT NULL"#,
-        user_id
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM classrooms WHERE user_id = $1 AND pinned_at IS NOT NULL",
     )
+    .bind(user_id)
     .fetch_one(db)
     .await?;
     if count >= MAX_PINNED_CLASSROOMS_PER_USER {
@@ -62,13 +60,11 @@ pub async fn classroom_list_handler(
     CurrentUserId(user_id): CurrentUserId,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let classrooms = sqlx::query_as!(
-        ClassroomModel,
-        "SELECT * FROM classrooms WHERE user_id = $1 ORDER BY period",
-        user_id
-    )
-    .fetch_all(&data.db)
-    .await?;
+    let classrooms: Vec<ClassroomModel> =
+        sqlx::query_as("SELECT * FROM classrooms WHERE user_id = $1 ORDER BY period")
+            .bind(user_id)
+            .fetch_all(&data.db)
+            .await?;
 
     Ok((StatusCode::OK, Json(json!({"data": classrooms}))))
 }
@@ -79,14 +75,12 @@ pub async fn get_classroom_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let classroom = sqlx::query_as!(
-        ClassroomModel,
-        "SELECT * FROM classrooms WHERE id = $1 AND user_id = $2",
-        id,
-        user_id
-    )
-    .fetch_one(&data.db)
-    .await?;
+    let classroom: ClassroomModel =
+        sqlx::query_as("SELECT * FROM classrooms WHERE id = $1 AND user_id = $2")
+            .bind(id)
+            .bind(user_id)
+            .fetch_one(&data.db)
+            .await?;
 
     Ok((StatusCode::OK, Json(json!({"data": classroom}))))
 }
@@ -99,8 +93,7 @@ pub async fn create_classroom_handler(
 ) -> Result<impl IntoResponse, AppError> {
     check_classroom_limit(&data.db, &user_id).await?;
 
-    let classroom = sqlx::query_as!(
-        ClassroomModel,
+    let classroom: ClassroomModel = sqlx::query_as(
         "INSERT INTO classrooms (
             user_id,
             subject,
@@ -110,12 +103,12 @@ pub async fn create_classroom_handler(
         )
         VALUES ($1, $2, $3, $4, $5)
         RETURNING *",
-        user_id,
-        body.subject,
-        body.period,
-        body.term_season.as_str(),
-        body.term_year
     )
+    .bind(user_id)
+    .bind(body.subject)
+    .bind(body.period)
+    .bind(body.term_season.as_str())
+    .bind(body.term_year)
     .fetch_one(&data.db)
     .await?;
 
@@ -129,14 +122,12 @@ pub async fn update_classroom_handler(
     State(data): State<Arc<AppState>>,
     Json(body): Json<UpdateClassroomSchema>,
 ) -> Result<impl IntoResponse, AppError> {
-    let classroom = sqlx::query_as!(
-        ClassroomModel,
-        "SELECT * FROM classrooms WHERE id = $1 AND user_id = $2",
-        id,
-        &user_id
-    )
-    .fetch_one(&data.db)
-    .await?;
+    let classroom: ClassroomModel =
+        sqlx::query_as("SELECT * FROM classrooms WHERE id = $1 AND user_id = $2")
+            .bind(id)
+            .bind(&user_id)
+            .fetch_one(&data.db)
+            .await?;
 
     let new_subject = body.subject.as_ref().unwrap_or(&classroom.subject);
     let new_period = body.period.unwrap_or(classroom.period);
@@ -153,8 +144,7 @@ pub async fn update_classroom_handler(
         check_pinned_classroom_limit(&data.db, &user_id).await?;
     }
 
-    let updated_classroom = sqlx::query_as!(
-        ClassroomModel,
+    let updated_classroom: ClassroomModel = sqlx::query_as(
         "UPDATE classrooms SET
             subject = $1,
             period = $2,
@@ -165,15 +155,15 @@ pub async fn update_classroom_handler(
             pinned_at = $7
         WHERE id = $8
         RETURNING *",
-        new_subject,
-        new_period,
-        new_term_season,
-        new_term_year,
-        new_boundary_width,
-        new_boundary_height,
-        new_pinned_at,
-        classroom.id
     )
+    .bind(new_subject.as_str())
+    .bind(new_period)
+    .bind(new_term_season)
+    .bind(new_term_year)
+    .bind(new_boundary_width)
+    .bind(new_boundary_height)
+    .bind(new_pinned_at)
+    .bind(classroom.id)
     .fetch_one(&data.db)
     .await?;
 
@@ -186,14 +176,12 @@ pub async fn delete_classroom_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let classroom = sqlx::query_as!(
-        ClassroomModel,
-        "DELETE FROM classrooms WHERE id = $1 AND user_id = $2 RETURNING *",
-        id,
-        user_id
-    )
-    .fetch_one(&data.db)
-    .await?;
+    let classroom: ClassroomModel =
+        sqlx::query_as("DELETE FROM classrooms WHERE id = $1 AND user_id = $2 RETURNING *")
+            .bind(id)
+            .bind(user_id)
+            .fetch_one(&data.db)
+            .await?;
 
     Ok((StatusCode::OK, Json(json!({"data": classroom}))))
 }
@@ -204,31 +192,29 @@ pub async fn get_seating_chart_handler(
     Path(classroom_id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let boundary = sqlx::query!(
+    let (boundary_width, boundary_height): (i32, i32) = sqlx::query_as(
         "SELECT boundary_width, boundary_height FROM classrooms WHERE id = $1 AND user_id = $2",
-        classroom_id,
-        user_id
     )
+    .bind(classroom_id)
+    .bind(user_id)
     .fetch_one(&data.db)
     .await?;
-    let (boundary_width, boundary_height) = (boundary.boundary_width, boundary.boundary_height);
 
-    let tables = sqlx::query_as!(
-        TableSchema,
+    let tables: Vec<TableSchema> = sqlx::query_as(
         r#"SELECT
             t.table_number,
             t.rows,
             t.cols,
             t.x_pos,
             t.y_pos,
-            ARRAY_AGG(s.student_id ORDER BY s.seat_number) as "seat_assignments!: Vec<Option<Uuid>>"
+            ARRAY_AGG(s.student_id ORDER BY s.seat_number) as "seat_assignments"
         FROM tables t
         INNER JOIN seats s ON (t.id = s.table_id)
         WHERE t.classroom_id = $1
         GROUP BY t.table_number, t.rows, t.cols, t.x_pos, t.y_pos
         "#,
-        classroom_id
     )
+    .bind(classroom_id)
     .fetch_all(&data.db)
     .await?;
 
@@ -252,20 +238,21 @@ pub async fn update_seating_chart_handler(
 ) -> Result<impl IntoResponse, AppError> {
     let mut tx = data.db.begin().await?;
 
-    let result = sqlx::query!(
+    let result = sqlx::query(
         "UPDATE classrooms SET boundary_width = $1, boundary_height = $2 WHERE id = $3 AND user_id = $4",
-        body.boundary_width,
-        body.boundary_height,
-        classroom_id,
-        &user_id
     )
+    .bind(body.boundary_width)
+    .bind(body.boundary_height)
+    .bind(classroom_id)
+    .bind(&user_id)
     .execute(&mut *tx)
     .await?;
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound("Classroom not found".to_string()));
     }
 
-    sqlx::query!("DELETE FROM tables WHERE classroom_id = $1", classroom_id)
+    sqlx::query("DELETE FROM tables WHERE classroom_id = $1")
+        .bind(classroom_id)
         .execute(&mut *tx)
         .await?;
 
@@ -273,30 +260,30 @@ pub async fn update_seating_chart_handler(
     for (index, table) in body.tables.iter().enumerate() {
         let table_number = index as i32;
 
-        let table_id = sqlx::query_scalar!(
+        let table_id: Uuid = sqlx::query_scalar(
             "INSERT INTO tables (classroom_id, table_number, rows, cols, x_pos, y_pos)
             VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING id",
-            classroom_id,
-            table_number,
-            table.rows,
-            table.cols,
-            table.x_pos,
-            table.y_pos
         )
+        .bind(classroom_id)
+        .bind(table_number)
+        .bind(table.rows)
+        .bind(table.cols)
+        .bind(table.x_pos)
+        .bind(table.y_pos)
         .fetch_one(&mut *tx)
         .await?;
 
         for (index, student_id) in table.seat_assignments.iter().enumerate() {
             let seat_number = index as i16;
 
-            sqlx::query!(
+            sqlx::query(
                 "INSERT INTO seats (table_id, student_id, seat_number)
                 VALUES ($1, $2, $3)",
-                table_id,
-                student_id.as_ref(),
-                seat_number
             )
+            .bind(table_id)
+            .bind(student_id.as_ref())
+            .bind(seat_number)
             .execute(&mut *tx)
             .await?;
         }
@@ -347,44 +334,36 @@ pub async fn randomize_seating_chart_handler(
         )));
     }
 
-    let _classroom = sqlx::query_as!(
-        ClassroomModel,
-        "SELECT * FROM classrooms WHERE id = $1 AND user_id = $2",
-        classroom_id,
-        user_id
-    )
-    .fetch_one(&data.db)
-    .await?;
+    let _classroom: ClassroomModel =
+        sqlx::query_as("SELECT * FROM classrooms WHERE id = $1 AND user_id = $2")
+            .bind(classroom_id)
+            .bind(user_id)
+            .fetch_one(&data.db)
+            .await?;
 
-    let students = sqlx::query!(
-        "SELECT id, seating_preference FROM students WHERE classroom_id = $1",
-        classroom_id
-    )
-    .fetch_all(&data.db)
-    .await?;
+    let students: Vec<(Uuid, Option<String>)> =
+        sqlx::query_as("SELECT id, seating_preference FROM students WHERE classroom_id = $1")
+            .bind(classroom_id)
+            .fetch_all(&data.db)
+            .await?;
     let students: Vec<(Uuid, Option<SeatingPreference>)> = students
         .into_iter()
-        .map(|row| {
+        .map(|(id, seating_preference)| {
             (
-                row.id,
-                row.seating_preference
-                    .and_then(|s| SeatingPreference::from_db_str(&s)),
+                id,
+                seating_preference.and_then(|s| SeatingPreference::from_db_str(&s)),
             )
         })
         .collect();
 
     let roster_ids: Vec<Uuid> = students.iter().map(|(id, _)| *id).collect();
-    let separations = sqlx::query!(
+    let separations: Vec<(Uuid, Uuid)> = sqlx::query_as(
         "SELECT student_id_a, student_id_b FROM student_separations
         WHERE student_id_a = ANY($1) AND student_id_b = ANY($1)",
-        &roster_ids
     )
+    .bind(&roster_ids)
     .fetch_all(&data.db)
     .await?;
-    let separations: Vec<(Uuid, Uuid)> = separations
-        .into_iter()
-        .map(|row| (row.student_id_a, row.student_id_b))
-        .collect();
 
     let tables = seating_chart::build_randomized_chart(
         students,

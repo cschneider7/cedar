@@ -20,13 +20,12 @@ async fn check_student_ownership(
     student_id: Uuid,
     user_id: &str,
 ) -> Result<(), AppError> {
-    let exists = sqlx::query_scalar!(
-        r#"SELECT EXISTS(SELECT 1 FROM students WHERE id = $1 AND user_id = $2) AS "exists!""#,
-        student_id,
-        user_id
-    )
-    .fetch_one(db)
-    .await?;
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM students WHERE id = $1 AND user_id = $2)")
+            .bind(student_id)
+            .bind(user_id)
+            .fetch_one(db)
+            .await?;
     if !exists {
         return Err(AppError::NotFound("Student not found".to_string()));
     }
@@ -38,13 +37,11 @@ pub async fn list_separations_handler(
     CurrentUserId(user_id): CurrentUserId,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let separations = sqlx::query_as!(
-        StudentSeparationModel,
-        "SELECT * FROM student_separations WHERE user_id = $1",
-        user_id
-    )
-    .fetch_all(&data.db)
-    .await?;
+    let separations: Vec<StudentSeparationModel> =
+        sqlx::query_as("SELECT * FROM student_separations WHERE user_id = $1")
+            .bind(user_id)
+            .fetch_all(&data.db)
+            .await?;
     Ok((StatusCode::OK, Json(json!({"data": separations}))))
 }
 
@@ -68,28 +65,26 @@ pub async fn create_separation_handler(
         (body.student_id_b, body.student_id_a)
     };
 
-    let inserted = sqlx::query_as!(
-        StudentSeparationModel,
+    let inserted: Option<StudentSeparationModel> = sqlx::query_as(
         "INSERT INTO student_separations (user_id, student_id_a, student_id_b)
         VALUES ($1, $2, $3)
         ON CONFLICT (student_id_a, student_id_b) DO NOTHING
         RETURNING *",
-        user_id,
-        id_a,
-        id_b
     )
+    .bind(user_id)
+    .bind(id_a)
+    .bind(id_b)
     .fetch_optional(&data.db)
     .await?;
 
     let separation =
         match inserted {
             Some(separation) => separation,
-            None => sqlx::query_as!(
-                StudentSeparationModel,
+            None => sqlx::query_as(
                 "SELECT * FROM student_separations WHERE student_id_a = $1 AND student_id_b = $2",
-                id_a,
-                id_b
             )
+            .bind(id_a)
+            .bind(id_b)
             .fetch_one(&data.db)
             .await?,
         };
@@ -103,12 +98,11 @@ pub async fn delete_separation_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let separation = sqlx::query_as!(
-        StudentSeparationModel,
+    let separation: StudentSeparationModel = sqlx::query_as(
         "DELETE FROM student_separations WHERE id = $1 AND user_id = $2 RETURNING *",
-        id,
-        user_id
     )
+    .bind(id)
+    .bind(user_id)
     .fetch_one(&data.db)
     .await?;
 
@@ -132,14 +126,14 @@ mod tests {
         student_id: i32,
         name: &str,
     ) -> Uuid {
-        sqlx::query_scalar!(
+        sqlx::query_scalar(
             "INSERT INTO students (user_id, classroom_id, student_id, name)
             VALUES ($1, NULL, $2, $3)
             RETURNING id",
-            user_id,
-            student_id,
-            name
         )
+        .bind(user_id)
+        .bind(student_id)
+        .bind(name)
         .fetch_one(pool)
         .await
         .unwrap()
@@ -390,7 +384,8 @@ mod tests {
             .await
             .unwrap();
 
-        sqlx::query!("DELETE FROM students WHERE id = $1", a)
+        sqlx::query("DELETE FROM students WHERE id = $1")
+            .bind(a)
             .execute(&pool)
             .await
             .unwrap();
