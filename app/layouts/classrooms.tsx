@@ -1,8 +1,10 @@
-import { RedirectToSignIn, SignedIn } from "@neondatabase/auth/react"
 import { Outlet } from "react-router"
 import { RouteErrorCard } from "~/components/route-error-card"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
+import { requireAuthMiddleware } from "~/middleware/require-auth"
 import type { Route } from "./+types/classrooms"
+
+export const middleware: Route.MiddlewareFunction[] = [requireAuthMiddleware]
 
 export const handle: BreadcrumbHandle = {
   breadcrumb: () => "Classrooms",
@@ -11,16 +13,11 @@ export const handle: BreadcrumbHandle = {
 
 export default function Layout() {
   return (
-    <>
-      <RedirectToSignIn />
-      <SignedIn>
-        <div className="flex h-full p-6">
-          <main className="w-full">
-            <Outlet />
-          </main>
-        </div>
-      </SignedIn>
-    </>
+    <div className="flex h-full p-6">
+      <main className="w-full">
+        <Outlet />
+      </main>
+    </div>
   )
 }
 

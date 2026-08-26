@@ -1,4 +1,3 @@
-import { SignedIn } from "@neondatabase/auth-ui"
 import { Search } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useFetcher } from "react-router"
@@ -12,7 +11,7 @@ import { Item, ItemContent, ItemTitle } from "~/components/ui/item"
 import { Popover, PopoverContent } from "~/components/ui/popover"
 import { useRootData } from "~/hooks/use-root-data"
 import { formatClassroomName } from "~/lib/classroom-term"
-import type { clientLoader as quickSearchLoader } from "~/routes/api/quick-search"
+import type { loader as quickSearchLoader } from "~/routes/api/quick-search"
 
 const SEARCH_DEBOUNCE_MS = 300
 const MAX_CLASSROOM_MATCHES = 5

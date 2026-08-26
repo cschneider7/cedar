@@ -1,6 +1,6 @@
 import { PencilIcon } from "lucide-react"
 import { useMemo, useState } from "react"
-import { Link, Outlet, redirect, useLocation } from "react-router"
+import { Link, Outlet, useLocation } from "react-router"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
 import { PinToggleButton } from "~/components/pin-toggle-button"
 import { RouteHydrateFallback } from "~/components/route-hydrate-fallback"
@@ -15,7 +15,7 @@ import {
   getStudents,
   toRouteError,
 } from "~/lib/api"
-import { getAuthToken } from "~/lib/auth-client"
+import { getAccessToken } from "~/lib/supabase/token"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 import { getPinnedClassrooms } from "~/lib/classroom-limit"
 import {
@@ -56,11 +56,8 @@ export function meta({}: Route.MetaArgs) {
   ]
 }
 
-export async function clientLoader({ params }: Route.ClientLoaderArgs) {
-  const token = await getAuthToken()
-  if (!token) {
-    return redirect("/auth/sign-in")
-  }
+export async function loader({ params, context }: Route.LoaderArgs) {
+  const token = await getAccessToken(context)
 
   try {
     const [classroom, seatingChart, allStudents, allSeparations] =

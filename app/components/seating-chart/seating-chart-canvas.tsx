@@ -77,7 +77,7 @@ import {
   type SeatingChartStudentNode,
   type SeatingChartTableNode,
 } from "~/lib/seating-chart-utils"
-import type { clientAction as classroomAction } from "~/routes/classrooms/classroom-seating-chart"
+import type { action as classroomAction } from "~/routes/classrooms/classroom-seating-chart"
 import { UnsavedChartChangesDialog } from "../classroom/unsaved-chart-changes-dialog"
 import {
   BoundarySizeDialog,

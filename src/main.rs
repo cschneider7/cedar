@@ -17,14 +17,19 @@ async fn main() {
 
     let frontend_origin =
         std::env::var("FRONTEND_ORIGIN").unwrap_or_else(|_| "http://localhost:5173".to_string());
-    let neon_auth_url =
-        std::env::var("NEON_AUTH_BASE_URL").expect("NEON_AUTH_BASE_URL must be set");
-
+    // SUPABASE_AUTH_BASE_URL can be set explicitly, or derived from
+    // SUPABASE_URL (which the Supabase Vercel Marketplace integration
+    // injects automatically for the connected environment).
+    let supabase_auth_url = std::env::var("SUPABASE_AUTH_BASE_URL").unwrap_or_else(|_| {
+        let supabase_url = std::env::var("SUPABASE_URL")
+            .expect("SUPABASE_AUTH_BASE_URL or SUPABASE_URL must be set");
+        format!("{}/auth/v1", supabase_url.trim_end_matches('/'))
+    });
     let app_state = AppState::build().await;
-    let jwks_verifier = auth::JwksVerifier::new(&neon_auth_url).await;
+    let jwks_verifier = auth::JwksVerifier::new(&supabase_auth_url).await;
     let app = create_router(app_state, Some(jwks_verifier), frontend_origin);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    println!("Server started successfully at 0.0.0.0:3000");
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3001").await.unwrap();
+    println!("Server started successfully at 0.0.0.0:3001");
     axum::serve(listener, app).await.unwrap();
 }

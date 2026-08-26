@@ -128,7 +128,7 @@ pub fn create_router(
     let app_routes = match jwks_verifier {
         Some(jwks_verifier) => app_routes.layer(axum::middleware::from_fn_with_state(
             jwks_verifier,
-            crate::auth::neon_auth_middleware,
+            crate::auth::supabase_auth_middleware,
         )),
         None => app_routes,
     };

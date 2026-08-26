@@ -104,7 +104,7 @@ async function getErrorMessage(
 }
 
 /**
- * Attaches the Neon Auth session token as a bearer `Authorization` header
+ * Attaches the Supabase session token as a bearer `Authorization` header
  * @param token - The session token, if any.
  * @returns Headers with the bearer token, or `undefined` if no token.
  */

@@ -18,7 +18,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-- `api` → `http://localhost:3000` (Axum API)
+- `api` → `http://localhost:3001` (Axum API)
 - `ui` → `http://localhost:5173` (Vite dev server)
 
 If you add/remove a dependency (`package.json` or `Cargo.toml`), run the build again:

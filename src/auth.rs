@@ -16,7 +16,7 @@ use tokio::sync::RwLock;
 use crate::error::AppError;
 
 #[derive(serde::Deserialize, Clone)]
-pub struct NeonAuthClaims {
+pub struct SupabaseAuthClaims {
     pub sub: String,
 }
 
@@ -32,32 +32,36 @@ struct Inner {
     last_refresh: RwLock<Instant>,
 }
 
-/// Fetches and caches Neon Auth's JWKS
+/// Fetches and caches Supabase Auth's JWKS
 #[derive(Clone)]
 pub struct JwksVerifier(Arc<Inner>);
 
 impl JwksVerifier {
-    /// Builds a verifier for the given Neon Auth base URL
+    /// Builds a verifier for the given Supabase Auth base URL (e.g.
+    /// `https://<project-ref>.supabase.co/auth/v1`). Unlike Neon Auth's
+    /// origin-only issuer, Supabase's issuer claim is the base URL itself
+    /// (including the `/auth/v1` path), so it's used verbatim rather than
+    /// reduced to scheme+host.
     pub async fn new(base_url: &str) -> Self {
-        let issuer = origin_of(base_url);
-        let jwks_url = format!("{}/.well-known/jwks.json", base_url.trim_end_matches('/'));
-        let mut validation = Validation::new(Algorithm::EdDSA);
+        let issuer = base_url.trim_end_matches('/').to_string();
+        let jwks_url = format!("{}/.well-known/jwks.json", issuer);
+        let mut validation = Validation::new(Algorithm::ES256);
         validation.set_issuer(&[issuer.as_str()]);
-        validation.set_audience(&[issuer.as_str()]);
+        validation.set_audience(&["authenticated"]);
         let verifier = Self(Arc::new(Inner {
             jwks_url,
             validation,
             http: reqwest::Client::builder()
                 .timeout(JWKS_FETCH_TIMEOUT)
                 .build()
-                .expect("failed to build Neon Auth HTTP client"),
+                .expect("failed to build Supabase Auth HTTP client"),
             keys: RwLock::new(HashMap::new()),
             last_refresh: RwLock::new(Instant::now()),
         }));
         verifier
             .refresh()
             .await
-            .expect("failed to fetch Neon Auth JWKS at startup");
+            .expect("failed to fetch Supabase Auth JWKS at startup");
         verifier
     }
 
@@ -84,7 +88,7 @@ impl JwksVerifier {
         Ok(())
     }
 
-    async fn verify(&self, token: &str) -> Result<NeonAuthClaims, AppError> {
+    async fn verify(&self, token: &str) -> Result<SupabaseAuthClaims, AppError> {
         let unauthorized = || AppError::Unauthorized("Not authenticated".to_string());
         let header = decode_header(token).map_err(|_| unauthorized())?;
         let kid = header.kid.ok_or_else(unauthorized)?;
@@ -92,7 +96,7 @@ impl JwksVerifier {
         {
             let keys = self.0.keys.read().await;
             if let Some(decoding_key) = keys.get(&kid) {
-                return decode::<NeonAuthClaims>(token, decoding_key, &self.0.validation)
+                return decode::<SupabaseAuthClaims>(token, decoding_key, &self.0.validation)
                     .map(|data| data.claims)
                     .map_err(|_| unauthorized());
             }
@@ -106,20 +110,14 @@ impl JwksVerifier {
 
         let keys = self.0.keys.read().await;
         let decoding_key = keys.get(&kid).ok_or_else(unauthorized)?;
-        decode::<NeonAuthClaims>(token, decoding_key, &self.0.validation)
+        decode::<SupabaseAuthClaims>(token, decoding_key, &self.0.validation)
             .map(|data| data.claims)
             .map_err(|_| unauthorized())
     }
 }
 
-fn origin_of(base_url: &str) -> String {
-    reqwest::Url::parse(base_url)
-        .map(|url| url.origin().ascii_serialization())
-        .unwrap_or_else(|_| base_url.trim_end_matches('/').to_string())
-}
-
-/// Middleware verifying every request's `Authorization: Bearer <token>` against Neon Auth's JWKS
-pub async fn neon_auth_middleware(
+/// Middleware verifying every request's `Authorization: Bearer <token>` against Supabase Auth's JWKS
+pub async fn supabase_auth_middleware(
     State(verifier): State<JwksVerifier>,
     mut request: Request,
     next: Next,
@@ -146,7 +144,7 @@ where
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let Extension(claims) = Extension::<NeonAuthClaims>::from_request_parts(parts, state)
+        let Extension(claims) = Extension::<SupabaseAuthClaims>::from_request_parts(parts, state)
             .await
             .map_err(|_| AppError::Unauthorized("Not authenticated".to_string()))?;
         Ok(CurrentUserId(claims.sub))

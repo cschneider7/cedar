@@ -1,7 +1,5 @@
-import { NeonAuthUIProvider } from "@neondatabase/auth-ui"
 import { SpeedInsights } from "@vercel/speed-insights/react"
 import { ThemeProvider } from "next-themes"
-import { useCallback } from "react"
 import {
   Link,
   Links,
@@ -10,7 +8,6 @@ import {
   Scripts,
   ScrollRestoration,
   isRouteErrorResponse,
-  useNavigate,
   useRevalidator,
 } from "react-router"
 import { Spinner } from "~/components/ui/spinner"
@@ -26,9 +23,22 @@ import {
 } from "~/components/ui/card"
 import { Toaster } from "~/components/ui/toast"
 import { TooltipProvider } from "~/components/ui/tooltip"
-import { authClient } from "~/lib/auth-client"
+import { supabaseContext } from "~/lib/supabase/context"
+import { supabaseSessionMiddleware } from "~/middleware/supabase-session"
 import type { Route } from "./+types/root"
 import "./app.css"
+
+export const middleware: Route.MiddlewareFunction[] = [
+  supabaseSessionMiddleware,
+]
+
+export function loader({ context }: Route.LoaderArgs) {
+  const { user } = context.get(supabaseContext)
+  return {
+    isSignedIn: user !== null,
+    userEmail: user?.email ?? null,
+  }
+}
 
 export const links: Route.LinksFunction = () => [
   { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
@@ -70,47 +80,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  const navigate = useNavigate()
-
-  const handleNavigate = useCallback(
-    (href: string) => navigate(href),
-    [navigate]
-  )
-  const handleReplace = useCallback(
-    (href: string) => navigate(href, { replace: true }),
-    [navigate]
-  )
-
-  const handleLink = useCallback(
-    ({
-      href,
-      className,
-      children,
-    }: {
-      href: string
-      className?: string
-      children: React.ReactNode
-    }) => (
-      <Link to={href} className={className}>
-        {children}
-      </Link>
-    ),
-    []
-  )
-
   return (
     <TooltipProvider delay={200}>
-      <NeonAuthUIProvider
-        authClient={authClient}
-        emailVerification={{ otp: true }}
-        navigate={handleNavigate}
-        replace={handleReplace}
-        Link={handleLink}
-      >
-        <div className="flex h-dvh flex-col overflow-hidden [--header-height:calc(--spacing(14))]">
-          <Outlet />
-        </div>
-      </NeonAuthUIProvider>
+      <div className="flex h-dvh flex-col overflow-hidden [--header-height:calc(--spacing(14))]">
+        <Outlet />
+      </div>
     </TooltipProvider>
   )
 }

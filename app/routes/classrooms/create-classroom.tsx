@@ -1,13 +1,14 @@
 import { Navigate } from "react-router"
 import type { MutationResult } from "~/lib/action-results"
 import { createClassroom } from "~/lib/api"
-import { getAuthToken } from "~/lib/auth-client"
+import { getAccessToken } from "~/lib/supabase/token"
 import { CreateClassroomSchema } from "~/lib/schemas"
 import type { Route } from "./+types/create-classroom"
 
-export async function clientAction({
+export async function action({
   request,
-}: Route.ClientActionArgs): Promise<MutationResult> {
+  context,
+}: Route.ActionArgs): Promise<MutationResult> {
   const rawData = await request.json()
   const result = CreateClassroomSchema.safeParse(rawData)
 
@@ -16,7 +17,10 @@ export async function clientAction({
   }
 
   try {
-    const classroom = await createClassroom(result.data, await getAuthToken())
+    const classroom = await createClassroom(
+      result.data,
+      await getAccessToken(context)
+    )
     return { ok: true, id: classroom.id }
   } catch (error) {
     return { ok: false, error: (error as Error).message }

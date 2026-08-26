@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react"
+import { useRouteLoaderData } from "react-router"
 import { getClassrooms, getStudentLimitStatus } from "~/lib/api"
-import { authClient, getAuthToken } from "~/lib/auth-client"
 import type { Classroom } from "~/lib/schemas"
+import { getAccessTokenBrowser } from "~/lib/supabase/client"
+import type { loader as rootLoader } from "~/root"
 
 export type RootDataFields = {
   classrooms: Classroom[]
@@ -56,13 +58,14 @@ export async function fetchRootData(
  * @returns The user's classrooms and student-limit status, or empty defaults while signed out
  */
 export function useRootData(): RootData {
-  const session = authClient.useSession()
+  const rootData = useRouteLoaderData<typeof rootLoader>("root")
+  const isSignedIn = rootData?.isSignedIn ?? false
   const [data, setData] = useState(EMPTY_ROOT_DATA)
   const [isRefetching, setIsRefetching] = useState(false)
   const [refetchToken, setRefetchToken] = useState(0)
 
   useEffect(() => {
-    if (!session.data) {
+    if (!isSignedIn) {
       setData(EMPTY_ROOT_DATA)
       return
     }
@@ -70,7 +73,7 @@ export function useRootData(): RootData {
     let cancelled = false
     setIsRefetching(true)
     ;(async () => {
-      const token = await getAuthToken()
+      const token = await getAccessTokenBrowser()
       const result = await fetchRootData(token)
       if (!cancelled) {
         setData(result)
@@ -81,7 +84,7 @@ export function useRootData(): RootData {
     return () => {
       cancelled = true
     }
-  }, [session.data, refetchToken])
+  }, [isSignedIn, refetchToken])
 
   const refetch = useCallback(() => setRefetchToken((n) => n + 1), [])
 

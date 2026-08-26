@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use crate::{
     AppState,
-    auth::NeonAuthClaims,
+    auth::SupabaseAuthClaims,
     blob::{BlobDeleter, BlobObject, BlobReader, BlobUploader},
     model::ClassroomModel,
     routes::create_router,
@@ -82,8 +82,8 @@ pub fn test_user_id() -> String {
     format!("user_test_{}", Uuid::new_v4())
 }
 
-fn test_jwt(user_id: &str) -> NeonAuthClaims {
-    NeonAuthClaims {
+fn test_jwt(user_id: &str) -> SupabaseAuthClaims {
+    SupabaseAuthClaims {
         sub: user_id.to_string(),
     }
 }

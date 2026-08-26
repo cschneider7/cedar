@@ -15,13 +15,13 @@ import {
 } from "~/components/ui/tooltip"
 
 import { ArrowLeft } from "lucide-react"
-import { Link, redirect } from "react-router"
+import { Link } from "react-router"
 import { DeleteStudentDialog } from "~/components/delete-student-dialog"
 import { RouteHydrateFallback } from "~/components/route-hydrate-fallback"
 import { StudentAvatar } from "~/components/student-avatar"
 import { StudentFormDialog } from "~/components/student-form-dialog"
 import { getClassroom, getStudent, toRouteError } from "~/lib/api"
-import { getAuthToken } from "~/lib/auth-client"
+import { getAccessToken } from "~/lib/supabase/token"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 import { formatClassroomName } from "~/lib/classroom-term"
 import type { Route } from "./+types/student"
@@ -33,11 +33,8 @@ export const handle: BreadcrumbHandle = {
     data ? `/students/${data.student.id}` : "/students",
 }
 
-export async function clientLoader({ params }: Route.ClientLoaderArgs) {
-  const token = await getAuthToken()
-  if (!token) {
-    return redirect("/auth/sign-in")
-  }
+export async function loader({ params, context }: Route.LoaderArgs) {
+  const token = await getAccessToken(context)
 
   try {
     const student = await getStudent(params.studentId, token)

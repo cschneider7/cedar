@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { makeArgs, stubFetch } from "~/lib/test-utils"
-import { clientAction as action } from "./delete-student"
+import { action } from "./delete-student"
 
 const studentId = "student-1"
 
@@ -20,7 +20,7 @@ describe("delete-student action", () => {
 
     expect(fetch).toHaveBeenCalledTimes(1)
     const [url, init] = vi.mocked(fetch).mock.calls[0]
-    expect(url).toBe(`http://localhost:3000/api/v1/students/${studentId}`)
+    expect(url).toBe(`http://localhost:3001/api/v1/students/${studentId}`)
     expect(init?.method).toBe("DELETE")
 
     expect(result).toEqual({ ok: true, id: studentId })

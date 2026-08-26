@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import type { ColdCall, ColdCallPick } from "~/lib/schemas"
 import { makeArgs, stubFetch } from "~/lib/test-utils"
-import { clientAction as action } from "./cold-call"
+import { action } from "./cold-call"
 
 const classroomId = "classroom-1"
 
@@ -39,7 +39,7 @@ describe("cold-call action", () => {
     expect(fetch).toHaveBeenCalledTimes(1)
     const [url, init] = vi.mocked(fetch).mock.calls[0]
     expect(url).toBe(
-      `http://localhost:3000/api/v1/classrooms/${classroomId}/cold-call`
+      `http://localhost:3001/api/v1/classrooms/${classroomId}/cold-call`
     )
     expect(init?.method).toBe("POST")
     expect(JSON.parse(init?.body as string)).toEqual(payload)

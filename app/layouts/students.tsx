@@ -1,9 +1,11 @@
 import type { Route } from "./+types/students"
 
-import { RedirectToSignIn, SignedIn } from "@neondatabase/auth/react"
 import { Outlet } from "react-router"
 import { RouteErrorCard } from "~/components/route-error-card"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
+import { requireAuthMiddleware } from "~/middleware/require-auth"
+
+export const middleware: Route.MiddlewareFunction[] = [requireAuthMiddleware]
 
 export const handle: BreadcrumbHandle = {
   breadcrumb: () => "Students",
@@ -22,14 +24,9 @@ export function meta({}: Route.MetaArgs) {
 
 export default function Layout() {
   return (
-    <>
-      <RedirectToSignIn />
-      <SignedIn>
-        <div className="h-full min-h-0 overflow-y-auto px-10 py-8">
-          <Outlet />
-        </div>
-      </SignedIn>
-    </>
+    <div className="h-full min-h-0 overflow-y-auto px-10 py-8">
+      <Outlet />
+    </div>
   )
 }
 

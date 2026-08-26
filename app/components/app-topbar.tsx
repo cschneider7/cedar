@@ -1,12 +1,12 @@
-import { SignedIn, SignedOut, UserButton } from "@neondatabase/auth-ui"
-import { Menu, Plus, Settings } from "lucide-react"
+import { Menu, Plus, Settings, LogOut } from "lucide-react"
 import { Fragment, useState } from "react"
-import { Link, useMatches } from "react-router"
+import { Link, useMatches, useNavigate, useRouteLoaderData } from "react-router"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
 import { NavLoadingIndicator } from "~/components/nav-loading-indicator"
 import { StudentFormDialog } from "~/components/student-form-dialog"
 import { ThemeToggle } from "~/components/theme-toggle"
 import { TopbarSearch } from "~/components/topbar-search"
+import { Avatar, AvatarFallback } from "~/components/ui/avatar"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -33,6 +33,8 @@ import {
   isAtClassroomLimit,
 } from "~/lib/classroom-limit"
 import { isAtStudentLimit } from "~/lib/student-limit"
+import { createSupabaseBrowserClient } from "~/lib/supabase/client"
+import type { loader as rootLoader } from "~/root"
 
 /**
  * Breadcrumb trail entries built from matched routes' `handle.breadcrumb`.
@@ -164,12 +166,48 @@ function CreateDropdown() {
   )
 }
 
+/** Avatar/email dropdown with an Account link and sign-out action. */
+function AccountMenu({ userEmail }: { userEmail: string }) {
+  const navigate = useNavigate()
+
+  async function handleSignOut() {
+    await createSupabaseBrowserClient().auth.signOut()
+    navigate("/")
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button variant="ghost" size="icon" aria-label="Account">
+            <Avatar>
+              <AvatarFallback>{userEmail[0]?.toUpperCase()}</AvatarFallback>
+            </Avatar>
+          </Button>
+        }
+      />
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem render={<Link to="/account" />}>
+          <Settings />
+          Account
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={handleSignOut}>
+          <LogOut />
+          Sign out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 /**
  * App-wide top bar: sidebar toggle, breadcrumbs, search, create menu, and auth controls.
  */
 export function AppTopbar() {
   const { toggleSidebar } = useSidebar()
   const crumbs = useBreadcrumbs()
+  const rootData = useRouteLoaderData<typeof rootLoader>("root")
+  const isSignedIn = rootData?.isSignedIn ?? false
 
   return (
     <header className="sticky top-0 z-40 flex h-(--header-height) w-full shrink-0 items-center gap-2 border-b border-border bg-background px-4">
@@ -194,29 +232,24 @@ export function AppTopbar() {
       <Breadcrumbs crumbs={crumbs} />
       <div className="ml-auto flex items-center gap-2">
         <NavLoadingIndicator />
-        <SignedIn>
-          <TopbarSearch />
-          <CreateDropdown />
-        </SignedIn>
+        {isSignedIn && (
+          <>
+            <TopbarSearch />
+            <CreateDropdown />
+          </>
+        )}
         <ThemeToggle />
-        <SignedOut>
+        {isSignedIn ? (
+          <AccountMenu userEmail={rootData?.userEmail ?? ""} />
+        ) : (
           <Button
             variant="default"
             nativeButton={false}
-            render={<Link to="/auth/sign-in" />}
+            render={<Link to="/login" />}
           >
             Sign in
           </Button>
-        </SignedOut>
-        <SignedIn>
-          <UserButton
-            size="icon"
-            disableDefaultLinks
-            additionalLinks={[
-              { href: "/account", icon: <Settings />, label: "Account" },
-            ]}
-          />
-        </SignedIn>
+        )}
       </div>
     </header>
   )

@@ -33,7 +33,7 @@ import {
   INITIAL_WEIGHT,
 } from "~/lib/seating-chart-utils"
 import { cn } from "~/lib/utils"
-import type { clientAction as coldCallAction } from "~/routes/classrooms/cold-call"
+import type { action as coldCallAction } from "~/routes/classrooms/cold-call"
 
 /**
  * Cold Call as a tab: same probability/pick logic as the former dialog,
