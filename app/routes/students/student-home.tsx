@@ -5,7 +5,13 @@ import {
 } from "@tanstack/react-table"
 import { LayoutGrid, List, Plus, Search, UsersIcon } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Link, useLocation, useNavigate, useNavigation } from "react-router"
+import {
+  Link,
+  redirect,
+  useLocation,
+  useNavigate,
+  useNavigation,
+} from "react-router"
 import { DeleteConfirmDialog } from "~/components/delete-confirm-dialog"
 import { RouteHydrateFallback } from "~/components/route-hydrate-fallback"
 import { SearchInput } from "~/components/search-input"
@@ -55,11 +61,7 @@ import {
   useStudentViewMode,
   type StudentViewMode,
 } from "~/hooks/use-student-view-mode"
-import {
-  getClassrooms,
-  getStudentsPage,
-  withUnauthenticatedFallback,
-} from "~/lib/api"
+import { getClassrooms, getStudentsPage } from "~/lib/api"
 import { getAuthToken } from "~/lib/auth-client"
 import { formatClassroomName } from "~/lib/classroom-term"
 import { getPageNumbers } from "~/lib/pagination"
@@ -77,6 +79,10 @@ import {
 
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const token = await getAuthToken()
+  if (!token) {
+    return redirect("/auth/sign-in")
+  }
+
   const url = new URL(request.url)
   const page = Math.max(1, Number(url.searchParams.get("page")) || 1)
   const q = url.searchParams.get("q") ?? ""
@@ -97,24 +103,10 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
     url.searchParams.get("sort_dir") === "desc" ? "desc" : "asc"
 
   const [studentsPage, classroomsResult] = await Promise.all([
-    // A 401 here means the sign-in redirect (<RedirectToSignIn>) hasn't
-    // navigated away yet — degrade to an empty page rather than crashing
-    // the route out from under it.
-    withUnauthenticatedFallback(
-      getStudentsPage(
-        { page, pageSize, q: q || undefined, sortBy, sortDir },
-        token
-      ),
-      {
-        students: [],
-        page,
-        page_size: pageSize,
-        total_count: 0,
-        total_pages: 1,
-      }
+    getStudentsPage(
+      { page, pageSize, q: q || undefined, sortBy, sortDir },
+      token
     ),
-    // Classrooms here only back badges, not load-bearing — a failure
-    // degrades to unlabeled badges + a toast, not the whole page failing.
     getClassrooms(token).then(
       (classrooms) => ({ classrooms, failed: false }),
       () => ({ classrooms: [] as Classroom[], failed: true })

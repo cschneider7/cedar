@@ -1,6 +1,6 @@
 import { PencilIcon } from "lucide-react"
 import { useMemo, useState } from "react"
-import { Link, Outlet, useLocation } from "react-router"
+import { Link, Outlet, redirect, useLocation } from "react-router"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
 import { PinToggleButton } from "~/components/pin-toggle-button"
 import { RouteHydrateFallback } from "~/components/route-hydrate-fallback"
@@ -58,8 +58,10 @@ export function meta({}: Route.MetaArgs) {
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   const token = await getAuthToken()
-  // Unlike other loaders here, failures are NOT degraded gracefully — a
-  // seating chart can't render meaningfully with a partial roster/chart.
+  if (!token) {
+    return redirect("/auth/sign-in")
+  }
+
   try {
     const [classroom, seatingChart, allStudents, allSeparations] =
       await Promise.all([

@@ -15,7 +15,7 @@ import {
 } from "~/components/ui/tooltip"
 
 import { ArrowLeft } from "lucide-react"
-import { Link } from "react-router"
+import { Link, redirect } from "react-router"
 import { DeleteStudentDialog } from "~/components/delete-student-dialog"
 import { RouteHydrateFallback } from "~/components/route-hydrate-fallback"
 import { StudentAvatar } from "~/components/student-avatar"
@@ -35,6 +35,10 @@ export const handle: BreadcrumbHandle = {
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   const token = await getAuthToken()
+  if (!token) {
+    return redirect("/auth/sign-in")
+  }
+
   try {
     const student = await getStudent(params.studentId, token)
     const classroom = student.classroom_id

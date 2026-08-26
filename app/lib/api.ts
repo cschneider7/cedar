@@ -65,27 +65,6 @@ export class ApiError extends Error {
 }
 
 /**
- * Resolves to `fallback` instead of throwing when `promise` rejects with a
- * 401 — for a protected route's primary `clientLoader` fetch, where a 401
- * means "not signed in yet" rather than a real failure. `<RedirectToSignIn>`
- * (rendered by the layout) is what navigates the user away; the loader just
- * needs to not crash the route first.
- * @param promise - The API call to guard.
- * @param fallback - The value to resolve with on a 401.
- */
-export async function withUnauthenticatedFallback<T>(
-  promise: Promise<T>,
-  fallback: T
-): Promise<T> {
-  try {
-    return await promise
-  } catch (error) {
-    if (error instanceof ApiError && error.status === 401) return fallback
-    throw error
-  }
-}
-
-/**
  * Re-throws an `ApiError` as a route `Response` carrying its real status,
  * for loaders that let failures propagate to the nearest `ErrorBoundary`.
  * @param error - The caught value to convert.
