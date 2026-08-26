@@ -10,24 +10,21 @@ Cedar is a modern web application for creating seating charts and organizing cla
 
 ## Installation
 
-The full local dev environment (Postgres, the Rust backend, and the frontend) runs via Docker Compose — no native Node/Rust install required.
+The full local dev environment (the Rust backend and the frontend) runs via Docker Compose — no native Node/Rust install required.
 
 ```bash
 cp .env.example .env
-# fill in CLERK_SECRET_KEY / VITE_CLERK_PUBLISHABLE_KEY with real Clerk dev keys
+# Fill in with credentials
 docker compose up --build
 ```
 
-- `postgres` → `localhost:5432` (data persisted in a Docker volume)
-- `backend` → `http://localhost:3000` (Axum API, hot-reloads via `cargo-watch`, migrations applied automatically on start)
-- `frontend` → `http://localhost:5173` (Vite dev server, HMR)
+- `api` → `http://localhost:3000` (Axum API)
+- `ui` → `http://localhost:5173` (Vite dev server)
 
-If you add/remove a dependency (`package.json` or `Cargo.toml`) and rebuild the images, the cached `node_modules`/cargo volumes won't refresh automatically — clear them too:
+If you add/remove a dependency (`package.json` or `Cargo.toml`), run the build again:
 
 ```bash
-docker compose build backend frontend
-docker compose down -v
-docker compose up
+docker compose up --build
 ```
 
 ## Build

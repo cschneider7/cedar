@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { makeArgs, stubFetch } from "~/lib/test-utils"
-import { action } from "./edit-classroom"
+import { clientAction as action } from "./edit-classroom"
 
 const classroomId = "classroom-1"
 

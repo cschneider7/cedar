@@ -18,12 +18,12 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog"
 import { FieldError } from "~/components/ui/field"
+import { useStudentImage } from "~/hooks/use-student-image"
 import {
   loadImage,
   OUTPUT_IMAGE_QUALITY,
   OUTPUT_IMAGE_TYPE,
   resizeImageToBlob,
-  studentImageProxyUrl,
   validateImageFile,
 } from "~/lib/image-utils"
 
@@ -32,7 +32,7 @@ import {
  * photo, a staged local file, an explicit removal, or nothing at all.
  */
 export type PhotoFieldValue =
-  | { kind: "existing"; url: string }
+  | { kind: "existing"; studentId: string }
   | { kind: "staged"; file: File; previewUrl: string }
   | { kind: "removed" }
   | { kind: "none" }
@@ -127,9 +127,14 @@ export function StudentPhotoField({
     )
   }
 
+  const existingImageUrl = useStudentImage(
+    value.kind === "existing" ? value.studentId : "",
+    value.kind === "existing"
+  )
+
   const previewUrl =
     value.kind === "existing"
-      ? studentImageProxyUrl(value.url)
+      ? existingImageUrl
       : value.kind === "staged"
         ? value.previewUrl
         : null

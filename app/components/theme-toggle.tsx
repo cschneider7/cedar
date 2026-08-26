@@ -1,4 +1,6 @@
 import { Monitor, Moon, Sun } from "lucide-react"
+import { useTheme } from "next-themes"
+import { useEffect, useState } from "react"
 import { Button } from "~/components/ui/button"
 import {
   DropdownMenu,
@@ -7,7 +9,8 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"
-import { useTheme, type Theme } from "~/components/ui/theme-provider"
+
+export type Theme = "light" | "dark" | "system"
 
 export const themeIcons = {
   light: Sun,
@@ -30,7 +33,9 @@ export function isTheme(value: unknown): value is Theme {
  */
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme()
-  const ThemeIcon = themeIcons[theme]
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  const ThemeIcon = mounted && isTheme(theme) ? themeIcons[theme] : Monitor
 
   return (
     <DropdownMenu>
@@ -43,7 +48,7 @@ export function ThemeToggle() {
       />
       <DropdownMenuContent align="end">
         <DropdownMenuRadioGroup
-          value={theme}
+          value={mounted && isTheme(theme) ? theme : "system"}
           onValueChange={(value) => {
             if (isTheme(value)) setTheme(value)
           }}

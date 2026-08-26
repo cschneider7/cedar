@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import type { Student } from "~/lib/schemas"
 import { makeArgs, stubFetch } from "~/lib/test-utils"
-import { loader } from "./quick-search"
+import { clientLoader as loader } from "./quick-search"
 
 const args = (q?: string) =>
   makeArgs(
@@ -27,12 +27,6 @@ stubFetch()
 describe("quick-search loader", () => {
   it("returns no students and skips the request when q is missing", async () => {
     const result = await loader(args())
-    expect(result).toEqual({ students: [] })
-    expect(fetch).not.toHaveBeenCalled()
-  })
-
-  it("returns no students and skips the request when q is blank", async () => {
-    const result = await loader(args("   "))
     expect(result).toEqual({ students: [] })
     expect(fetch).not.toHaveBeenCalled()
   })

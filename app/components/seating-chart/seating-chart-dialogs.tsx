@@ -47,7 +47,7 @@ import {
   RANDOMIZE_TABLE_COUNT_WARNING_THRESHOLD,
   type TableGeometry,
 } from "~/lib/seating-chart-utils"
-import type { action as randomizeSeatingChartAction } from "~/routes/classrooms/randomize-seating-chart"
+import type { clientAction as randomizeSeatingChartAction } from "~/routes/classrooms/randomize-seating-chart"
 
 /** Dialog for generating a randomized seating chart, applied as an unsaved canvas edit. */
 export function RandomSeatingChartDialog({

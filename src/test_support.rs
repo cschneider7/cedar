@@ -7,18 +7,21 @@ use std::{
 };
 
 use axum::{Router, body::Body, http::Request, response::Response};
-use clerk_rs::validators::authorizer::ClerkJwt;
 use http_body_util::BodyExt;
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::{AppState, blob::BlobDeleter, model::ClassroomModel, routes::create_router};
+use crate::{
+    AppState,
+    auth::NeonAuthClaims,
+    blob::{BlobDeleter, BlobObject, BlobReader, BlobUploader},
+    model::ClassroomModel,
+    routes::create_router,
+};
 
 const TEST_FRONTEND_ORIGIN: &str = "http://localhost:5173";
 
 /// A `BlobDeleter` test double that records every URL passed to `delete`
-/// instead of making a real network call, so tests can assert on cleanup
-/// behavior without mocking HTTP.
 #[derive(Clone, Default)]
 pub struct RecordingBlobDeleter(pub Arc<Mutex<Vec<String>>>);
 
@@ -29,22 +32,42 @@ impl BlobDeleter for RecordingBlobDeleter {
     }
 }
 
-/// Builds the app router for tests with no Clerk layer attached — tests
-/// authenticate by attaching a hand-built `ClerkJwt` extension directly to
-/// the request (see `authenticated_request`/`authenticated_json_request`)
-/// rather than exercising real JWT/JWKS verification. Every handler's own
-/// auth-extraction and user-scoping logic is still exercised the same way;
-/// only Clerk's signature-verification step is bypassed.
+/// A `BlobReader` test double that always reports the object missing
+#[derive(Clone, Default)]
+pub struct EmptyBlobReader;
+
+impl BlobReader for EmptyBlobReader {
+    fn get(&self, _key: String) -> Pin<Box<dyn Future<Output = Option<BlobObject>> + Send>> {
+        Box::pin(async { None })
+    }
+}
+
+/// A `BlobUploader` test double that always fails to presign
+#[derive(Clone, Default)]
+pub struct EmptyBlobUploader;
+
+impl BlobUploader for EmptyBlobUploader {
+    fn presign_put(
+        &self,
+        _key: String,
+        _content_type: String,
+        _content_length: i64,
+    ) -> Pin<Box<dyn Future<Output = Option<String>> + Send>> {
+        Box::pin(async { None })
+    }
+}
+
+/// Builds the app router for tests
 pub fn app(pool: sqlx::PgPool) -> Router {
     app_with_blob_deleter(pool, Arc::new(RecordingBlobDeleter::default()))
 }
 
-/// Same as `app`, but with an injectable `BlobDeleter` for tests asserting on
-/// blob cleanup calls (see `RecordingBlobDeleter`).
 pub fn app_with_blob_deleter(pool: sqlx::PgPool, blob_deleter: Arc<dyn BlobDeleter>) -> Router {
     let app_state = Arc::new(AppState {
         db: pool,
         blob_deleter,
+        blob_reader: Arc::new(EmptyBlobReader),
+        blob_uploader: Arc::new(EmptyBlobUploader),
     });
     create_router(app_state, None, TEST_FRONTEND_ORIGIN.to_string())
 }
@@ -54,28 +77,18 @@ pub async fn body_json(response: Response) -> Value {
     serde_json::from_slice(&bytes).unwrap()
 }
 
-/// A fresh, Clerk-shaped user id for scoping test data, e.g. `user_test_<uuid>`.
+/// A fresh, opaque user id for scoping test data
 pub fn test_user_id() -> String {
     format!("user_test_{}", Uuid::new_v4())
 }
 
-fn test_jwt(user_id: &str) -> ClerkJwt {
-    ClerkJwt {
-        azp: None,
-        exp: i32::MAX,
-        iat: 0,
-        iss: "test".to_string(),
-        nbf: 0,
-        sid: None,
+fn test_jwt(user_id: &str) -> NeonAuthClaims {
+    NeonAuthClaims {
         sub: user_id.to_string(),
-        act: None,
-        org: None,
-        other: serde_json::Map::new(),
     }
 }
 
-/// Builds a JSON POST/PATCH/PUT request, with a `ClerkJwt` extension for
-/// `user_id` so the request is authenticated as that user.
+/// Builds a JSON POST/PATCH/PUT request
 pub fn authenticated_json_request(
     method: &str,
     uri: &str,
@@ -101,9 +114,7 @@ pub fn authenticated_request(method: &str, uri: &str, user_id: &str) -> Request<
         .unwrap()
 }
 
-/// Inserts a classroom with a hardcoded default term ("fall" 2026) — term
-/// isn't relevant to most callers of this helper; tests exercising term
-/// behavior go through the real create/update handlers instead.
+/// Inserts a classroom with a hardcoded default term ("fall" 2026)
 pub async fn insert_classroom(
     pool: &sqlx::PgPool,
     user_id: &str,

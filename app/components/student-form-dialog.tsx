@@ -34,6 +34,8 @@ import {
 } from "~/components/ui/select"
 import { Spinner } from "~/components/ui/spinner"
 import { useResourceFormDialog } from "~/hooks/use-resource-form-dialog"
+import { requestStudentImageUploadUrl } from "~/lib/api"
+import { getAuthToken } from "~/lib/auth-client"
 import { formatClassroomName } from "~/lib/classroom-term"
 import type { Classroom, Student } from "~/lib/schemas"
 import { CreateStudentSchema, UpdateStudentSchema } from "~/lib/schemas"
@@ -55,7 +57,7 @@ type StudentFormDialogProps = (
  */
 function defaultPhotoValue(props: StudentFormDialogProps): PhotoFieldValue {
   if (props.mode === "edit" && props.student.image_url) {
-    return { kind: "existing", url: props.student.image_url }
+    return { kind: "existing", studentId: props.student.id }
   }
   return { kind: "none" }
 }
@@ -138,18 +140,11 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
     if (photo.kind === "staged") {
       setIsUploading(true)
       try {
-        const tokenRes = await fetch("/api/student-image-upload", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contentLength: photo.file.size }),
-        })
-        if (!tokenRes.ok) {
-          throw new Error("Failed to prepare photo upload")
-        }
-        const { url, key } = (await tokenRes.json()) as {
-          url: string
-          key: string
-        }
+        const token = await getAuthToken()
+        const { url, key } = await requestStudentImageUploadUrl(
+          photo.file.size,
+          token
+        )
 
         const putRes = await fetch(url, {
           method: "PUT",

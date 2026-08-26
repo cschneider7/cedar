@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { makeArgs, stubFetch } from "~/lib/test-utils"
-import { action } from "./bulk-unassign-students"
+import { clientAction as action } from "./bulk-unassign-students"
 
 const args = (ids: string[]) =>
   makeArgs("http://test/students/bulk-unassign", {

@@ -1,7 +1,7 @@
-import { Show } from "@clerk/react-router"
+import { SignedIn } from "@neondatabase/auth-ui"
 import { Search } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Link, useFetcher, useRouteLoaderData } from "react-router"
+import { Link, useFetcher } from "react-router"
 import { Badge } from "~/components/ui/badge"
 import {
   InputGroup,
@@ -10,9 +10,9 @@ import {
 } from "~/components/ui/input-group"
 import { Item, ItemContent, ItemTitle } from "~/components/ui/item"
 import { Popover, PopoverContent } from "~/components/ui/popover"
+import { useRootData } from "~/hooks/use-root-data"
 import { formatClassroomName } from "~/lib/classroom-term"
-import type { loader as quickSearchLoader } from "~/routes/api/quick-search"
-import type { loader as rootLoader } from "~/root"
+import type { clientLoader as quickSearchLoader } from "~/routes/api/quick-search"
 
 const SEARCH_DEBOUNCE_MS = 300
 const MAX_CLASSROOM_MATCHES = 5
@@ -22,8 +22,8 @@ const MAX_CLASSROOM_MATCHES = 5
  * students with a short debounce.
  */
 function SearchDropdown() {
-  const rootData = useRouteLoaderData<typeof rootLoader>("root")
-  const classrooms = rootData?.classrooms ?? []
+  const rootData = useRootData()
+  const classrooms = rootData.classrooms
   const fetcher = useFetcher<typeof quickSearchLoader>()
   const inputRef = useRef<HTMLInputElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -32,8 +32,6 @@ function SearchDropdown() {
   const [debouncedQuery, setDebouncedQuery] = useState("")
   const [open, setOpen] = useState(false)
 
-  // No PopoverTrigger (see below), so Base UI's outside-press dismissal
-  // never fires — it needs a registered trigger. Close on outside click by hand.
   useEffect(() => {
     if (!open) return
     function handlePointerDown(event: PointerEvent) {
@@ -57,7 +55,6 @@ function SearchDropdown() {
   useEffect(() => {
     if (!debouncedQuery) return
     fetcher.load(`/api/quick-search?q=${encodeURIComponent(debouncedQuery)}`)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedQuery])
 
   const matchedClassrooms = useMemo(() => {
@@ -83,8 +80,6 @@ function SearchDropdown() {
   }
 
   return (
-    // No PopoverTrigger: merging its props onto InputGroup broke typing
-    // (added a conflicting role="button"). Anchored via inputRef instead.
     <Popover open={open && hasQuery} onOpenChange={setOpen}>
       <InputGroup className="max-w-48 min-w-25">
         <InputGroupInput
@@ -108,8 +103,6 @@ function SearchDropdown() {
         ref={contentRef}
         anchor={inputRef}
         align="end"
-        // Disable Base UI's focus management: it moves focus into the first
-        // result on open, and refocuses the input on close (re-triggering onFocus).
         initialFocus={false}
         finalFocus={false}
         className="w-72 max-w-[calc(100vw-2rem)] p-2"
@@ -163,9 +156,5 @@ function SearchDropdown() {
  * Wraps `SearchDropdown` so it doesn't render for a signed-out visitor.
  */
 export function TopbarSearch() {
-  return (
-    <Show when="signed-in">
-      <SearchDropdown />
-    </Show>
-  )
+  return <SearchDropdown />
 }

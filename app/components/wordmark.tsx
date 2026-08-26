@@ -69,7 +69,9 @@ export function Wordmark({
   textClassName?: string
 }) {
   return (
-    <span className={cn("inline-flex items-center gap-2", className)}>
+    <span
+      className={cn("inline-flex items-center gap-2 select-none", className)}
+    >
       <Logomark />
       <span className={cn("font-heading", textClassName)}>Cedar</span>
     </span>

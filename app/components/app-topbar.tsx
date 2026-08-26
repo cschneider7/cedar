@@ -1,10 +1,12 @@
-import { Show, useClerk, useUser } from "@clerk/react-router"
-import { LogOut, Menu, Plus, Settings } from "lucide-react"
+import { SignedIn, SignedOut, UserButton } from "@neondatabase/auth-ui"
+import { Menu, Plus, Settings } from "lucide-react"
 import { Fragment, useState } from "react"
-import { Link, useMatches, useRouteLoaderData } from "react-router"
+import { Link, useMatches } from "react-router"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
+import { NavLoadingIndicator } from "~/components/nav-loading-indicator"
 import { StudentFormDialog } from "~/components/student-form-dialog"
-import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar"
+import { ThemeToggle } from "~/components/theme-toggle"
+import { TopbarSearch } from "~/components/topbar-search"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -17,32 +19,20 @@ import { Button } from "~/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"
-import { NavLoadingIndicator } from "~/components/nav-loading-indicator"
 import { Separator } from "~/components/ui/separator"
 import { useSidebar } from "~/components/ui/sidebar"
-import { useTheme } from "~/components/ui/theme-provider"
-import { isTheme, themeIcons, ThemeToggle } from "~/components/ui/theme-toggle"
 import { toast } from "~/components/ui/toast"
-import { TopbarSearch } from "~/components/topbar-search"
 import { Wordmark } from "~/components/wordmark"
+import { useRootData } from "~/hooks/use-root-data"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 import {
   MAX_CLASSROOMS_PER_USER,
   isAtClassroomLimit,
 } from "~/lib/classroom-limit"
 import { isAtStudentLimit } from "~/lib/student-limit"
-import type { loader as rootLoader } from "~/root"
 
 /**
  * Breadcrumb trail entries built from matched routes' `handle.breadcrumb`.
@@ -109,7 +99,7 @@ function Breadcrumbs({
 function CreateDropdown() {
   const [studentOpen, setStudentOpen] = useState(false)
   const [classroomOpen, setClassroomOpen] = useState(false)
-  const rootData = useRouteLoaderData<typeof rootLoader>("root")
+  const rootData = useRootData()
 
   function handleNewStudent() {
     if (
@@ -175,127 +165,6 @@ function CreateDropdown() {
 }
 
 /**
- * Signed-in account menu: profile, theme switcher, and sign out.
- */
-function UserMenu() {
-  const { user } = useUser()
-  const { signOut, openUserProfile } = useClerk()
-  const { theme, setTheme } = useTheme()
-
-  if (!user) return null
-
-  const displayName =
-    user.fullName || user.primaryEmailAddress?.emailAddress || "Account"
-  const email = user.primaryEmailAddress?.emailAddress
-  const initials =
-    `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase() ||
-    displayName.slice(0, 2).toUpperCase()
-
-  // Avatar renders at size-8 (32px) — request a 2x-retina-sized crop
-  // instead of Clerk's full-size default image.
-  let avatarImageUrl: string | undefined
-  if (user.imageUrl) {
-    const url = new URL(user.imageUrl)
-    url.searchParams.set("width", "64")
-    url.searchParams.set("height", "64")
-    url.searchParams.set("fit", "crop")
-    avatarImageUrl = url.toString()
-  }
-
-  const ThemeIcon = themeIcons[theme]
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <button
-            type="button"
-            aria-label="Account menu"
-            className="rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
-          >
-            <Avatar>
-              <AvatarImage src={avatarImageUrl} alt={displayName} />
-              <AvatarFallback>{initials}</AvatarFallback>
-            </Avatar>
-          </button>
-        }
-      />
-      <DropdownMenuContent align="end" className="w-max max-w-45">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>
-            {email && (
-              <div className="truncate text-sm font-normal text-muted-foreground">
-                {email}
-              </div>
-            )}
-          </DropdownMenuLabel>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => openUserProfile()}>
-          <Settings />
-          Account
-        </DropdownMenuItem>
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <ThemeIcon />
-            <span>Theme</span>
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuRadioGroup
-              value={theme}
-              onValueChange={(value) => {
-                if (isTheme(value)) setTheme(value)
-              }}
-            >
-              <DropdownMenuRadioItem value="light" closeOnClick>
-                Light
-              </DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="dark" closeOnClick>
-                Dark
-              </DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="system" closeOnClick>
-                System
-              </DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          variant="destructive"
-          onClick={() => signOut({ redirectUrl: "/" })}
-        >
-          <LogOut />
-          Sign out
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-/**
- * Signed-out (theme toggle + sign in) or signed-in (account menu) controls.
- */
-function AuthControl() {
-  return (
-    <>
-      <Show when="signed-out">
-        <ThemeToggle />
-        <Button
-          variant="default"
-          nativeButton={false}
-          render={<Link to="/login" />}
-        >
-          Sign in
-        </Button>
-      </Show>
-      <Show when="signed-in">
-        <UserMenu />
-      </Show>
-    </>
-  )
-}
-
-/**
  * App-wide top bar: sidebar toggle, breadcrumbs, search, create menu, and auth controls.
  */
 export function AppTopbar() {
@@ -325,9 +194,29 @@ export function AppTopbar() {
       <Breadcrumbs crumbs={crumbs} />
       <div className="ml-auto flex items-center gap-2">
         <NavLoadingIndicator />
-        <TopbarSearch />
-        <CreateDropdown />
-        <AuthControl />
+        <SignedIn>
+          <TopbarSearch />
+          <CreateDropdown />
+        </SignedIn>
+        <ThemeToggle />
+        <SignedOut>
+          <Button
+            variant="default"
+            nativeButton={false}
+            render={<Link to="/auth/sign-in" />}
+          >
+            Sign in
+          </Button>
+        </SignedOut>
+        <SignedIn>
+          <UserButton
+            size="icon"
+            disableDefaultLinks
+            additionalLinks={[
+              { href: "/account", icon: <Settings />, label: "Account" },
+            ]}
+          />
+        </SignedIn>
       </div>
     </header>
   )

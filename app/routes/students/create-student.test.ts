@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { makeArgs, stubFetch } from "~/lib/test-utils"
-import { action } from "./create-student"
+import { clientAction as action } from "./create-student"
 
 const validPayload = {
   student_id: 123,
