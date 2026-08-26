@@ -23,11 +23,7 @@ export const EMPTY_ROOT_DATA: RootDataFields = {
 }
 
 /**
- * Fetches the classroom list and student-limit status, degrading to empty
- * defaults + `classroomsError: true` on any failure — extracted from
- * `useRootData` as a plain function so it's unit-testable without rendering
- * a hook (this project's test suite covers pure loader-shaped logic, not
- * component/hook rendering).
+ * Fetches the classroom list and student-limit status
  * @param token - The caller's session token.
  * @returns The signed-in user's classrooms and student-limit status.
  */
@@ -56,15 +52,8 @@ export async function fetchRootData(
 }
 
 /**
- * Client-side replacement for `root.tsx`'s old server `loader` — Neon Auth
- * has no server-side session SDK, so this classroom/student-limit prefetch
- * now happens post-hydration once a session is confirmed, instead of at SSR
- * time. `app-topbar.tsx`/`topbar-search.tsx`/`app-sidebar.tsx` read this
- * instead of `useRouteLoaderData("root")`; `refetch` replaces the old
- * `useRevalidator()`-driven retry button, since this data no longer flows
- * through React Router's own loader/revalidation system.
- * @returns The signed-in user's classrooms and student-limit status, or
- * empty defaults while signed out or loading, plus a manual `refetch`.
+ * Client-side data loader
+ * @returns The user's classrooms and student-limit status, or empty defaults while signed out
  */
 export function useRootData(): RootData {
   const session = authClient.useSession()

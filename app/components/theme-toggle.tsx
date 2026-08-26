@@ -33,9 +33,6 @@ export function isTheme(value: unknown): value is Theme {
  */
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme()
-  // next-themes only knows the real theme once mounted (it's undefined on
-  // the server and on the first client render, by design) — fall back to a
-  // stable icon until then so this doesn't itself cause a hydration mismatch.
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
   const ThemeIcon = mounted && isTheme(theme) ? themeIcons[theme] : Monitor

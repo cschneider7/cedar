@@ -77,9 +77,6 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const page = Math.max(1, Number(url.searchParams.get("page")) || 1)
   const q = url.searchParams.get("q") ?? ""
   const viewParam = url.searchParams.get("view")
-  // An explicit `?view=` always wins; otherwise fall back to the stored
-  // cookie preference — no longer server-rendered on first paint (this is a
-  // clientLoader now), so there's a brief flash to the stored mode instead.
   const viewMode: StudentViewMode =
     viewParam === "list" || viewParam === "grid"
       ? viewParam

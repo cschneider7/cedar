@@ -1,11 +1,7 @@
 import { expect, test } from "@playwright/test"
 
-// Set NEON_AUTH_TEST_EMAIL/NEON_AUTH_TEST_PASSWORD (a real, already-seeded
-// Neon Auth account) in .env to run the sign-in/sign-out test — see
-// .env.example. Unlike Clerk, Neon Auth has no testing-token bypass, so
-// this drives the actual rendered sign-in form.
-const email = process.env.NEON_AUTH_TEST_EMAIL
-const password = process.env.NEON_AUTH_TEST_PASSWORD
+const email = process.env.NEON_AUTH_TEST_EMAIL!
+const password = process.env.NEON_AUTH_TEST_PASSWORD!
 
 test("redirects an unauthenticated visitor to /login", async ({ page }) => {
   await page.goto("/students")
@@ -27,7 +23,5 @@ test("signs in, lands on /, and can sign out", async ({ page }) => {
 
   await page.getByRole("button", { name: /account menu/i }).click()
   await page.getByRole("menuitem", { name: /sign out/i }).click()
-  // The topbar's "Sign in" control is a Base UI Button rendered as an <a>
-  // (nativeButton={false}) — Base UI reports it with role="button", not "link".
   await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible()
 })

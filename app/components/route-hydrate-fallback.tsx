@@ -1,10 +1,7 @@
 import { Spinner } from "~/components/ui/spinner"
 
 /**
- * Shared `HydrateFallback` for routes that moved from a server `loader` to a
- * `clientLoader` as part of the Neon Auth migration — those routes have no
- * SSR data on first paint, so React Router renders this until the
- * `clientLoader` resolves during hydration.
+ * Shared `HydrateFallback` for routes
  * @returns A centered spinner filling the available space.
  */
 export function RouteHydrateFallback() {

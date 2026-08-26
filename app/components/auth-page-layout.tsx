@@ -4,8 +4,7 @@ import { Wordmark } from "~/components/wordmark"
 
 /**
  * Shared chrome for the pre-auth pages (login/signup/forgot-password/
- * reset-password/email-verification/sign-out): centered card, wordmark, and
- * a theme toggle, matching the styling every `AuthView` page around it uses.
+ * reset-password/email-verification/sign-out)
  * @param props - `children` (typically an `AuthView`) to render inside.
  */
 export function AuthPageLayout({ children }: { children: ReactNode }) {

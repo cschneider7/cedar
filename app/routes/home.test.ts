@@ -63,7 +63,6 @@ describe("home loader", () => {
 
     expect(fetch).not.toHaveBeenCalled()
     expect(result).toEqual({
-      isAuthenticated: false,
       classroomsError: false,
       studentsError: false,
     })
@@ -77,7 +76,6 @@ describe("home loader", () => {
     const result = await loader()
 
     expect(result).toEqual({
-      isAuthenticated: true,
       classroomsError: false,
       studentsError: false,
     })

@@ -3,7 +3,10 @@ import { Menu, Plus, Settings } from "lucide-react"
 import { Fragment, useState } from "react"
 import { Link, useMatches } from "react-router"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
+import { NavLoadingIndicator } from "~/components/nav-loading-indicator"
 import { StudentFormDialog } from "~/components/student-form-dialog"
+import { ThemeToggle } from "~/components/theme-toggle"
+import { TopbarSearch } from "~/components/topbar-search"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -19,12 +22,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"
-import { NavLoadingIndicator } from "~/components/nav-loading-indicator"
 import { Separator } from "~/components/ui/separator"
 import { useSidebar } from "~/components/ui/sidebar"
-import { ThemeToggle } from "~/components/theme-toggle"
 import { toast } from "~/components/ui/toast"
-import { TopbarSearch } from "~/components/topbar-search"
 import { Wordmark } from "~/components/wordmark"
 import { useRootData } from "~/hooks/use-root-data"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
@@ -165,42 +165,6 @@ function CreateDropdown() {
 }
 
 /**
- * Signed-out (sign in button) or signed-in (account menu) controls, plus an
- * always-visible theme toggle. The account menu is auth-ui's own
- * `UserButton` rather than a hand-rolled dropdown — `disableDefaultLinks`
- * turns off its built-in "Settings" link (which targets
- * `accountViewPaths.SETTINGS`, i.e. `/settings`, not this app's actual
- * `/account` page) in favor of an explicit `additionalLinks` entry. Its
- * built-in "Sign out" link is not similarly overridable (see
- * `routes/auth/sign-out.tsx`), and isn't gated by `disableDefaultLinks`.
- */
-function AuthControl() {
-  return (
-    <>
-      <ThemeToggle />
-      <SignedOut>
-        <Button
-          variant="default"
-          nativeButton={false}
-          render={<Link to="/auth/sign-in" />}
-        >
-          Sign in
-        </Button>
-      </SignedOut>
-      <SignedIn>
-        <UserButton
-          size="icon"
-          disableDefaultLinks
-          additionalLinks={[
-            { href: "/account", icon: <Settings />, label: "Account" },
-          ]}
-        />
-      </SignedIn>
-    </>
-  )
-}
-
-/**
  * App-wide top bar: sidebar toggle, breadcrumbs, search, create menu, and auth controls.
  */
 export function AppTopbar() {
@@ -232,7 +196,25 @@ export function AppTopbar() {
         <NavLoadingIndicator />
         <TopbarSearch />
         <CreateDropdown />
-        <AuthControl />
+        <ThemeToggle />
+        <SignedOut>
+          <Button
+            variant="default"
+            nativeButton={false}
+            render={<Link to="/auth/sign-in" />}
+          >
+            Sign in
+          </Button>
+        </SignedOut>
+        <SignedIn>
+          <UserButton
+            size="icon"
+            disableDefaultLinks
+            additionalLinks={[
+              { href: "/account", icon: <Settings />, label: "Account" },
+            ]}
+          />
+        </SignedIn>
       </div>
     </header>
   )

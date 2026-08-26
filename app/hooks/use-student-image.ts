@@ -4,12 +4,7 @@ import { getAuthToken } from "~/lib/auth-client"
 const API_URL = import.meta.env.VITE_API_URL
 
 /**
- * Fetches a student's private photo through the Rust backend's
- * authenticated proxy and exposes it as an object URL for an `<img src>`.
- * Replaces the old same-origin Node proxy — Neon Auth's session cookie
- * isn't sent to this app's own origin, and a bare `<img src>` can't carry
- * an `Authorization` header, so the photo is fetched with `fetch()` +
- * Bearer auth instead and rendered via an object URL.
+ * Fetches a student's private photo through the backend
  * @param studentId - The student whose photo to fetch.
  * @param enabled - Skip fetching (e.g. when the student has no photo set).
  * @returns The object URL once loaded, or `null` while loading/on failure.

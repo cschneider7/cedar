@@ -14,11 +14,7 @@ use crate::auth::JwksVerifier;
 use crate::error::log_app_errors;
 use crate::{AppState, handlers};
 
-/// Builds the full `/api/v1/*` router, wiring every handler to its route and
-/// attaching shared state plus Neon-Auth/CORS/tracing/error-logging
-/// middleware. `jwks_verifier` is `None` in tests, which bypass JWT
-/// verification while still exercising every handler's own auth-extractor
-/// logic (see `test_support.rs`).
+/// Builds the full api router
 pub fn create_router(
     app_state: Arc<AppState>,
     jwks_verifier: Option<JwksVerifier>,

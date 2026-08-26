@@ -1,3 +1,4 @@
+import { SignedIn, SignedOut } from "@neondatabase/auth-ui"
 import { ArrowUpRightIcon, ClipboardList, UsersRound } from "lucide-react"
 import { useEffect } from "react"
 import { Link } from "react-router"
@@ -28,20 +29,13 @@ export function meta({}: Route.MetaArgs) {
 
 export async function clientLoader() {
   const { data: session } = await authClient.getSession()
-  // `/` is a public route (unlike students/classrooms, it has no auth gate)
-  // — an anonymous visitor has no session to scope data to, and the backend
-  // 401s without one, so skip the calls entirely rather than surfacing that
-  // 401 as an error toast.
   if (!session) {
     return {
-      isAuthenticated: false as const,
       classroomsError: false,
       studentsError: false,
     }
   }
   const token = await getAuthToken()
-  // Classrooms/students are only fetched to detect a reachability failure
-  // for the toasts below — the dashboard doesn't display their data itself.
   const [classroomsFailed, studentsFailed] = await Promise.all([
     getClassrooms(token).then(
       () => false,
@@ -53,7 +47,6 @@ export async function clientLoader() {
     ),
   ])
   return {
-    isAuthenticated: true as const,
     classroomsError: classroomsFailed,
     studentsError: studentsFailed,
   }
@@ -125,7 +118,7 @@ function StatTile({
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { isAuthenticated, classroomsError, studentsError } = loaderData
+  const { classroomsError, studentsError } = loaderData
 
   useEffect(() => {
     if (classroomsError)
@@ -144,9 +137,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           Manage your students, classrooms, and seating charts.
         </p>
       </div>
-      {!isAuthenticated ? (
+      <SignedOut>
         <SignedOutHome />
-      ) : (
+      </SignedOut>
+      <SignedIn>
         <ItemGroup className="w-full max-w-md">
           <StatTile
             icon={<ClipboardList className="size-7" />}
@@ -159,7 +153,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             to="/students"
           />
         </ItemGroup>
-      )}
+      </SignedIn>
     </div>
   )
 }

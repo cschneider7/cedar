@@ -61,8 +61,6 @@ describe("student-home loader", () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(jsonResponse({ ...emptyPage, page_size: 20 }))
       .mockResolvedValueOnce(jsonResponse(noClassrooms))
-    // clientLoader reads document.cookie directly (no server Request headers
-    // anymore) — stub a minimal document for this one Node-env test.
     vi.stubGlobal("document", { cookie: "students-view-mode=list" })
 
     const result = await loader(makeArgs("http://test/students"))
