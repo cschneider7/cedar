@@ -17,7 +17,8 @@ async fn main() {
 
     let frontend_origin =
         std::env::var("FRONTEND_ORIGIN").unwrap_or_else(|_| "http://localhost:5173".to_string());
-    let neon_auth_url = std::env::var("NEON_AUTH_URL").expect("NEON_AUTH_URL must be set");
+    let neon_auth_url =
+        std::env::var("NEON_AUTH_BASE_URL").expect("NEON_AUTH_BASE_URL must be set");
 
     let app_state = AppState::build().await;
     let jwks_verifier = auth::JwksVerifier::new(&neon_auth_url).await;
