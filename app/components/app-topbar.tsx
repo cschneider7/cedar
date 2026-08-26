@@ -194,8 +194,10 @@ export function AppTopbar() {
       <Breadcrumbs crumbs={crumbs} />
       <div className="ml-auto flex items-center gap-2">
         <NavLoadingIndicator />
-        <TopbarSearch />
-        <CreateDropdown />
+        <SignedIn>
+          <TopbarSearch />
+          <CreateDropdown />
+        </SignedIn>
         <ThemeToggle />
         <SignedOut>
           <Button

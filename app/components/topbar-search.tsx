@@ -156,11 +156,5 @@ function SearchDropdown() {
  * Wraps `SearchDropdown` so it doesn't render for a signed-out visitor.
  */
 export function TopbarSearch() {
-  return (
-    <>
-      <SignedIn>
-        <SearchDropdown />
-      </SignedIn>
-    </>
-  )
+  return <SearchDropdown />
 }
