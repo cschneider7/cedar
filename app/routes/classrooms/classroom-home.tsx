@@ -37,7 +37,11 @@ import {
   TableRow,
 } from "~/components/ui/table"
 import { toast } from "~/components/ui/toast"
-import { getClassrooms, getStudents } from "~/lib/api"
+import {
+  getClassrooms,
+  getStudents,
+  withUnauthenticatedFallback,
+} from "~/lib/api"
 import { getAuthToken } from "~/lib/auth-client"
 import {
   MAX_CLASSROOMS_PER_USER,
@@ -67,7 +71,10 @@ export function meta({}: Route.MetaArgs) {
 export async function clientLoader() {
   const token = await getAuthToken()
   const [classrooms, studentsResult] = await Promise.all([
-    getClassrooms(token),
+    // A 401 here means the sign-in redirect (<RedirectToSignIn>) hasn't
+    // navigated away yet — degrade to an empty list rather than crashing
+    // the route out from under it.
+    withUnauthenticatedFallback(getClassrooms(token), []),
     // Student counts are supplementary — a failure here degrades to "—"
     // counts + a toast rather than failing the whole page.
     getStudents(token).then(

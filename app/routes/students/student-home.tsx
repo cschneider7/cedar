@@ -55,7 +55,11 @@ import {
   useStudentViewMode,
   type StudentViewMode,
 } from "~/hooks/use-student-view-mode"
-import { getClassrooms, getStudentsPage } from "~/lib/api"
+import {
+  getClassrooms,
+  getStudentsPage,
+  withUnauthenticatedFallback,
+} from "~/lib/api"
 import { getAuthToken } from "~/lib/auth-client"
 import { formatClassroomName } from "~/lib/classroom-term"
 import { getPageNumbers } from "~/lib/pagination"
@@ -93,9 +97,21 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
     url.searchParams.get("sort_dir") === "desc" ? "desc" : "asc"
 
   const [studentsPage, classroomsResult] = await Promise.all([
-    getStudentsPage(
-      { page, pageSize, q: q || undefined, sortBy, sortDir },
-      token
+    // A 401 here means the sign-in redirect (<RedirectToSignIn>) hasn't
+    // navigated away yet — degrade to an empty page rather than crashing
+    // the route out from under it.
+    withUnauthenticatedFallback(
+      getStudentsPage(
+        { page, pageSize, q: q || undefined, sortBy, sortDir },
+        token
+      ),
+      {
+        students: [],
+        page,
+        page_size: pageSize,
+        total_count: 0,
+        total_pages: 1,
+      }
     ),
     // Classrooms here only back badges, not load-bearing — a failure
     // degrades to unlabeled badges + a toast, not the whole page failing.
