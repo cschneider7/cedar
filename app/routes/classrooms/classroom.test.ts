@@ -5,7 +5,7 @@ import type {
   Separation,
   Student,
 } from "~/lib/schemas"
-import { makeArgs, stubFetch } from "~/lib/test-utils"
+import { expectLoaderData, makeArgs, stubFetch } from "~/lib/test-utils"
 import { clientLoader as loader } from "./classroom"
 
 const classroomId = "classroom-1"
@@ -89,7 +89,7 @@ describe("classroom loader", () => {
       .mockResolvedValueOnce(jsonResponse(students))
       .mockResolvedValueOnce(jsonResponse(separations))
 
-    const result = await loader(loaderArgs())
+    const result = expectLoaderData(await loader(loaderArgs()))
 
     expect(fetch).toHaveBeenCalledTimes(4)
     const [classroomUrl] = vi.mocked(fetch).mock.calls[0]

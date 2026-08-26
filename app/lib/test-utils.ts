@@ -38,3 +38,14 @@ export function makeArgs(
     context: {},
   } as any
 }
+
+/**
+ * Narrows a clientLoader's result, failing the test if it redirected instead
+ * of returning data.
+ */
+export function expectLoaderData<T>(result: Response | T): T {
+  if (result instanceof Response) {
+    throw new Error("expected loader data but got a redirect Response")
+  }
+  return result
+}
