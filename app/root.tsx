@@ -72,6 +72,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
 export default function App() {
   const navigate = useNavigate()
 
+  const handleNavigate = useCallback(
+    (href: string) => navigate(href),
+    [navigate]
+  )
+  const handleReplace = useCallback(
+    (href: string) => navigate(href, { replace: true }),
+    [navigate]
+  )
+
   const handleLink = useCallback(
     ({
       href,
@@ -94,8 +103,8 @@ export default function App() {
       <NeonAuthUIProvider
         authClient={authClient}
         emailVerification={{ otp: true }}
-        navigate={(href) => navigate(href)}
-        replace={(href) => navigate(href, { replace: true })}
+        navigate={handleNavigate}
+        replace={handleReplace}
         Link={handleLink}
       >
         <div className="flex h-dvh flex-col overflow-hidden [--header-height:calc(--spacing(14))]">
