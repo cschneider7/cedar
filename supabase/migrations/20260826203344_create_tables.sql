@@ -1,3 +1,8 @@
+-- Squashed schema (originally migrations 0001_create_tables through
+-- 0004_add_student_separations under sqlx-cli's migrations/ directory,
+-- combined here since Supabase now owns migrations and there is no
+-- production data to preserve across the old up/down history).
+
 -- Classrooms
 CREATE TABLE IF NOT EXISTS classrooms (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -56,14 +61,13 @@ CREATE TABLE IF NOT EXISTS student_separations (
     UNIQUE (student_id_a, student_id_b)
 );
 
--- Preview-environment read-only role
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'preview_readonly') THEN
-    CREATE ROLE preview_readonly LOGIN;
-  END IF;
-END
-$$;
+-- Preview-environment read-only role: Vercel Preview deployments connect as
+-- this role so create/edit/delete attempts fail with a Postgres permission
+-- error instead of mutating the shared Production data (Preview and
+-- Production share one Supabase project). Password is set out-of-band via
+-- `ALTER ROLE preview_readonly WITH PASSWORD '...'`, never committed here.
+CREATE ROLE preview_readonly LOGIN;
 GRANT USAGE ON SCHEMA public TO preview_readonly;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO preview_readonly;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO preview_readonly;
+;
