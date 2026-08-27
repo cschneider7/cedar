@@ -1,6 +1,6 @@
 import { Navigate } from "react-router"
 import { createSeparation } from "~/lib/api"
-import { tokenFromRequest } from "~/lib/auth"
+import { getAccessToken } from "~/lib/supabase/token"
 import { CreateSeparationSchema, type Separation } from "~/lib/schemas"
 import type { Route } from "./+types/create-separation"
 
@@ -13,10 +13,11 @@ export default function Component() {
   return <Navigate to="/classrooms" replace />
 }
 
-export async function action(
-  args: Route.ActionArgs
-): Promise<CreateSeparationResult> {
-  const rawData = await args.request.json()
+export async function action({
+  request,
+  context,
+}: Route.ActionArgs): Promise<CreateSeparationResult> {
+  const rawData = await request.json()
   const result = CreateSeparationSchema.safeParse(rawData)
 
   if (!result.success) {
@@ -26,7 +27,7 @@ export async function action(
   try {
     const separation = await createSeparation(
       result.data,
-      await tokenFromRequest(args)
+      await getAccessToken(context)
     )
     return { ok: true, separation }
   } catch (error) {

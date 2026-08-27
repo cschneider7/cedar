@@ -1,5 +1,5 @@
-import { ClerkProvider } from "@clerk/react-router"
-import { clerkMiddleware, rootAuthLoader } from "@clerk/react-router/server"
+import { SpeedInsights } from "@vercel/speed-insights/react"
+import { ThemeProvider } from "next-themes"
 import {
   Link,
   Links,
@@ -10,7 +10,6 @@ import {
   isRouteErrorResponse,
   useRevalidator,
 } from "react-router"
-import { SpeedInsights } from "@vercel/speed-insights/react"
 import { Spinner } from "~/components/ui/spinner"
 
 import { Button } from "~/components/ui/button"
@@ -23,58 +22,28 @@ import {
   CardTitle,
 } from "~/components/ui/card"
 import { Toaster } from "~/components/ui/toast"
-import { ThemeProvider } from "~/components/ui/theme-provider"
 import { TooltipProvider } from "~/components/ui/tooltip"
-import { getClassrooms, getStudentLimitStatus } from "~/lib/api"
+import { supabaseContext } from "~/lib/supabase/context"
+import { supabaseSessionMiddleware } from "~/middleware/supabase-session"
 import type { Route } from "./+types/root"
 import "./app.css"
 
-export const middleware: Route.MiddlewareFunction[] = [clerkMiddleware()]
-
-export const links: Route.LinksFunction = () => [
-  { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+export const middleware: Route.MiddlewareFunction[] = [
+  supabaseSessionMiddleware,
 ]
 
-export async function loader(args: Route.LoaderArgs) {
-  return rootAuthLoader(args, async ({ request }) => {
-    const { isAuthenticated, getToken } = request.auth
-    // Anonymous visitors (public pages like `/`) have no session to scope a
-    // classroom list to, and `/api/v1/classrooms` now 401s without one.
-    if (!isAuthenticated) {
-      return {
-        classrooms: [],
-        classroomsError: false,
-        studentCount: null,
-        studentLimit: null,
-      }
-    }
-    // This loader runs on every navigation/revalidation — a transient
-    // failure here must not take down the whole shell, so degrade instead.
-    // The student-limit fetch fails open (see student-limit.ts) on the same
-    // failure, since either fetch failing means the account's limit status
-    // can't be trusted.
-    try {
-      const token = await getToken()
-      const [classrooms, limitStatus] = await Promise.all([
-        getClassrooms(token),
-        getStudentLimitStatus(token),
-      ])
-      return {
-        classrooms,
-        classroomsError: false,
-        studentCount: limitStatus.count,
-        studentLimit: limitStatus.limit,
-      }
-    } catch {
-      return {
-        classrooms: [],
-        classroomsError: true,
-        studentCount: null,
-        studentLimit: null,
-      }
-    }
-  })
+export function loader({ context }: Route.LoaderArgs) {
+  const { user } = context.get(supabaseContext)
+  return {
+    isSignedIn: user !== null,
+    userEmail: user?.email ?? null,
+  }
 }
+
+export const links: Route.LinksFunction = () => [
+  { rel: "icon", type: "image/svg+xml", href: "/favicon.svg?v=2" },
+  { rel: "apple-touch-icon", href: "/icon.svg?v=2" },
+]
 
 export function HydrateFallback() {
   return (
@@ -89,30 +58,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Must stay in sync with ThemeProvider's logic below. Runs before render to avoid a light->dark flash on load. */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function () {
-              try {
-                var storageKey = "vite-ui-theme";
-                var resolved = localStorage.getItem(storageKey) || "light";
-                if (resolved === "system") {
-                  resolved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-                }
-                document.documentElement.classList.remove("light", "dark");
-                document.documentElement.classList.add(resolved);
-                document.documentElement.style.colorScheme = resolved;
-              } catch (e) {}
-            })();`,
-          }}
-        />
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
       </head>
       <body>
-        <ThemeProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          storageKey="vite-ui-theme"
+        >
           {children}
           <Toaster />
         </ThemeProvider>
@@ -124,15 +80,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
   )
 }
 
-export default function App({ loaderData }: Route.ComponentProps) {
+export default function App() {
   return (
-    <ClerkProvider loaderData={loaderData}>
-      <TooltipProvider delay={200}>
-        <div className="flex h-dvh flex-col overflow-hidden [--header-height:calc(--spacing(14))]">
-          <Outlet />
-        </div>
-      </TooltipProvider>
-    </ClerkProvider>
+    <TooltipProvider delay={200}>
+      <div className="flex h-dvh flex-col overflow-hidden [--header-height:calc(--spacing(14))]">
+        <Outlet />
+      </div>
+    </TooltipProvider>
   )
 }
 

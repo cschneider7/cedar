@@ -38,7 +38,7 @@ describe("classroom-seating-chart action", () => {
     expect(fetch).toHaveBeenCalledTimes(1)
     const [url, init] = vi.mocked(fetch).mock.calls[0]
     expect(url).toBe(
-      `http://localhost:3000/api/v1/classrooms/${classroomId}/seating-chart`
+      `http://localhost:3001/api/v1/classrooms/${classroomId}/seating-chart`
     )
     expect(init?.method).toBe("PUT")
     expect(JSON.parse(init?.body as string)).toEqual(chart)

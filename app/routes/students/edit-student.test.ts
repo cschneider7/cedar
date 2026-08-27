@@ -21,7 +21,7 @@ describe("edit-student action", () => {
 
     expect(fetch).toHaveBeenCalledTimes(1)
     const [patchUrl, patchInit] = vi.mocked(fetch).mock.calls[0]
-    expect(patchUrl).toBe(`http://localhost:3000/api/v1/students/${studentId}`)
+    expect(patchUrl).toBe(`http://localhost:3001/api/v1/students/${studentId}`)
     expect(patchInit?.method).toBe("PATCH")
     expect(JSON.parse(patchInit?.body as string)).toEqual({
       name: "Bob Updated",
@@ -37,7 +37,7 @@ describe("edit-student action", () => {
 
     expect(fetch).toHaveBeenCalledTimes(1)
     const [patchUrl, patchInit] = vi.mocked(fetch).mock.calls[0]
-    expect(patchUrl).toBe(`http://localhost:3000/api/v1/students/${studentId}`)
+    expect(patchUrl).toBe(`http://localhost:3001/api/v1/students/${studentId}`)
     expect(patchInit?.method).toBe("PATCH")
     expect(JSON.parse(patchInit?.body as string)).toEqual({
       seating_preference: null,

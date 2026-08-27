@@ -1,12 +1,15 @@
 import { Navigate } from "react-router"
 import type { MutationResult } from "~/lib/action-results"
 import { deleteClassroom } from "~/lib/api"
-import { tokenFromRequest } from "~/lib/auth"
+import { getAccessToken } from "~/lib/supabase/token"
 import type { Route } from "./+types/delete-classroom"
 
 export async function action(args: Route.ActionArgs): Promise<MutationResult> {
   try {
-    await deleteClassroom(args.params.classroomId, await tokenFromRequest(args))
+    await deleteClassroom(
+      args.params.classroomId,
+      await getAccessToken(args.context)
+    )
     return { ok: true, id: args.params.classroomId }
   } catch (error) {
     return { ok: false, error: (error as Error).message }

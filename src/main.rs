@@ -17,13 +17,13 @@ async fn main() {
 
     let frontend_origin =
         std::env::var("FRONTEND_ORIGIN").unwrap_or_else(|_| "http://localhost:5173".to_string());
-    let clerk_secret_key = std::env::var("CLERK_SECRET_KEY").expect("CLERK_SECRET_KEY must be set");
-
+    let supabase_url = std::env::var("SUPABASE_URL").expect("SUPABASE_URL must be set");
+    let supabase_auth_url = format!("{}/auth/v1", supabase_url.trim_end_matches('/'));
     let app_state = AppState::build().await;
-    let clerk_layer = auth::clerk_layer(&clerk_secret_key);
-    let app = create_router(app_state, Some(clerk_layer), frontend_origin);
+    let jwks_verifier = auth::JwksVerifier::new(&supabase_auth_url).await;
+    let app = create_router(app_state, Some(jwks_verifier), frontend_origin);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    println!("Server started successfully at 0.0.0.0:3000");
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3001").await.unwrap();
+    println!("Server started successfully at 0.0.0.0:3001");
     axum::serve(listener, app).await.unwrap();
 }

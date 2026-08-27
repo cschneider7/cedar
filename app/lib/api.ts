@@ -7,6 +7,7 @@ import {
   CreateClassroomSchema,
   CreateSeparationSchema,
   CreateStudentSchema,
+  ImageUploadUrlSchema,
   RandomizeSeatingChartOptionsSchema,
   SeatingChartSchema,
   SeparationSchema,
@@ -19,6 +20,7 @@ import {
   type Classroom,
   type ColdCall,
   type ColdCallPick,
+  type ImageUploadUrl,
   type RandomizeSeatingChartOptions,
   type SeatingChart,
   type Separation,
@@ -33,11 +35,7 @@ if (!RAW_API_URL) {
 }
 
 // VITE_API_URL is "/api/v1" (relative, same-origin) on Vercel — that only
-// resolves in the browser. Route loaders/actions run this same code
-// server-side too, where a bare relative path isn't a valid fetch() URL, so
-// resolve it against the deployment's own origin (VERCEL_URL, injected
-// automatically by Vercel) when running there. Local dev/docker-compose
-// already set an absolute VITE_API_URL, so this is a no-op for them.
+// resolves in the browser
 const IS_INTERNAL_SSR_FETCH =
   typeof window === "undefined" &&
   !RAW_API_URL.startsWith("http") &&
@@ -106,8 +104,7 @@ async function getErrorMessage(
 }
 
 /**
- * Attaches the Clerk session token as a bearer `Authorization` header —
- * every caller passes its own token; there's no ambient shared credential.
+ * Attaches the Supabase session token as a bearer `Authorization` header
  * @param token - The session token, if any.
  * @returns Headers with the bearer token, or `undefined` if no token.
  */
@@ -117,11 +114,7 @@ function withAuth(token?: string | null): HeadersInit | undefined {
 
 /**
  * Lets the SSR loader's own same-deployment request through Vercel
- * Deployment Protection (Vercel Authentication) — without it, this project
- * has no custom domain to exempt internal requests, so the protection layer
- * intercepts the call before it ever reaches the Rust function, and it comes
- * back as an HTML challenge page instead of JSON. `VERCEL_AUTOMATION_BYPASS_SECRET`
- * is auto-injected once any bypass secret exists for the project.
+ * Deployment Protection (Vercel Authentication)
  * @returns The bypass header, or `undefined` outside an internal SSR fetch.
  */
 function withProtectionBypass(): HeadersInit | undefined {
@@ -144,8 +137,7 @@ type ApiFetchOptions = {
  * Shared low-level fetch wrapper for every function below — builds the
  * request, maps failures to `ApiError`, and validates the response against `schema`.
  * @param path - The API path, appended to `API_URL`.
- * @param schema - Schema to validate/parse the response body against, or
- * `undefined` for an endpoint with no response body.
+ * @param schema - Schema to validate/parse the response body against
  * @param opts - Method, auth token, request body, and abort signal.
  * @returns The parsed response body, or `undefined` if `schema` is omitted.
  */
@@ -270,6 +262,23 @@ export async function getStudentLimitStatus(
   token?: string | null
 ): Promise<StudentLimitStatus> {
   return apiFetch(`/students/count`, StudentLimitStatusSchema, { token })
+}
+
+/**
+ * Requests a presigned S3 PUT URL for a student photo upload.
+ * @param contentLength - The file's byte size.
+ * @param token - The caller's session token, if any.
+ * @returns The presigned PUT URL and the S3 key it will land at.
+ */
+export async function requestStudentImageUploadUrl(
+  contentLength: number,
+  token?: string | null
+): Promise<ImageUploadUrl> {
+  return apiFetch(`/students/image-upload-url`, ImageUploadUrlSchema, {
+    method: "POST",
+    token,
+    body: { content_length: contentLength },
+  })
 }
 
 /**

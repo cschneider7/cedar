@@ -5,7 +5,7 @@ import type {
   Separation,
   Student,
 } from "~/lib/schemas"
-import { makeArgs, stubFetch } from "~/lib/test-utils"
+import { expectLoaderData, makeArgs, stubFetch } from "~/lib/test-utils"
 import { loader } from "./classroom"
 
 const classroomId = "classroom-1"
@@ -89,7 +89,7 @@ describe("classroom loader", () => {
       .mockResolvedValueOnce(jsonResponse(students))
       .mockResolvedValueOnce(jsonResponse(separations))
 
-    const result = await loader(loaderArgs())
+    const result = expectLoaderData(await loader(loaderArgs()))
 
     expect(fetch).toHaveBeenCalledTimes(4)
     const [classroomUrl] = vi.mocked(fetch).mock.calls[0]
@@ -97,13 +97,13 @@ describe("classroom loader", () => {
     const [studentsUrl] = vi.mocked(fetch).mock.calls[2]
     const [separationsUrl] = vi.mocked(fetch).mock.calls[3]
     expect(classroomUrl).toBe(
-      `http://localhost:3000/api/v1/classrooms/${classroomId}`
+      `http://localhost:3001/api/v1/classrooms/${classroomId}`
     )
     expect(seatingChartUrl).toBe(
-      `http://localhost:3000/api/v1/classrooms/${classroomId}/seating-chart`
+      `http://localhost:3001/api/v1/classrooms/${classroomId}/seating-chart`
     )
-    expect(studentsUrl).toBe("http://localhost:3000/api/v1/students")
-    expect(separationsUrl).toBe("http://localhost:3000/api/v1/separations")
+    expect(studentsUrl).toBe("http://localhost:3001/api/v1/students")
+    expect(separationsUrl).toBe("http://localhost:3001/api/v1/separations")
 
     expect(result.classroom).toEqual(classroom)
     expect(result.seatingChart).toEqual(seatingChart)

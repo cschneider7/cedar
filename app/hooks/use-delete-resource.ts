@@ -50,7 +50,6 @@ export function useDeleteResource({
     ) {
       navigate(navigateTo)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher.state, fetcher.data])
 
   return { isDeleting, error, submit: fetcher.submit }

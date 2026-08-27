@@ -32,8 +32,7 @@ async fn check_student_ownership(
     Ok(())
 }
 
-/// Lists every "keep apart" separation pair belonging to the current user
-/// (unscoped by classroom — the frontend filters to a classroom's roster).
+/// Lists every student separation pair belonging to the current user
 pub async fn list_separations_handler(
     CurrentUserId(user_id): CurrentUserId,
     State(data): State<Arc<AppState>>,
@@ -46,9 +45,7 @@ pub async fn list_separations_handler(
     Ok((StatusCode::OK, Json(json!({"data": separations}))))
 }
 
-/// Creates a "keep apart" separation between two students, both of which
-/// must belong to the current user. Idempotent: adding an already-existing
-/// pair (in either order) returns the existing row instead of erroring.
+/// Creates a student separation between two students
 pub async fn create_separation_handler(
     CurrentUserId(user_id): CurrentUserId,
     State(data): State<Arc<AppState>>,
@@ -74,7 +71,7 @@ pub async fn create_separation_handler(
         ON CONFLICT (student_id_a, student_id_b) DO NOTHING
         RETURNING *",
     )
-    .bind(&user_id)
+    .bind(user_id)
     .bind(id_a)
     .bind(id_b)
     .fetch_optional(&data.db)
@@ -95,7 +92,7 @@ pub async fn create_separation_handler(
     Ok((StatusCode::CREATED, Json(json!({"data": separation}))))
 }
 
-/// Deletes a separation pair, scoped to the current user.
+/// Deletes a separation pair
 pub async fn delete_separation_handler(
     CurrentUserId(user_id): CurrentUserId,
     Path(id): Path<Uuid>,
@@ -129,7 +126,7 @@ mod tests {
         student_id: i32,
         name: &str,
     ) -> Uuid {
-        let id: Uuid = sqlx::query_scalar(
+        sqlx::query_scalar(
             "INSERT INTO students (user_id, classroom_id, student_id, name)
             VALUES ($1, NULL, $2, $3)
             RETURNING id",
@@ -139,8 +136,7 @@ mod tests {
         .bind(name)
         .fetch_one(pool)
         .await
-        .unwrap();
-        id
+        .unwrap()
     }
 
     #[sqlx::test]

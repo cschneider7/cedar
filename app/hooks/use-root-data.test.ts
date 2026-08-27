@@ -1,8 +1,7 @@
-import { getAuth } from "@clerk/react-router/server"
 import { describe, expect, it, vi } from "vitest"
+import { stubFetch } from "~/lib/test-utils"
 import type { Classroom } from "~/lib/schemas"
-import { makeArgs, stubFetch } from "~/lib/test-utils"
-import { loader } from "./root"
+import { fetchRootData } from "./use-root-data"
 
 function jsonResponse(data: unknown) {
   return new Response(JSON.stringify({ data }), { status: 200 })
@@ -10,8 +9,8 @@ function jsonResponse(data: unknown) {
 
 stubFetch()
 
-describe("root loader", () => {
-  it("returns the user's classrooms and student limit status when authenticated", async () => {
+describe("fetchRootData", () => {
+  it("returns the user's classrooms and student limit status on success", async () => {
     const classrooms: Classroom[] = [
       {
         id: "classroom-1",
@@ -28,13 +27,13 @@ describe("root loader", () => {
       .mockResolvedValueOnce(jsonResponse(classrooms))
       .mockResolvedValueOnce(jsonResponse({ count: 12, limit: 850 }))
 
-    const result = await loader(makeArgs("http://localhost/"))
+    const result = await fetchRootData("test-token")
 
     expect(fetch).toHaveBeenCalledTimes(2)
     const [classroomsUrl] = vi.mocked(fetch).mock.calls[0]
-    expect(classroomsUrl).toBe("http://localhost:3000/api/v1/classrooms")
+    expect(classroomsUrl).toBe("http://localhost:3001/api/v1/classrooms")
     const [limitUrl] = vi.mocked(fetch).mock.calls[1]
-    expect(limitUrl).toBe("http://localhost:3000/api/v1/students/count")
+    expect(limitUrl).toBe("http://localhost:3001/api/v1/students/count")
     expect(result).toEqual({
       classrooms,
       classroomsError: false,
@@ -43,29 +42,12 @@ describe("root loader", () => {
     })
   })
 
-  it("returns no classrooms or student limit status when unauthenticated", async () => {
-    vi.mocked(getAuth).mockResolvedValueOnce({
-      isAuthenticated: false,
-      getToken: async () => null,
-    } as Awaited<ReturnType<typeof getAuth>>)
-
-    const result = await loader(makeArgs("http://localhost/"))
-
-    expect(fetch).not.toHaveBeenCalled()
-    expect(result).toEqual({
-      classrooms: [],
-      classroomsError: false,
-      studentCount: null,
-      studentLimit: null,
-    })
-  })
-
   it("degrades to empty/null instead of throwing when either fetch fails", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response("Internal Server Error", { status: 500 })
     )
 
-    const result = await loader(makeArgs("http://localhost/"))
+    const result = await fetchRootData("test-token")
 
     expect(result).toEqual({
       classrooms: [],

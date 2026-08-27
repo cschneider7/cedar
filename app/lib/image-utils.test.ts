@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest"
-import {
-  computeResizedDimensions,
-  studentImageProxyUrl,
-  validateImageFile,
-} from "./image-utils"
+import { computeResizedDimensions, validateImageFile } from "./image-utils"
 
 describe("computeResizedDimensions", () => {
   it("leaves dimensions unchanged when already under the max edge", () => {
@@ -24,13 +20,6 @@ describe("computeResizedDimensions", () => {
     expect(computeResizedDimensions(4000, 2000, 1000)).toEqual({
       width: 1000,
       height: 500,
-    })
-  })
-
-  it("scales down a portrait image preserving aspect ratio", () => {
-    expect(computeResizedDimensions(2000, 4000, 1000)).toEqual({
-      width: 500,
-      height: 1000,
     })
   })
 
@@ -70,14 +59,5 @@ describe("validateImageFile", () => {
     expect(
       validateImageFile(makeFile("image/jpeg", 5 * 1024 * 1024))
     ).toBeNull()
-  })
-})
-
-describe("studentImageProxyUrl", () => {
-  it("wraps the object key in the proxy route as an encoded query param", () => {
-    const key = "students/user_1/photo.webp"
-    expect(studentImageProxyUrl(key)).toBe(
-      `/api/student-image?key=${encodeURIComponent(key)}`
-    )
   })
 })

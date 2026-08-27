@@ -1,11 +1,13 @@
 import { PencilIcon } from "lucide-react"
 import { useMemo, useState } from "react"
-import { Link, Outlet, useLocation, useRouteLoaderData } from "react-router"
+import { Link, Outlet, useLocation } from "react-router"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
 import { PinToggleButton } from "~/components/pin-toggle-button"
+import { RouteHydrateFallback } from "~/components/route-hydrate-fallback"
 import { Button } from "~/components/ui/button"
 import { Separator } from "~/components/ui/separator"
 import { tabsListVariants } from "~/components/ui/tabs"
+import { useRootData } from "~/hooks/use-root-data"
 import {
   getClassroom,
   getClassroomSeatingChart,
@@ -13,7 +15,7 @@ import {
   getStudents,
   toRouteError,
 } from "~/lib/api"
-import { tokenFromRequest } from "~/lib/auth"
+import { getAccessToken } from "~/lib/supabase/token"
 import type { BreadcrumbHandle } from "~/lib/breadcrumb"
 import { getPinnedClassrooms } from "~/lib/classroom-limit"
 import {
@@ -22,7 +24,6 @@ import {
 } from "~/lib/classroom-tabs"
 import { formatClassroomName, formatTerm } from "~/lib/classroom-term"
 import { INITIAL_WEIGHT } from "~/lib/seating-chart-utils"
-import type { loader as rootLoader } from "~/root"
 import type { Route } from "./+types/classroom"
 
 const TABS: { value: ClassroomTab; label: string }[] = [
@@ -55,11 +56,9 @@ export function meta({}: Route.MetaArgs) {
   ]
 }
 
-export async function loader(args: Route.LoaderArgs) {
-  const token = await tokenFromRequest(args)
-  const { params } = args
-  // Unlike other loaders here, failures are NOT degraded gracefully — a
-  // seating chart can't render meaningfully with a partial roster/chart.
+export async function loader({ params, context }: Route.LoaderArgs) {
+  const token = await getAccessToken(context)
+
   try {
     const [classroom, seatingChart, allStudents, allSeparations] =
       await Promise.all([
@@ -83,6 +82,10 @@ export async function loader(args: Route.LoaderArgs) {
   }
 }
 
+export function HydrateFallback() {
+  return <RouteHydrateFallback />
+}
+
 export type ClassroomOutletContext = {
   coldCallWeights: Record<string, number>
   setColdCallWeights: (weights: Record<string, number>) => void
@@ -90,8 +93,8 @@ export type ClassroomOutletContext = {
 
 export default function Component({ loaderData }: Route.ComponentProps) {
   const { classroom, students } = loaderData
-  const rootData = useRouteLoaderData<typeof rootLoader>("root")
-  const pinnedCount = getPinnedClassrooms(rootData?.classrooms ?? []).length
+  const rootData = useRootData()
+  const pinnedCount = getPinnedClassrooms(rootData.classrooms).length
 
   const location = useLocation()
   const activeTab = classroomTabFromPathname(location.pathname, classroom.id)

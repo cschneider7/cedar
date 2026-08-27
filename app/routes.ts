@@ -7,13 +7,17 @@ import {
 } from "@react-router/dev/routes"
 
 export default [
-  route("login", "routes/auth/login.tsx"),
-  route("signup", "routes/auth/signup.tsx"),
-  route("api/student-image-upload", "routes/api/student-image-upload.tsx"),
-  route("api/student-image", "routes/api/student-image.tsx"),
+  layout("layouts/auth.tsx", [
+    route("login", "routes/auth/login.tsx"),
+    route("signup", "routes/auth/signup.tsx"),
+    route("forgot-password", "routes/auth/forgot-password.tsx"),
+    route("reset-password", "routes/auth/reset-password.tsx"),
+  ]),
+  route("auth/callback", "routes/auth/callback.tsx"),
   route("api/quick-search", "routes/api/quick-search.tsx"),
   layout("layouts/app-shell.tsx", [
     index("routes/home.tsx"),
+    route("account", "routes/account.tsx"),
 
     ...prefix("students", [
       layout("layouts/students.tsx", [

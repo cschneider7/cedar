@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import type { Classroom, StudentsPage } from "~/lib/schemas"
-import { makeArgs, stubFetch } from "~/lib/test-utils"
+import { expectLoaderData, makeArgs, stubFetch } from "~/lib/test-utils"
 import { loader } from "./student-home"
 
 function jsonResponse(data: unknown) {
@@ -62,10 +62,12 @@ describe("student-home loader", () => {
       .mockResolvedValueOnce(jsonResponse({ ...emptyPage, page_size: 20 }))
       .mockResolvedValueOnce(jsonResponse(noClassrooms))
 
-    const result = await loader(
-      makeArgs("http://test/students", {
-        headers: { Cookie: "students-view-mode=list" },
-      })
+    const result = expectLoaderData(
+      await loader(
+        makeArgs("http://test/students", {
+          headers: { Cookie: "students-view-mode=list" },
+        })
+      )
     )
 
     expect(result.viewMode).toBe("list")
@@ -78,10 +80,12 @@ describe("student-home loader", () => {
       .mockResolvedValueOnce(jsonResponse(emptyPage))
       .mockResolvedValueOnce(jsonResponse(noClassrooms))
 
-    const result = await loader(
-      makeArgs("http://test/students?view=grid", {
-        headers: { Cookie: "students-view-mode=list" },
-      })
+    const result = expectLoaderData(
+      await loader(
+        makeArgs("http://test/students?view=grid", {
+          headers: { Cookie: "students-view-mode=list" },
+        })
+      )
     )
 
     expect(result.viewMode).toBe("grid")
@@ -169,7 +173,9 @@ describe("student-home loader", () => {
       .mockResolvedValueOnce(jsonResponse(page))
       .mockResolvedValueOnce(jsonResponse(classrooms))
 
-    const result = await loader(makeArgs("http://test/students"))
+    const result = expectLoaderData(
+      await loader(makeArgs("http://test/students"))
+    )
 
     expect(result.studentsPage).toEqual(page)
     expect(result.page).toBe(1)

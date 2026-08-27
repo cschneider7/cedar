@@ -1,14 +1,14 @@
 import { Navigate } from "react-router"
 import type { MutationResult } from "~/lib/action-results"
 import { deleteSeparation } from "~/lib/api"
-import { tokenFromRequest } from "~/lib/auth"
+import { getAccessToken } from "~/lib/supabase/token"
 import type { Route } from "./+types/delete-separation"
 
 export async function action(args: Route.ActionArgs): Promise<MutationResult> {
   try {
     await deleteSeparation(
       args.params.separationId,
-      await tokenFromRequest(args)
+      await getAccessToken(args.context)
     )
     return { ok: true, id: args.params.separationId }
   } catch (error) {

@@ -1,6 +1,6 @@
 import { SeatingChartCanvas } from "~/components/seating-chart/seating-chart-canvas"
 import { updateClassroomSeatingChart } from "~/lib/api"
-import { tokenFromRequest } from "~/lib/auth"
+import { getAccessToken } from "~/lib/supabase/token"
 import { useClassroomData } from "~/lib/classroom-route-data"
 import { SeatingChartSchema } from "~/lib/schemas"
 import type { Route } from "./+types/classroom-seating-chart"
@@ -17,7 +17,7 @@ export async function action(args: Route.ActionArgs) {
     await updateClassroomSeatingChart(
       args.params.classroomId,
       result.data,
-      await tokenFromRequest(args)
+      await getAccessToken(args.context)
     )
   } catch (error) {
     return { ok: false, error: (error as Error).message }

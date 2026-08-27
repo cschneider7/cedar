@@ -1,4 +1,6 @@
+import type { RouterContextProvider } from "react-router"
 import { afterEach, beforeEach, vi } from "vitest"
+import { createTestContext } from "~/lib/auth-test-setup"
 
 /**
  * Registers the fetch-stub lifecycle every action/loader test file needs.
@@ -25,9 +27,10 @@ export function makeArgs(
     params?: Record<string, string>
     body?: unknown
     headers?: Record<string, string>
+    context?: RouterContextProvider
   } = {}
 ) {
-  const { method = "GET", params = {}, body, headers } = options
+  const { method = "GET", params = {}, body, headers, context } = options
   return {
     request: new Request(url, {
       method,
@@ -35,6 +38,17 @@ export function makeArgs(
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     }),
     params,
-    context: {},
+    context: context ?? createTestContext(),
   } as any
+}
+
+/**
+ * Narrows a clientLoader's result, failing the test if it redirected instead
+ * of returning data.
+ */
+export function expectLoaderData<T>(result: Response | T): T {
+  if (result instanceof Response) {
+    throw new Error("expected loader data but got a redirect Response")
+  }
+  return result
 }

@@ -186,7 +186,6 @@ function SeatingChartEditor({
     if (locked) {
       setNodes(buildInitialNodes(classroomId, seatingChart, studentsById))
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locked, seatingChart, studentsById])
 
   const boundary = useMemo(() => getBoundary(nodes), [nodes])

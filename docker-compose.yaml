@@ -1,115 +1,48 @@
+# Docker Compose file for local development of the Cedar project
+name: cedar
+
 services:
-  postgres:
-    image: postgres:18
-    container_name: postgres
-    env_file:
-      - ./.env
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgresDb:/var/lib/postgresql
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-cedar}",
-        ]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
-
-  minio:
-    image: minio/minio
-    container_name: minio
-    env_file:
-      - ./.env
-    environment:
-      MINIO_API_CORS_ALLOW_ORIGIN: http://localhost:5173
-    command: server /data --console-address ":9001"
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minioData:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
-
-  minio-init:
-    image: minio/mc
-    container_name: minio-init
-    env_file:
-      - ./.env
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" &&
-      mc mb --ignore-existing local/\"$$S3_BUCKET\"
-      "
-    restart: "no"
-
-  backend:
+  api:
     build:
       context: .
       dockerfile: Dockerfile
       target: backend-dev
-    container_name: backend
+    container_name: cedar-api
     env_file:
       - ./.env
-    environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-cedar}
-      S3_ENDPOINT: http://minio:9000
-    ports:
-      - "3000:3000"
+    command: >
+      sh -c "cargo watch --workdir /app -w src -x 'run --bin class_management'"
+    network_mode: host
     volumes:
       - .:/app
       - backend_cargo_registry:/usr/local/cargo/registry
       - backend_cargo_git:/usr/local/cargo/git
       - backend_target:/app/target
-    depends_on:
-      postgres:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 5s
       timeout: 3s
       retries: 20
       start_period: 10s
 
-  frontend:
+  ui:
     build:
       context: .
       dockerfile: Dockerfile
       target: frontend-dev
-    container_name: frontend
+    container_name: cedar-ui
     env_file:
       - ./.env
-    environment:
-      VITE_API_URL: http://backend:3000/api/v1
-      S3_ENDPOINT: http://minio:9000
-    ports:
-      - "5173:5173"
+    network_mode: host
     volumes:
       - .:/app
       - frontend_node_modules:/app/node_modules
     depends_on:
-      backend:
-        condition: service_healthy
-      minio:
+      api:
         condition: service_healthy
 
 volumes:
-  postgresDb:
   backend_cargo_registry:
   backend_cargo_git:
   backend_target:
   frontend_node_modules:
-  minioData:

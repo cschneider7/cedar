@@ -1,39 +1,26 @@
-# Single source of truth for the toolchain/runtime versions used by every
-# stage below — bump these (not the FROM lines) when the repo's own pinned
-# versions change, instead of hunting down each `FROM node:...`/`FROM rust:...`.
-# RUST_VERSION must match rust-toolchain.toml's `channel`; NODE_VERSION must
-# match the version pinned in .github/workflows/node.js.yml.
 ARG RUST_VERSION=1.97.1
 ARG NODE_VERSION=26
 
 # ---------------------------------------------------------------------------
-# Backend (Rust/Axum, class_management package) — target: backend-dev
-# (production runs as Vercel Functions, built by Vercel itself — see
-# vercel.json/api/index.rs — not by this Dockerfile.)
+# Backend (Rust/Axum, class_management package)
 # ---------------------------------------------------------------------------
 FROM rust:${RUST_VERSION}-slim-trixie AS backend-system-deps
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      pkg-config libssl-dev curl \
+      curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Dev image (docker-compose.yaml builds this with `target: backend-dev`).
-# Application source is bind-mounted at runtime for cargo-watch hot reload,
-# not baked into the image — see docker-entrypoint.backend.sh.
+# Development image
 FROM backend-system-deps AS backend-dev
 RUN cargo install cargo-watch \
-    && cargo install sqlx-cli --version 0.9.0 --no-default-features --features postgres,native-tls
+    && cargo install sqlx-cli --version 0.9.0 --no-default-features --features postgres,rustls
 
 COPY Cargo.toml Cargo.lock ./
 RUN mkdir -p src \
     && echo "fn main() {}" > src/main.rs \
     && cargo fetch --locked
 
-COPY docker-entrypoint.backend.sh /usr/local/bin/docker-entrypoint.backend.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.backend.sh
-
-EXPOSE 3000
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.backend.sh"]
+EXPOSE 3001
 
 # ---------------------------------------------------------------------------
 # Frontend (React Router) — targets: frontend-dev, frontend (default target)
@@ -43,26 +30,16 @@ COPY . /app
 WORKDIR /app
 RUN npm ci
 
-# Dev image (docker-compose.yaml builds this with `target: frontend-dev`).
-# Application source is bind-mounted at runtime for Vite HMR, not baked in.
-# node_modules lives in a named volume (see docker-compose.yaml) so the bind
-# mount doesn't shadow it with the host's — the `npm ci` below only seeds
-# that volume on its first population; docker-entrypoint.frontend.sh is
-# what actually keeps it in sync with package-lock.json on every start.
+# Development image
 FROM node:${NODE_VERSION}-alpine AS frontend-dev
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
-COPY docker-entrypoint.frontend.sh /usr/local/bin/docker-entrypoint.frontend.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.frontend.sh
-
 EXPOSE 5173
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.frontend.sh"]
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 
-# Production build — last stage in the file, so it's also the default
-# target for any build that doesn't pass --target explicitly.
+# Production image
 FROM node:${NODE_VERSION}-alpine AS frontend-production-dependencies-env
 COPY ./package.json package-lock.json /app/
 WORKDIR /app

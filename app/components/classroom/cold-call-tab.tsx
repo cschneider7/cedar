@@ -85,7 +85,6 @@ export function ColdCallTab({
       onWeightsChange(nextWeights)
       setHasPicked(true)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher.state, fetcher.data])
 
   const picked =

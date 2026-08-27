@@ -232,7 +232,6 @@ export function SeatingPreferencesDialog({
     setAvoided(buildAvoided(students, separations))
     setError(null)
     setSearch(initialSearch ?? "")
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, students, separations])
 
   function handleAvoidedChange(studentId: string, nextIds: string[]) {

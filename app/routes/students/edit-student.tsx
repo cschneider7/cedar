@@ -1,12 +1,12 @@
 import { Navigate } from "react-router"
 import type { MutationResult } from "~/lib/action-results"
 import { getClassrooms, updateStudent } from "~/lib/api"
-import { tokenFromRequest } from "~/lib/auth"
+import { getAccessToken } from "~/lib/supabase/token"
 import { UpdateStudentSchema } from "~/lib/schemas"
 import type { Route } from "./+types/edit-student"
 
-export async function loader(args: Route.LoaderArgs) {
-  const token = await tokenFromRequest(args)
+export async function loader({ context }: Route.LoaderArgs) {
+  const token = await getAccessToken(context)
   const classrooms = await getClassrooms(token)
   return { classrooms: classrooms }
 }
@@ -17,8 +17,11 @@ export default function Component() {
   return <Navigate to="/students" replace />
 }
 
-export async function action(args: Route.ActionArgs): Promise<MutationResult> {
-  const { params, request } = args
+export async function action({
+  params,
+  request,
+  context,
+}: Route.ActionArgs): Promise<MutationResult> {
   const rawData = await request.json()
   const result = UpdateStudentSchema.safeParse(rawData)
 
@@ -30,7 +33,7 @@ export async function action(args: Route.ActionArgs): Promise<MutationResult> {
     await updateStudent(
       params.studentId,
       result.data,
-      await tokenFromRequest(args)
+      await getAccessToken(context)
     )
     return { ok: true, id: params.studentId }
   } catch (error) {

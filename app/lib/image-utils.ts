@@ -8,16 +8,6 @@ export const OUTPUT_IMAGE_TYPE = "image/webp"
 export const OUTPUT_IMAGE_QUALITY = 0.85
 
 /**
- * Builds the URL a student's private photo must be fetched through, since
- * the S3-compatible bucket is private (see the "api/student-image" route).
- * @param imageKey - The student's stored `image_url` (an S3 object key)
- * @returns The proxy URL to use as an `<img>` `src`
- */
-export function studentImageProxyUrl(imageKey: string): string {
-  return `/api/student-image?key=${encodeURIComponent(imageKey)}`
-}
-
-/**
  * Computes aspect-ratio-preserving output dimensions capped to a max edge
  * length, leaving already-small dimensions untouched.
  * @param width - Original width in pixels

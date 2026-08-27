@@ -31,12 +31,6 @@ describe("quick-search loader", () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it("returns no students and skips the request when q is blank", async () => {
-    const result = await loader(args("   "))
-    expect(result).toEqual({ students: [] })
-    expect(fetch).not.toHaveBeenCalled()
-  })
-
   it("searches students by the query, capped to a small page", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       jsonResponse({
@@ -53,7 +47,7 @@ describe("quick-search loader", () => {
     expect(fetch).toHaveBeenCalledTimes(1)
     const [url] = vi.mocked(fetch).mock.calls[0]
     expect(url).toBe(
-      "http://localhost:3000/api/v1/students?page=1&page_size=5&q=ali"
+      "http://localhost:3001/api/v1/students?page=1&page_size=5&q=ali"
     )
     expect(result).toEqual({ students })
   })

@@ -1,7 +1,7 @@
-import { getAuth } from "@clerk/react-router/server"
 import { ArrowUpRightIcon, ClipboardList, UsersRound } from "lucide-react"
 import { useEffect } from "react"
 import { Link } from "react-router"
+import { RouteHydrateFallback } from "~/components/route-hydrate-fallback"
 import {
   Item,
   ItemActions,
@@ -13,6 +13,8 @@ import {
 } from "~/components/ui/item"
 import { toast } from "~/components/ui/toast"
 import { getClassrooms, getStudents } from "~/lib/api"
+import { supabaseContext } from "~/lib/supabase/context"
+import { getAccessToken } from "~/lib/supabase/token"
 import type { Route } from "./+types/home"
 
 export function meta({}: Route.MetaArgs) {
@@ -25,22 +27,16 @@ export function meta({}: Route.MetaArgs) {
   ]
 }
 
-export async function loader(args: Route.LoaderArgs) {
-  const { isAuthenticated, getToken } = await getAuth(args)
-  // `/` is a public route (unlike students/classrooms, it has no `requireAuth`
-  // middleware) — an anonymous visitor has no session to scope data to, and
-  // the backend 401s without one, so skip the calls entirely rather than
-  // surfacing that 401 as an error toast.
-  if (!isAuthenticated) {
+export async function loader({ context }: Route.LoaderArgs) {
+  const { user } = context.get(supabaseContext)
+  if (!user) {
     return {
-      isAuthenticated: false as const,
+      isSignedIn: false,
       classroomsError: false,
       studentsError: false,
     }
   }
-  const token = await getToken()
-  // Classrooms/students are only fetched to detect a reachability failure
-  // for the toasts below — the dashboard doesn't display their data itself.
+  const token = await getAccessToken(context)
   const [classroomsFailed, studentsFailed] = await Promise.all([
     getClassrooms(token).then(
       () => false,
@@ -52,10 +48,14 @@ export async function loader(args: Route.LoaderArgs) {
     ),
   ])
   return {
-    isAuthenticated: true as const,
+    isSignedIn: true,
     classroomsError: classroomsFailed,
     studentsError: studentsFailed,
   }
+}
+
+export function HydrateFallback() {
+  return <RouteHydrateFallback />
 }
 
 /**
@@ -120,7 +120,7 @@ function StatTile({
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { isAuthenticated, classroomsError, studentsError } = loaderData
+  const { isSignedIn, classroomsError, studentsError } = loaderData
 
   useEffect(() => {
     if (classroomsError)
@@ -139,9 +139,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           Manage your students, classrooms, and seating charts.
         </p>
       </div>
-      {!isAuthenticated ? (
-        <SignedOutHome />
-      ) : (
+      {isSignedIn ? (
         <ItemGroup className="w-full max-w-md">
           <StatTile
             icon={<ClipboardList className="size-7" />}
@@ -154,6 +152,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             to="/students"
           />
         </ItemGroup>
+      ) : (
+        <SignedOutHome />
       )}
     </div>
   )

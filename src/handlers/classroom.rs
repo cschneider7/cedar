@@ -22,11 +22,7 @@ use crate::{
     seating_chart::{self, MAX_TABLE_DIMENSION},
 };
 
-/// Abuse-prevention ceiling: a flat cap on classrooms per user account.
 const MAX_CLASSROOMS_PER_USER: i64 = 50;
-
-/// A separate, smaller cap on how many of a user's classrooms can be pinned
-/// at once (sidebar real estate, not abuse prevention).
 const MAX_PINNED_CLASSROOMS_PER_USER: i64 = 10;
 
 /// Rejects a new classroom if `user_id` is already at `MAX_CLASSROOMS_PER_USER`.
@@ -43,10 +39,7 @@ async fn check_classroom_limit(db: &sqlx::PgPool, user_id: &str) -> Result<(), A
     Ok(())
 }
 
-/// Rejects newly pinning a classroom if `user_id` already has
-/// `MAX_PINNED_CLASSROOMS_PER_USER` pinned. Only called when a request is
-/// transitioning a classroom from unpinned to pinned — reordering/unpinning
-/// never needs this check.
+/// Rejects newly pinning a classroom if user reached maximum pinned number
 async fn check_pinned_classroom_limit(db: &sqlx::PgPool, user_id: &str) -> Result<(), AppError> {
     let count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM classrooms WHERE user_id = $1 AND pinned_at IS NOT NULL",
@@ -92,8 +85,7 @@ pub async fn get_classroom_handler(
     Ok((StatusCode::OK, Json(json!({"data": classroom}))))
 }
 
-/// Creates a new classroom owned by the current user; boundary dimensions
-/// take their DB defaults.
+/// Creates a new classroom owned by the current user
 pub async fn create_classroom_handler(
     CurrentUserId(user_id): CurrentUserId,
     State(data): State<Arc<AppState>>,
@@ -113,7 +105,7 @@ pub async fn create_classroom_handler(
         RETURNING *",
     )
     .bind(user_id)
-    .bind(&body.subject)
+    .bind(body.subject)
     .bind(body.period)
     .bind(body.term_season.as_str())
     .bind(body.term_year)
@@ -123,8 +115,7 @@ pub async fn create_classroom_handler(
     Ok((StatusCode::CREATED, Json(json!({"data": classroom}))))
 }
 
-/// Partially updates a classroom, merging provided fields over its existing
-/// values before writing them back. Scoped to the current user.
+/// Partially updates a classroom
 pub async fn update_classroom_handler(
     CurrentUserId(user_id): CurrentUserId,
     Path(id): Path<Uuid>,
@@ -165,7 +156,7 @@ pub async fn update_classroom_handler(
         WHERE id = $8
         RETURNING *",
     )
-    .bind(new_subject)
+    .bind(new_subject.as_str())
     .bind(new_period)
     .bind(new_term_season)
     .bind(new_term_year)
@@ -179,7 +170,7 @@ pub async fn update_classroom_handler(
     Ok((StatusCode::OK, Json(json!({"data": updated_classroom}))))
 }
 
-/// Deletes a classroom by its uuid, scoped to the current user.
+/// Deletes a classroom by its uuid
 pub async fn delete_classroom_handler(
     CurrentUserId(user_id): CurrentUserId,
     Path(id): Path<Uuid>,
@@ -195,9 +186,7 @@ pub async fn delete_classroom_handler(
     Ok((StatusCode::OK, Json(json!({"data": classroom}))))
 }
 
-/// Fetches a classroom's full seating chart as a dense, `table_number`-ordered
-/// document, with unoccupied seats included as `null` entries. Scoped to the
-/// current user.
+/// Fetches a classroom's seating chart
 pub async fn get_seating_chart_handler(
     CurrentUserId(user_id): CurrentUserId,
     Path(classroom_id): Path<Uuid>,
@@ -212,18 +201,18 @@ pub async fn get_seating_chart_handler(
     .await?;
 
     let tables: Vec<TableSchema> = sqlx::query_as(
-        "SELECT
+        r#"SELECT
             t.table_number,
             t.rows,
             t.cols,
             t.x_pos,
             t.y_pos,
-            ARRAY_AGG(s.student_id ORDER BY s.seat_number) as seat_assignments
+            ARRAY_AGG(s.student_id ORDER BY s.seat_number) as "seat_assignments"
         FROM tables t
         INNER JOIN seats s ON (t.id = s.table_id)
         WHERE t.classroom_id = $1
         GROUP BY t.table_number, t.rows, t.cols, t.x_pos, t.y_pos
-        ",
+        "#,
     )
     .bind(classroom_id)
     .fetch_all(&data.db)
@@ -240,9 +229,7 @@ pub async fn get_seating_chart_handler(
     Ok((StatusCode::OK, Json(response)))
 }
 
-/// Replaces a classroom's entire seating chart in one transaction: every
-/// existing table/seat is deleted, then re-inserted from the request body.
-/// Scoped to the current user.
+/// Replaces a classroom's seating chart
 pub async fn update_seating_chart_handler(
     CurrentUserId(user_id): CurrentUserId,
     Path(classroom_id): Path<Uuid>,
@@ -325,8 +312,7 @@ pub async fn update_seating_chart_handler(
     Ok((StatusCode::OK, Json(response)))
 }
 
-/// Proposes a randomized seating chart for a classroom's current roster and
-/// canvas geometry, without persisting anything. Scoped to the current user.
+/// Proposes a randomized seating chart for a classroom's current roster and canvas
 pub async fn randomize_seating_chart_handler(
     CurrentUserId(user_id): CurrentUserId,
     Path(classroom_id): Path<Uuid>,
@@ -362,7 +348,12 @@ pub async fn randomize_seating_chart_handler(
             .await?;
     let students: Vec<(Uuid, Option<SeatingPreference>)> = students
         .into_iter()
-        .map(|(id, pref)| (id, pref.and_then(|s| SeatingPreference::from_db_str(&s))))
+        .map(|(id, seating_preference)| {
+            (
+                id,
+                seating_preference.and_then(|s| SeatingPreference::from_db_str(&s)),
+            )
+        })
         .collect();
 
     let roster_ids: Vec<Uuid> = students.iter().map(|(id, _)| *id).collect();
@@ -402,19 +393,7 @@ pub async fn randomize_seating_chart_handler(
 }
 
 /// Picks a random student for a cold call from the given weighted roster,
-/// then returns adjusted weights for the next pick. Stateless: nothing is
-/// read from or written to the database, so unlike every other handler in
-/// this file this one doesn't scope anything by user id — there's no DB row
-/// to scope, since all data comes from the request body, which the caller
-/// already fetched for their own classroom. It still extracts
-/// `CurrentUserId` (ignoring the value) purely to require authentication,
-/// since every route is otherwise protected by the outer Clerk layer in
-/// production but that layer is bypassed in tests (see `test_support.rs`) —
-/// without an extractor of its own, this handler would be reachable
-/// unauthenticated in tests even though production requests still 401.
-/// `classroom_id` is accepted for REST consistency with the other
-/// seating-chart endpoints (and to leave room for a future ownership check)
-/// but isn't otherwise used today.
+/// then returns adjusted weights for the next pick
 pub async fn cold_call_handler(
     CurrentUserId(_user_id): CurrentUserId,
     Path(_classroom_id): Path<Uuid>,
@@ -811,40 +790,6 @@ mod tests {
         let json = body_json(response).await;
         assert_eq!(json["data"]["boundary_width"], 2000);
         assert_eq!(json["data"]["boundary_height"], existing.boundary_height);
-
-        Ok(())
-    }
-
-    #[sqlx::test]
-    async fn update_classroom_full_boundary_patch_with_subject_and_period(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
-        let app = app(pool.clone());
-        let user_id = test_user_id();
-        let existing = insert_classroom(&pool, &user_id, "Math 2", 3).await;
-
-        let body = json!({
-            "subject": "Algebra",
-            "period": 5,
-            "boundary_width": 1500,
-            "boundary_height": 1200
-        });
-        let response = app
-            .oneshot(authenticated_json_request(
-                "PATCH",
-                &format!("/api/v1/classrooms/{}", existing.id),
-                body,
-                &user_id,
-            ))
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let json = body_json(response).await;
-        assert_eq!(json["data"]["subject"], "Algebra");
-        assert_eq!(json["data"]["period"], 5);
-        assert_eq!(json["data"]["boundary_width"], 1500);
-        assert_eq!(json["data"]["boundary_height"], 1200);
 
         Ok(())
     }

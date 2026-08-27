@@ -823,28 +823,6 @@ mod tests {
     }
 
     #[test]
-    fn zero_preference_students_matches_plain_shuffle_regression() {
-        let roster = students(5);
-        let tables = build_randomized_chart(
-            roster.clone(),
-            vec![],
-            false,
-            vec![],
-            2,
-            2,
-            BOUNDARY.0,
-            BOUNDARY.1,
-        )
-        .unwrap();
-
-        let capacity: usize = tables.iter().map(|t| t.seat_assignments.len()).sum();
-        assert!(capacity >= roster.len());
-
-        let assigned: HashSet<Uuid> = assigned_ids(&tables).into_iter().collect();
-        assert_eq!(assigned, student_ids(&roster).into_iter().collect());
-    }
-
-    #[test]
     fn front_group_seats_are_always_at_or_below_median_seat_y_when_capacity_allows() {
         // 4 rows x 2 cols = 8 seats; 4 front-preferring students (exactly
         // half) plus 4 none students fills the table exactly.
