@@ -619,7 +619,7 @@ dependencies = [
 
 [[package]]
 name = "class_management"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 dependencies = [
  "aws-sdk-s3",
  "axum",
