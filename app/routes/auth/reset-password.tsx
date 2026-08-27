@@ -46,8 +46,6 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export function loader({ context }: Route.LoaderArgs) {
-  // Only reachable with an active session, established by /auth/callback's
-  // recovery-code exchange — otherwise there's nothing to reset.
   const { user } = context.get(supabaseContext)
   if (!user) {
     throw redirect("/forgot-password")

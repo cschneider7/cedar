@@ -2,11 +2,7 @@ import { data, type MiddlewareFunction } from "react-router"
 
 /**
  * Route-level middleware refusing sign-up/reset-password/OAuth-linking on
- * Vercel Preview deployments — enforced server-side (not just hidden in
- * the UI) so a direct POST to these routes still refuses. Preview and
- * Production share one Supabase project (see the migration spec), so this
- * is the only thing stopping Preview from mutating auth state that's
- * visible in Production.
+ * Vercel Preview deployments
  */
 export const previewAuthGateMiddleware: MiddlewareFunction<Response> = (
   {},
@@ -21,7 +17,9 @@ export const previewAuthGateMiddleware: MiddlewareFunction<Response> = (
   return next()
 }
 
-/** Whether the current deployment is a Vercel Preview — for cosmetic UI gating (hiding buttons/links) alongside the server-side middleware above. */
+/**
+ * Whether the current deployment is a Vercel Preview
+ */
 export function isPreviewEnv(): boolean {
   return process.env.VERCEL_ENV === "preview"
 }

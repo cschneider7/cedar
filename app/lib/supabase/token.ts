@@ -2,8 +2,7 @@ import type { RouterContextProvider } from "react-router"
 import { supabaseContext } from "~/lib/supabase/context"
 
 /**
- * Gets the current request's Supabase access token, for passing through to
- * the Rust API (`~/lib/api.ts`'s `token` params).
+ * Gets the current request's Supabase access token
  */
 export async function getAccessToken(
   context: Readonly<RouterContextProvider>

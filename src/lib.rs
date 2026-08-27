@@ -29,10 +29,7 @@ pub struct AppState {
 impl AppState {
     /// Connects to Postgres and builds the shared application state
     pub async fn build() -> Arc<AppState> {
-        // Prefer DATABASE_URL (local dev / CI / an explicit Preview override
-        // to the read-only `preview_readonly` role); fall back to POSTGRES_URL,
-        // which is what the Supabase Vercel Marketplace integration injects
-        // automatically for the connected (Production) environment.
+        // Prefer DATABASE_URL in local dev and preview environments
         let db_url = std::env::var("DATABASE_URL")
             .or_else(|_| std::env::var("POSTGRES_URL"))
             .expect("DATABASE_URL or POSTGRES_URL must be set");

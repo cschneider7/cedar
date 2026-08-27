@@ -3,13 +3,7 @@ import { supabaseContext } from "~/lib/supabase/context"
 import { createSupabaseServerClient } from "~/lib/supabase/server"
 
 /**
- * Root-level middleware: builds a per-request Supabase server client,
- * resolves the current user (validated against the Auth server, not just
- * decoded from the cookie), and makes both available to every downstream
- * loader/action/middleware via `supabaseContext`. Runs once per request
- * regardless of which route matched, and copies any refreshed session's
- * `Set-Cookie` headers onto the outgoing response — missing that write
- * would silently log the user out on their next request.
+ * Middleware that builds a Supabase server client and resolves the current user
  */
 export const supabaseSessionMiddleware: MiddlewareFunction<Response> = async (
   { request, context },

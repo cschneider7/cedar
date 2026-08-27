@@ -1,4 +1,4 @@
-import { Menu, Plus, Settings, LogOut } from "lucide-react"
+import { LogOut, Menu, Plus, Settings } from "lucide-react"
 import { Fragment, useState } from "react"
 import { Link, useMatches, useNavigate, useRouteLoaderData } from "react-router"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
@@ -166,7 +166,9 @@ function CreateDropdown() {
   )
 }
 
-/** Avatar/email dropdown with an Account link and sign-out action. */
+/**
+ * Avatar/email dropdown with an Account link and sign-out action.
+ */
 function AccountMenu({ userEmail }: { userEmail: string }) {
   const navigate = useNavigate()
 

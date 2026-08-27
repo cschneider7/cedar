@@ -37,11 +37,7 @@ struct Inner {
 pub struct JwksVerifier(Arc<Inner>);
 
 impl JwksVerifier {
-    /// Builds a verifier for the given Supabase Auth base URL (e.g.
-    /// `https://<project-ref>.supabase.co/auth/v1`). Unlike Neon Auth's
-    /// origin-only issuer, Supabase's issuer claim is the base URL itself
-    /// (including the `/auth/v1` path), so it's used verbatim rather than
-    /// reduced to scheme+host.
+    /// Builds a verifier for the given Supabase URL
     pub async fn new(base_url: &str) -> Self {
         let issuer = base_url.trim_end_matches('/').to_string();
         let jwks_url = format!("{}/.well-known/jwks.json", issuer);

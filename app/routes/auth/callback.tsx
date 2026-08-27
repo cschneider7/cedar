@@ -8,8 +8,7 @@ export const middleware: Route.MiddlewareFunction[] = [
 ]
 
 /**
- * PKCE callback for every redirect-based auth flow (Google OAuth, email
- * confirmation, password recovery). No UI of its own — it always redirects.
+ * PKCE callback for every redirect-based auth flow
  */
 export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url)

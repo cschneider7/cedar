@@ -2,10 +2,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import { SUPABASE_AUTH_COOKIE_NAME } from "~/lib/supabase/context"
 
 /**
- * Builds a Supabase client for use in the browser. Used only by client
- * components that call auth methods directly (login/signup forms, the
- * topbar's sign-out action) — server-side data loading goes through the
- * per-request server client instead (`~/lib/supabase/server`).
+ * Builds a Supabase client for use in the browser
  */
 export function createSupabaseBrowserClient() {
   return createBrowserClient(
@@ -16,9 +13,7 @@ export function createSupabaseBrowserClient() {
 }
 
 /**
- * Gets the current session's access token from the browser, for the
- * handful of client-only fetches that can't go through a `loader`/`action`
- * (an authenticated `<img>`-backing fetch, a client-side polling hook).
+ * Gets the current session's access token from the browser
  */
 export async function getAccessTokenBrowser(): Promise<string | undefined> {
   const {
