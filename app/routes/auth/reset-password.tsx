@@ -3,7 +3,7 @@ import { useState } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { redirect, useNavigate } from "react-router"
 import * as z from "zod"
-import { AuthPageLayout } from "~/components/auth-page-layout"
+import { PasswordInput } from "~/components/password-input"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
 import {
@@ -19,7 +19,6 @@ import {
   FieldGroup,
   FieldLabel,
 } from "~/components/ui/field"
-import { Input } from "~/components/ui/input"
 import { Spinner } from "~/components/ui/spinner"
 import { toast } from "~/components/ui/toast"
 import { createSupabaseBrowserClient } from "~/lib/supabase/client"
@@ -80,74 +79,70 @@ export default function ResetPassword() {
   }
 
   return (
-    <AuthPageLayout>
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>Reset password</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {error && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          <form id="reset-password-form" onSubmit={form.handleSubmit(onSubmit)}>
-            <FieldGroup>
-              <Controller
-                name="password"
-                control={form.control}
-                render={({ field, fieldState }) => (
-                  <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel htmlFor="password">New password</FieldLabel>
-                    <Input
-                      {...field}
-                      id="password"
-                      type="password"
-                      autoComplete="new-password"
-                      aria-invalid={fieldState.invalid}
-                    />
-                    {fieldState.invalid && (
-                      <FieldError errors={[fieldState.error]} />
-                    )}
-                  </Field>
-                )}
-              />
-              <Controller
-                name="confirmPassword"
-                control={form.control}
-                render={({ field, fieldState }) => (
-                  <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel htmlFor="confirm-password">
-                      Confirm new password
-                    </FieldLabel>
-                    <Input
-                      {...field}
-                      id="confirm-password"
-                      type="password"
-                      autoComplete="new-password"
-                      aria-invalid={fieldState.invalid}
-                    />
-                    {fieldState.invalid && (
-                      <FieldError errors={[fieldState.error]} />
-                    )}
-                  </Field>
-                )}
-              />
-            </FieldGroup>
-          </form>
-        </CardContent>
-        <CardFooter>
-          <Button
-            type="submit"
-            form="reset-password-form"
-            className="w-full"
-            disabled={isSubmitting}
-          >
-            {isSubmitting && <Spinner />}
-            Reset password
-          </Button>
-        </CardFooter>
-      </Card>
-    </AuthPageLayout>
+    <Card className="w-full max-w-sm">
+      <CardHeader>
+        <CardTitle>Reset password</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {error && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        <form id="reset-password-form" onSubmit={form.handleSubmit(onSubmit)}>
+          <FieldGroup>
+            <Controller
+              name="password"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor="password">New password</FieldLabel>
+                  <PasswordInput
+                    {...field}
+                    id="password"
+                    autoComplete="new-password"
+                    aria-invalid={fieldState.invalid}
+                  />
+                  {fieldState.invalid && (
+                    <FieldError errors={[fieldState.error]} />
+                  )}
+                </Field>
+              )}
+            />
+            <Controller
+              name="confirmPassword"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor="confirm-password">
+                    Confirm new password
+                  </FieldLabel>
+                  <PasswordInput
+                    {...field}
+                    id="confirm-password"
+                    autoComplete="new-password"
+                    aria-invalid={fieldState.invalid}
+                  />
+                  {fieldState.invalid && (
+                    <FieldError errors={[fieldState.error]} />
+                  )}
+                </Field>
+              )}
+            />
+          </FieldGroup>
+        </form>
+      </CardContent>
+      <CardFooter>
+        <Button
+          type="submit"
+          form="reset-password-form"
+          className="w-full"
+          disabled={isSubmitting}
+        >
+          {isSubmitting && <Spinner />}
+          Reset password
+        </Button>
+      </CardFooter>
+    </Card>
   )
 }

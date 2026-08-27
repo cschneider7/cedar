@@ -3,7 +3,6 @@ import { useState } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { Link } from "react-router"
 import * as z from "zod"
-import { AuthPageLayout } from "~/components/auth-page-layout"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
 import {
@@ -65,81 +64,74 @@ export default function ForgotPassword() {
 
   if (submitted) {
     return (
-      <AuthPageLayout>
-        <Card className="w-full max-w-sm">
-          <CardHeader>
-            <CardTitle>Check your email</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              If an account exists for that email, we sent a link to reset your
-              password.
-            </p>
-          </CardContent>
-        </Card>
-      </AuthPageLayout>
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle>Check your email</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            If an account exists for that email, we sent a link to reset your
+            password.
+          </p>
+        </CardContent>
+      </Card>
     )
   }
 
   return (
-    <AuthPageLayout>
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>Forgot password</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {error && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          <form
-            id="forgot-password-form"
-            onSubmit={form.handleSubmit(onSubmit)}
+    <Card className="w-full max-w-sm">
+      <CardHeader>
+        <CardTitle>Forgot password</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {error && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        <form id="forgot-password-form" onSubmit={form.handleSubmit(onSubmit)}>
+          <FieldGroup>
+            <Controller
+              name="email"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor="email">Email</FieldLabel>
+                  <Input
+                    {...field}
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    aria-invalid={fieldState.invalid}
+                  />
+                  {fieldState.invalid && (
+                    <FieldError errors={[fieldState.error]} />
+                  )}
+                </Field>
+              )}
+            />
+          </FieldGroup>
+        </form>
+      </CardContent>
+      <CardFooter className="flex-col gap-4">
+        <Button
+          type="submit"
+          form="forgot-password-form"
+          className="w-full"
+          disabled={isSubmitting}
+        >
+          {isSubmitting && <Spinner />}
+          Send reset link
+        </Button>
+        <p className="text-sm text-muted-foreground">
+          <Link
+            to="/login"
+            className="underline underline-offset-4 hover:text-primary"
           >
-            <FieldGroup>
-              <Controller
-                name="email"
-                control={form.control}
-                render={({ field, fieldState }) => (
-                  <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel htmlFor="email">Email</FieldLabel>
-                    <Input
-                      {...field}
-                      id="email"
-                      type="email"
-                      autoComplete="email"
-                      aria-invalid={fieldState.invalid}
-                    />
-                    {fieldState.invalid && (
-                      <FieldError errors={[fieldState.error]} />
-                    )}
-                  </Field>
-                )}
-              />
-            </FieldGroup>
-          </form>
-        </CardContent>
-        <CardFooter className="flex-col gap-4">
-          <Button
-            type="submit"
-            form="forgot-password-form"
-            className="w-full"
-            disabled={isSubmitting}
-          >
-            {isSubmitting && <Spinner />}
-            Send reset link
-          </Button>
-          <p className="text-sm text-muted-foreground">
-            <Link
-              to="/login"
-              className="underline underline-offset-4 hover:text-primary"
-            >
-              Back to log in
-            </Link>
-          </p>
-        </CardFooter>
-      </Card>
-    </AuthPageLayout>
+            Back to log in
+          </Link>
+        </p>
+      </CardFooter>
+    </Card>
   )
 }

@@ -3,8 +3,8 @@ import { useState } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { Link, useNavigate, useSearchParams } from "react-router"
 import * as z from "zod"
-import { AuthPageLayout } from "~/components/auth-page-layout"
 import { GoogleIcon } from "~/components/google-icon"
+import { PasswordInput } from "~/components/password-input"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Button } from "~/components/ui/button"
 import {
@@ -80,100 +80,97 @@ export default function Login({ loaderData }: Route.ComponentProps) {
   }
 
   return (
-    <AuthPageLayout>
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>Log in</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {error && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          <form id="login-form" onSubmit={form.handleSubmit(onSubmit)}>
-            <FieldGroup>
-              <Controller
-                name="email"
-                control={form.control}
-                render={({ field, fieldState }) => (
-                  <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel htmlFor="email">Email</FieldLabel>
-                    <Input
-                      {...field}
-                      id="email"
-                      type="email"
-                      autoComplete="email"
-                      aria-invalid={fieldState.invalid}
-                    />
-                    {fieldState.invalid && (
-                      <FieldError errors={[fieldState.error]} />
-                    )}
-                  </Field>
-                )}
-              />
-              <Controller
-                name="password"
-                control={form.control}
-                render={({ field, fieldState }) => (
-                  <Field data-invalid={fieldState.invalid}>
-                    <div className="flex items-center justify-between">
-                      <FieldLabel htmlFor="password">Password</FieldLabel>
-                      <Link
-                        to="/forgot-password"
-                        className="text-sm text-muted-foreground underline underline-offset-4 hover:text-primary"
-                      >
-                        Forgot password?
-                      </Link>
-                    </div>
-                    <Input
-                      {...field}
-                      id="password"
-                      type="password"
-                      autoComplete="current-password"
-                      aria-invalid={fieldState.invalid}
-                    />
-                    {fieldState.invalid && (
-                      <FieldError errors={[fieldState.error]} />
-                    )}
-                  </Field>
-                )}
-              />
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
-                {isSubmitting && <Spinner />}
-                Log in
-              </Button>
-              {!loaderData.isPreview && (
-                <>
-                  <FieldSeparator>or</FieldSeparator>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    onClick={handleGoogleSignIn}
-                  >
-                    <GoogleIcon />
-                    Continue with Google
-                  </Button>
-                </>
-              )}
-            </FieldGroup>
-          </form>
-        </CardContent>
-        {!loaderData.isPreview && (
-          <CardFooter className="flex-col gap-4">
-            <p className="text-sm text-muted-foreground">
-              Don&apos;t have an account?{" "}
-              <Link
-                to="/signup"
-                className="underline underline-offset-4 hover:text-primary"
-              >
-                Sign up
-              </Link>
-            </p>
-          </CardFooter>
+    <Card className="w-full max-w-sm">
+      <CardHeader>
+        <CardTitle>Log in</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {error && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
-      </Card>
-    </AuthPageLayout>
+        <form id="login-form" onSubmit={form.handleSubmit(onSubmit)}>
+          <FieldGroup>
+            <Controller
+              name="email"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor="email">Email</FieldLabel>
+                  <Input
+                    {...field}
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    aria-invalid={fieldState.invalid}
+                  />
+                  {fieldState.invalid && (
+                    <FieldError errors={[fieldState.error]} />
+                  )}
+                </Field>
+              )}
+            />
+            <Controller
+              name="password"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <div className="flex items-center justify-between">
+                    <FieldLabel htmlFor="password">Password</FieldLabel>
+                    <Link
+                      to="/forgot-password"
+                      className="text-sm text-muted-foreground underline underline-offset-4 hover:text-primary"
+                    >
+                      Forgot password?
+                    </Link>
+                  </div>
+                  <PasswordInput
+                    {...field}
+                    id="password"
+                    autoComplete="current-password"
+                    aria-invalid={fieldState.invalid}
+                  />
+                  {fieldState.invalid && (
+                    <FieldError errors={[fieldState.error]} />
+                  )}
+                </Field>
+              )}
+            />
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting && <Spinner />}
+              Log in
+            </Button>
+            {!loaderData.isPreview && (
+              <>
+                <FieldSeparator>or</FieldSeparator>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleGoogleSignIn}
+                >
+                  <GoogleIcon />
+                  Continue with Google
+                </Button>
+              </>
+            )}
+          </FieldGroup>
+        </form>
+      </CardContent>
+      {!loaderData.isPreview && (
+        <CardFooter className="flex-col gap-4">
+          <p className="text-sm text-muted-foreground">
+            Don&apos;t have an account?{" "}
+            <Link
+              to="/signup"
+              className="underline underline-offset-4 hover:text-primary"
+            >
+              Sign up
+            </Link>
+          </p>
+        </CardFooter>
+      )}
+    </Card>
   )
 }

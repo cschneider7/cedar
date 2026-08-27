@@ -17,7 +17,6 @@ export function usePinClassroom() {
     if (fetcher.state === "idle" && fetcher.data && !fetcher.data.ok) {
       toast.add({ title: fetcher.data.error, type: "error" })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher.state, fetcher.data])
 
   /**

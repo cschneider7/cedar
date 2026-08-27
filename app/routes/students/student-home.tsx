@@ -418,7 +418,6 @@ export default function Component({ loaderData }: Route.ComponentProps) {
       })
     }, 300)
     return () => clearTimeout(timeout)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput])
 
   const columns = useMemo(

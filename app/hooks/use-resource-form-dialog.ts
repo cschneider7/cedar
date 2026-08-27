@@ -52,7 +52,6 @@ export function useResourceFormDialog<TFieldValues extends FieldValues>({
       form.reset(defaultValues)
       onOpen?.()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   const fetcher = useFetcher<MutationResult>()
@@ -68,7 +67,6 @@ export function useResourceFormDialog<TFieldValues extends FieldValues>({
         type: "success",
       })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher.state, fetcher.data])
 
   /**
