@@ -56,8 +56,16 @@ CREATE TABLE IF NOT EXISTS student_separations (
     UNIQUE (student_id_a, student_id_b)
 );
 
--- Preview-environment read-only role
-CREATE ROLE preview_readonly LOGIN;
+-- Preview-environment read-only role. Roles are cluster-global, not per-database,
+-- so this must be idempotent: sqlx migrate run seeds it once, then every #[sqlx::test]
+-- re-runs migrations against a fresh database in the same cluster.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'preview_readonly') THEN
+    CREATE ROLE preview_readonly LOGIN;
+  END IF;
+END
+$$;
 GRANT USAGE ON SCHEMA public TO preview_readonly;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO preview_readonly;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO preview_readonly;
