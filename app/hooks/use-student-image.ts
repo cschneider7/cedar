@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { getAuthToken } from "~/lib/auth-client"
+import { getAccessTokenBrowser } from "~/lib/supabase/client"
 
 const API_URL = import.meta.env.VITE_API_URL
 
@@ -25,7 +25,7 @@ export function useStudentImage(
     let cancelled = false
     ;(async () => {
       try {
-        const token = await getAuthToken()
+        const token = await getAccessTokenBrowser()
         const res = await fetch(`${API_URL}/students/${studentId}/image`, {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         })

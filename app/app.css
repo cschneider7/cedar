@@ -1,9 +1,6 @@
-@layer neon-auth;
-
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@neondatabase/auth-ui/tailwind";
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/archivo";
 @import "@xyflow/react/dist/style.css";

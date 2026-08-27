@@ -5,13 +5,7 @@ import {
 } from "@tanstack/react-table"
 import { LayoutGrid, List, Plus, Search, UsersIcon } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import {
-  Link,
-  redirect,
-  useLocation,
-  useNavigate,
-  useNavigation,
-} from "react-router"
+import { Link, useLocation, useNavigate, useNavigation } from "react-router"
 import { DeleteConfirmDialog } from "~/components/delete-confirm-dialog"
 import { RouteHydrateFallback } from "~/components/route-hydrate-fallback"
 import { SearchInput } from "~/components/search-input"
@@ -62,7 +56,7 @@ import {
   type StudentViewMode,
 } from "~/hooks/use-student-view-mode"
 import { getClassrooms, getStudentsPage } from "~/lib/api"
-import { getAuthToken } from "~/lib/auth-client"
+import { getAccessToken } from "~/lib/supabase/token"
 import { formatClassroomName } from "~/lib/classroom-term"
 import { getPageNumbers } from "~/lib/pagination"
 import type { Classroom, Student } from "~/lib/schemas"
@@ -77,11 +71,8 @@ import {
   type StudentSortKey,
 } from "./student-columns"
 
-export async function clientLoader({ request }: Route.ClientLoaderArgs) {
-  const token = await getAuthToken()
-  if (!token) {
-    return redirect("/auth/sign-in")
-  }
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const token = await getAccessToken(context)
 
   const url = new URL(request.url)
   const page = Math.max(1, Number(url.searchParams.get("page")) || 1)
@@ -90,9 +81,7 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const viewMode: StudentViewMode =
     viewParam === "list" || viewParam === "grid"
       ? viewParam
-      : parseViewModeCookie(
-          typeof document === "undefined" ? null : document.cookie
-        )
+      : parseViewModeCookie(request.headers.get("Cookie"))
   const pageSize = viewMode === "list" ? 20 : 24
   const sortByParam = url.searchParams.get("sort_by")
   const sortBy: StudentSortKey =
@@ -429,7 +418,6 @@ export default function Component({ loaderData }: Route.ComponentProps) {
       })
     }, 300)
     return () => clearTimeout(timeout)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput])
 
   const columns = useMemo(

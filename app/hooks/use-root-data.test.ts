@@ -31,9 +31,9 @@ describe("fetchRootData", () => {
 
     expect(fetch).toHaveBeenCalledTimes(2)
     const [classroomsUrl] = vi.mocked(fetch).mock.calls[0]
-    expect(classroomsUrl).toBe("http://localhost:3000/api/v1/classrooms")
+    expect(classroomsUrl).toBe("http://localhost:3001/api/v1/classrooms")
     const [limitUrl] = vi.mocked(fetch).mock.calls[1]
-    expect(limitUrl).toBe("http://localhost:3000/api/v1/students/count")
+    expect(limitUrl).toBe("http://localhost:3001/api/v1/students/count")
     expect(result).toEqual({
       classrooms,
       classroomsError: false,

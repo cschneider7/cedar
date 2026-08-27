@@ -35,7 +35,7 @@ import {
 import { Spinner } from "~/components/ui/spinner"
 import { useResourceFormDialog } from "~/hooks/use-resource-form-dialog"
 import { requestStudentImageUploadUrl } from "~/lib/api"
-import { getAuthToken } from "~/lib/auth-client"
+import { getAccessTokenBrowser } from "~/lib/supabase/client"
 import { formatClassroomName } from "~/lib/classroom-term"
 import type { Classroom, Student } from "~/lib/schemas"
 import { CreateStudentSchema, UpdateStudentSchema } from "~/lib/schemas"
@@ -140,7 +140,7 @@ export function StudentFormDialog(props: StudentFormDialogProps) {
     if (photo.kind === "staged") {
       setIsUploading(true)
       try {
-        const token = await getAuthToken()
+        const token = await getAccessTokenBrowser()
         const { url, key } = await requestStudentImageUploadUrl(
           photo.file.size,
           token

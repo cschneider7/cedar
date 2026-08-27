@@ -29,7 +29,10 @@ pub struct AppState {
 impl AppState {
     /// Connects to Postgres and builds the shared application state
     pub async fn build() -> Arc<AppState> {
-        let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+        // Prefer DATABASE_URL in local dev and preview environments
+        let db_url = std::env::var("DATABASE_URL")
+            .or_else(|_| std::env::var("POSTGRES_URL"))
+            .expect("DATABASE_URL or POSTGRES_URL must be set");
         let s3_endpoint = std::env::var("S3_ENDPOINT").expect("S3_ENDPOINT must be set");
         let s3_region = std::env::var("S3_REGION").expect("S3_REGION must be set");
         let s3_bucket = std::env::var("S3_BUCKET").expect("S3_BUCKET must be set");

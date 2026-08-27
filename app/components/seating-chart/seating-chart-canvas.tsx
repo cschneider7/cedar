@@ -77,7 +77,7 @@ import {
   type SeatingChartStudentNode,
   type SeatingChartTableNode,
 } from "~/lib/seating-chart-utils"
-import type { clientAction as classroomAction } from "~/routes/classrooms/classroom-seating-chart"
+import type { action as classroomAction } from "~/routes/classrooms/classroom-seating-chart"
 import { UnsavedChartChangesDialog } from "../classroom/unsaved-chart-changes-dialog"
 import {
   BoundarySizeDialog,
@@ -186,7 +186,6 @@ function SeatingChartEditor({
     if (locked) {
       setNodes(buildInitialNodes(classroomId, seatingChart, studentsById))
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locked, seatingChart, studentsById])
 
   const boundary = useMemo(() => getBoundary(nodes), [nodes])

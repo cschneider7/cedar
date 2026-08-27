@@ -1,13 +1,13 @@
 import { generateRandomSeatingChart } from "~/lib/api"
-import { getAuthToken } from "~/lib/auth-client"
+import { getAccessToken } from "~/lib/supabase/token"
 import type { SeatingChart } from "~/lib/schemas"
 import type { Route } from "./+types/randomize-seating-chart"
 
 export type RandomizeSeatingChartResult =
   { ok: true; seatingChart: SeatingChart } | { ok: false; error: string }
 
-export async function clientAction(
-  args: Route.ClientActionArgs
+export async function action(
+  args: Route.ActionArgs
 ): Promise<RandomizeSeatingChartResult> {
   const options = await args.request.json()
 
@@ -15,7 +15,7 @@ export async function clientAction(
     const seatingChart = await generateRandomSeatingChart(
       args.params.classroomId,
       options,
-      await getAuthToken()
+      await getAccessToken(args.context)
     )
     return { ok: true, seatingChart }
   } catch (error) {

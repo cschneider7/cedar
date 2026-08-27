@@ -7,6 +7,5 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["app/**/*.test.ts"],
-    setupFiles: ["./app/lib/auth-test-setup.ts"],
   },
 })

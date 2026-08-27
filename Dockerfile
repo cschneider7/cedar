@@ -20,7 +20,7 @@ RUN mkdir -p src \
     && echo "fn main() {}" > src/main.rs \
     && cargo fetch --locked
 
-EXPOSE 3000
+EXPOSE 3001
 
 # ---------------------------------------------------------------------------
 # Frontend (React Router) — targets: frontend-dev, frontend (default target)

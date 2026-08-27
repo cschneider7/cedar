@@ -1,7 +1,7 @@
 import { flexRender, useTable } from "@tanstack/react-table"
 import { ClipboardList, Plus, Search } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
-import { redirect, useNavigate } from "react-router"
+import { useNavigate } from "react-router"
 import { ClassroomFormDialog } from "~/components/classroom-form-dialog"
 import { RouteHydrateFallback } from "~/components/route-hydrate-fallback"
 import { Alert, AlertDescription } from "~/components/ui/alert"
@@ -38,7 +38,7 @@ import {
 } from "~/components/ui/table"
 import { toast } from "~/components/ui/toast"
 import { getClassrooms, getStudents } from "~/lib/api"
-import { getAuthToken } from "~/lib/auth-client"
+import { getAccessToken } from "~/lib/supabase/token"
 import {
   MAX_CLASSROOMS_PER_USER,
   getPinnedClassrooms,
@@ -64,11 +64,8 @@ export function meta({}: Route.MetaArgs) {
   ]
 }
 
-export async function clientLoader() {
-  const token = await getAuthToken()
-  if (!token) {
-    return redirect("/auth/sign-in")
-  }
+export async function loader({ context }: Route.LoaderArgs) {
+  const token = await getAccessToken(context)
 
   const [classrooms, studentsResult] = await Promise.all([
     getClassrooms(token),

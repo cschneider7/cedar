@@ -1,13 +1,13 @@
 import * as z from "zod"
 import { bulkDeleteStudents } from "~/lib/api"
-import { getAuthToken } from "~/lib/auth-client"
+import { getAccessToken } from "~/lib/supabase/token"
 import type { Route } from "./+types/bulk-delete-students"
 
 const BulkDeleteInputSchema = z.object({
   ids: z.array(z.string().min(1)).min(1),
 })
 
-export async function clientAction({ request }: Route.ClientActionArgs) {
+export async function action({ request, context }: Route.ActionArgs) {
   const rawData = await request.json()
   const result = BulkDeleteInputSchema.safeParse(rawData)
 
@@ -16,7 +16,7 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
   }
 
   try {
-    await bulkDeleteStudents(result.data.ids, await getAuthToken())
+    await bulkDeleteStudents(result.data.ids, await getAccessToken(context))
     return { ok: true }
   } catch (error) {
     return { ok: false, error: (error as Error).message }

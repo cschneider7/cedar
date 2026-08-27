@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { makeArgs, stubFetch } from "~/lib/test-utils"
-import { clientAction as action } from "./create-classroom"
+import { action } from "./create-classroom"
 
 const validPayload = {
   subject: "Math 2",
@@ -33,7 +33,7 @@ describe("create-classroom action", () => {
 
     expect(fetch).toHaveBeenCalledTimes(1)
     const [url, init] = vi.mocked(fetch).mock.calls[0]
-    expect(url).toBe("http://localhost:3000/api/v1/classrooms")
+    expect(url).toBe("http://localhost:3001/api/v1/classrooms")
     expect(init?.method).toBe("POST")
     expect(JSON.parse(init?.body as string)).toEqual(validPayload)
 

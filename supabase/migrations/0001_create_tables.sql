@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS classrooms (
     term_year SMALLINT NOT NULL,
     boundary_width INTEGER NOT NULL DEFAULT 1080,
     boundary_height INTEGER NOT NULL DEFAULT 820,
-    created_time TIMESTAMPTZ DEFAULT now()
+    created_time TIMESTAMPTZ DEFAULT now(),
+    pinned_at TIMESTAMPTZ
 );
 
 -- Students
@@ -19,7 +20,8 @@ CREATE TABLE IF NOT EXISTS students (
     student_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     created_time TIMESTAMPTZ DEFAULT now(),
-    image_url TEXT
+    image_url TEXT,
+    seating_preference TEXT CHECK (seating_preference IN ('front', 'back'))
 );
 
 -- Tables
@@ -42,3 +44,26 @@ CREATE TABLE IF NOT EXISTS seats (
     seat_number SMALLINT NOT NULL,
     UNIQUE (table_id, seat_number)
 );
+
+-- Student separations ("keep these two students apart")
+CREATE TABLE IF NOT EXISTS student_separations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL,
+    student_id_a UUID NOT NULL REFERENCES students ON DELETE CASCADE,
+    student_id_b UUID NOT NULL REFERENCES students ON DELETE CASCADE,
+    created_time TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (student_id_a < student_id_b),
+    UNIQUE (student_id_a, student_id_b)
+);
+
+-- Preview-environment read-only role
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'preview_readonly') THEN
+    CREATE ROLE preview_readonly LOGIN;
+  END IF;
+END
+$$;
+GRANT USAGE ON SCHEMA public TO preview_readonly;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO preview_readonly;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO preview_readonly;

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { makeArgs, stubFetch } from "~/lib/test-utils"
-import { clientAction as action } from "./bulk-unassign-students"
+import { action } from "./bulk-unassign-students"
 
 const args = (ids: string[]) =>
   makeArgs("http://test/students/bulk-unassign", {
@@ -22,8 +22,8 @@ describe("bulk-unassign-students action", () => {
 
     expect(fetch).toHaveBeenCalledTimes(2)
     const calledUrls = vi.mocked(fetch).mock.calls.map(([url]) => url)
-    expect(calledUrls).toContain("http://localhost:3000/api/v1/students/s1")
-    expect(calledUrls).toContain("http://localhost:3000/api/v1/students/s2")
+    expect(calledUrls).toContain("http://localhost:3001/api/v1/students/s1")
+    expect(calledUrls).toContain("http://localhost:3001/api/v1/students/s2")
     for (const [, init] of vi.mocked(fetch).mock.calls) {
       expect(init?.method).toBe("PATCH")
       expect(JSON.parse(init?.body as string)).toEqual({ classroom_id: null })

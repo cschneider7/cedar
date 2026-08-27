@@ -1,11 +1,11 @@
 import { SeatingChartCanvas } from "~/components/seating-chart/seating-chart-canvas"
 import { updateClassroomSeatingChart } from "~/lib/api"
-import { getAuthToken } from "~/lib/auth-client"
+import { getAccessToken } from "~/lib/supabase/token"
 import { useClassroomData } from "~/lib/classroom-route-data"
 import { SeatingChartSchema } from "~/lib/schemas"
 import type { Route } from "./+types/classroom-seating-chart"
 
-export async function clientAction(args: Route.ClientActionArgs) {
+export async function action(args: Route.ActionArgs) {
   const rawData = await args.request.json()
   const result = SeatingChartSchema.safeParse(rawData)
 
@@ -17,7 +17,7 @@ export async function clientAction(args: Route.ClientActionArgs) {
     await updateClassroomSeatingChart(
       args.params.classroomId,
       result.data,
-      await getAuthToken()
+      await getAccessToken(args.context)
     )
   } catch (error) {
     return { ok: false, error: (error as Error).message }

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import type { Student } from "~/lib/schemas"
 import { makeArgs, stubFetch } from "~/lib/test-utils"
-import { clientLoader as loader } from "./quick-search"
+import { loader } from "./quick-search"
 
 const args = (q?: string) =>
   makeArgs(
@@ -47,7 +47,7 @@ describe("quick-search loader", () => {
     expect(fetch).toHaveBeenCalledTimes(1)
     const [url] = vi.mocked(fetch).mock.calls[0]
     expect(url).toBe(
-      "http://localhost:3000/api/v1/students?page=1&page_size=5&q=ali"
+      "http://localhost:3001/api/v1/students?page=1&page_size=5&q=ali"
     )
     expect(result).toEqual({ students })
   })

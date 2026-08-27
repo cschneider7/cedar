@@ -1,12 +1,12 @@
 import { Navigate } from "react-router"
 import type { MutationResult } from "~/lib/action-results"
 import { createStudent, getClassrooms } from "~/lib/api"
-import { getAuthToken } from "~/lib/auth-client"
+import { getAccessToken } from "~/lib/supabase/token"
 import { CreateStudentSchema } from "~/lib/schemas"
 import type { Route } from "./+types/create-student"
 
-export async function clientLoader() {
-  const token = await getAuthToken()
+export async function loader({ context }: Route.LoaderArgs) {
+  const token = await getAccessToken(context)
   const classrooms = await getClassrooms(token)
   return { classrooms: classrooms }
 }
@@ -17,9 +17,10 @@ export default function Component() {
   return <Navigate to="/students" replace />
 }
 
-export async function clientAction({
+export async function action({
   request,
-}: Route.ClientActionArgs): Promise<MutationResult> {
+  context,
+}: Route.ActionArgs): Promise<MutationResult> {
   const rawData = await request.json()
   const result = CreateStudentSchema.safeParse(rawData)
 
@@ -28,7 +29,10 @@ export async function clientAction({
   }
 
   try {
-    const student = await createStudent(result.data, await getAuthToken())
+    const student = await createStudent(
+      result.data,
+      await getAccessToken(context)
+    )
     return { ok: true, id: student.id }
   } catch (error) {
     return { ok: false, error: (error as Error).message }

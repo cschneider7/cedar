@@ -143,7 +143,6 @@ function RosterActionsCell({
     if (fetcher.state === "idle" && fetcher.data?.ok) {
       toast.add({ title: "Student unassigned", type: "success" })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher.state, fetcher.data])
 
   function handleUnassign() {

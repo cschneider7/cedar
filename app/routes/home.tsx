@@ -1,4 +1,3 @@
-import { SignedIn, SignedOut } from "@neondatabase/auth-ui"
 import { ArrowUpRightIcon, ClipboardList, UsersRound } from "lucide-react"
 import { useEffect } from "react"
 import { Link } from "react-router"
@@ -14,7 +13,8 @@ import {
 } from "~/components/ui/item"
 import { toast } from "~/components/ui/toast"
 import { getClassrooms, getStudents } from "~/lib/api"
-import { authClient, getAuthToken } from "~/lib/auth-client"
+import { supabaseContext } from "~/lib/supabase/context"
+import { getAccessToken } from "~/lib/supabase/token"
 import type { Route } from "./+types/home"
 
 export function meta({}: Route.MetaArgs) {
@@ -27,15 +27,16 @@ export function meta({}: Route.MetaArgs) {
   ]
 }
 
-export async function clientLoader() {
-  const { data: session } = await authClient.getSession()
-  if (!session) {
+export async function loader({ context }: Route.LoaderArgs) {
+  const { user } = context.get(supabaseContext)
+  if (!user) {
     return {
+      isSignedIn: false,
       classroomsError: false,
       studentsError: false,
     }
   }
-  const token = await getAuthToken()
+  const token = await getAccessToken(context)
   const [classroomsFailed, studentsFailed] = await Promise.all([
     getClassrooms(token).then(
       () => false,
@@ -47,6 +48,7 @@ export async function clientLoader() {
     ),
   ])
   return {
+    isSignedIn: true,
     classroomsError: classroomsFailed,
     studentsError: studentsFailed,
   }
@@ -118,7 +120,7 @@ function StatTile({
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { classroomsError, studentsError } = loaderData
+  const { isSignedIn, classroomsError, studentsError } = loaderData
 
   useEffect(() => {
     if (classroomsError)
@@ -137,10 +139,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           Manage your students, classrooms, and seating charts.
         </p>
       </div>
-      <SignedOut>
-        <SignedOutHome />
-      </SignedOut>
-      <SignedIn>
+      {isSignedIn ? (
         <ItemGroup className="w-full max-w-md">
           <StatTile
             icon={<ClipboardList className="size-7" />}
@@ -153,7 +152,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             to="/students"
           />
         </ItemGroup>
-      </SignedIn>
+      ) : (
+        <SignedOutHome />
+      )}
     </div>
   )
 }
