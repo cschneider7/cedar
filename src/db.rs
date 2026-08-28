@@ -6,16 +6,13 @@
 use std::sync::Arc;
 
 use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod};
-use rustls::pki_types::{CertificateDer, pem::PemObject};
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::crypto::{CryptoProvider, verify_tls12_signature, verify_tls13_signature};
+use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+use rustls::{DigitallySignedStruct, SignatureScheme};
 
 /// The application's connection pool.
 pub type Db = Pool;
-
-/// Supabase's Supavisor pooler serves a cert chained to this private root
-/// (`Supabase Root 2021 CA`), which is in no public root store — so it's pinned
-/// here. Published at
-/// <https://supabase-downloads.s3.amazonaws.com/prod/ssl/prod-ca-2021.crt>.
-const SUPABASE_ROOT_CA_PEM: &[u8] = include_bytes!("supabase_prod_ca_2021.pem");
 
 /// Query-string params `tokio_postgres::Config` understands. Anything else
 /// (e.g. Supabase's `supa=base-pooler.x`) makes `Config::from_str` error, so
@@ -39,7 +36,7 @@ pub async fn build_pool(
 ) -> Result<Db, Box<dyn std::error::Error + Send + Sync>> {
     let manager = Manager::from_config(
         parse_config(db_url)?,
-        make_tls()?,
+        make_tls(),
         ManagerConfig {
             recycling_method: RecyclingMethod::Fast,
         },
@@ -70,23 +67,71 @@ fn parse_config(
     Ok(cleaned.parse::<tokio_postgres::Config>()?)
 }
 
-/// rustls connector trusting the public web roots plus Supabase's pinned root,
-/// with the ring provider (explicit — no reliance on a process-default) and
-/// full chain + hostname verification.
-fn make_tls()
--> Result<tokio_postgres_rustls::MakeRustlsConnect, Box<dyn std::error::Error + Send + Sync>> {
-    let mut roots = rustls::RootCertStore::empty();
-    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-    for cert in CertificateDer::pem_slice_iter(SUPABASE_ROOT_CA_PEM) {
-        roots.add(cert?)?;
+/// TLS that encrypts the connection but does not authenticate the server
+/// certificate — i.e. libpq's `sslmode=require` semantics, which is what the
+/// previous `sqlx` setup used. `tokio-postgres-rustls` only offers full
+/// verification or none; it has no `require`-equivalent middle mode. Supabase's
+/// Supavisor pooler presents a cert signed by a private CA that is in no public
+/// root store, so full verification (`verify-ca`/`verify-full`) is not an option
+/// against it regardless. `sslmode` from the URL still gates whether TLS is used
+/// at all (`disable` → plaintext, the local-dev default `prefer` → opportunistic).
+fn make_tls() -> tokio_postgres_rustls::MakeRustlsConnect {
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let config = rustls::ClientConfig::builder_with_provider(provider.clone())
+        .with_safe_default_protocol_versions()
+        .expect("rustls: ring provider supports TLS 1.2 and 1.3")
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(EncryptOnlyVerifier(provider)))
+        .with_no_client_auth();
+    tokio_postgres_rustls::MakeRustlsConnect::new(config)
+}
+
+/// Accepts any server certificate; the TLS handshake still negotiates
+/// encryption. See `make_tls` for why this is the behavior we want here.
+#[derive(Debug)]
+struct EncryptOnlyVerifier(Arc<CryptoProvider>);
+
+impl ServerCertVerifier for EncryptOnlyVerifier {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: UnixTime,
+    ) -> Result<ServerCertVerified, rustls::Error> {
+        Ok(ServerCertVerified::assertion())
     }
 
-    let config = rustls::ClientConfig::builder_with_provider(Arc::new(
-        rustls::crypto::ring::default_provider(),
-    ))
-    .with_safe_default_protocol_versions()?
-    .with_root_certificates(roots)
-    .with_no_client_auth();
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &self.0.signature_verification_algorithms,
+        )
+    }
 
-    Ok(tokio_postgres_rustls::MakeRustlsConnect::new(config))
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &self.0.signature_verification_algorithms,
+        )
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.0.signature_verification_algorithms.supported_schemes()
+    }
 }

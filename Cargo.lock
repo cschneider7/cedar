@@ -650,7 +650,6 @@ dependencies = [
  "url",
  "uuid",
  "vercel_runtime",
- "webpki-roots",
 ]
 
 [[package]]
