@@ -1,6 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm run build",
   "rewrites": [
     { "source": "/api/v1/:path*", "destination": "/api/index" },
     { "source": "/health", "destination": "/api/index" }
