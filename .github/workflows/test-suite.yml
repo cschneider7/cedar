@@ -16,8 +16,8 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  rust-tests:
-    name: Rust Tests
+  backend-tests:
+    name: Backend Tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -41,8 +41,8 @@ jobs:
       - name: Run tests
         run: cargo test --all-features
 
-  node-tests:
-    name: Node Tests
+  frontend-tests:
+    name: Frontend Tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
