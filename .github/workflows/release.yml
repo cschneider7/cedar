@@ -1,48 +1,24 @@
-name: Release
+name: Release Please
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: ["main"]
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-please
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Publish GitHub Release
+  release-please:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Verify tag matches manifest versions
-        run: |
-          tag="${GITHUB_REF_NAME#v}"
-          cargo_version="$(perl -ne 'if (/^version = "(.+)"/) { print $1; exit }' Cargo.toml)"
-          npm_version="$(node -p "require('./package.json').version")"
-          echo "tag=$tag  Cargo.toml=$cargo_version  package.json=$npm_version"
-          if [ "$tag" != "$cargo_version" ] || [ "$tag" != "$npm_version" ]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match Cargo.toml ($cargo_version) / package.json ($npm_version). Run scripts/bump-version.sh, merge, then re-tag."
-            exit 1
-          fi
-
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            echo "::notice::Release $GITHUB_REF_NAME already exists — nothing to do."
-            exit 0
-          fi
-          args=("$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes --verify-tag)
-          # A hyphen in the tag (e.g. v0.2.0-beta.2) marks a SemVer pre-release.
-          case "$GITHUB_REF_NAME" in
-            *-*) args+=(--prerelease) ;;
-            *) args+=(--latest) ;;
-          esac
-          gh release create "${args[@]}"
+      - uses: googleapis/release-please-action@v5
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
