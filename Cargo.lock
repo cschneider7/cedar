@@ -624,7 +624,7 @@ dependencies = [
 
 [[package]]
 name = "class_management"
-version = "0.2.0-beta.2"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "aws-sdk-s3",
