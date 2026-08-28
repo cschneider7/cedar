@@ -12,16 +12,10 @@ use tokio_postgres::config::SslMode;
 /// The application's connection pool.
 pub type Db = Pool;
 
-/// The `Supabase Root 2021 CA` (self-signed, valid to 2031). Supabase's Supavisor
-/// pooler serves a cert chaining to this private root, which is in no public root
-/// store, so it is the sole trust anchor for `verify-full`. Download it from the
-/// project dashboard: Database Settings → SSL Configuration → Download certificate.
+/// The `Supabase Root 2021 CA` (self-signed, valid to 2031)
 const SUPABASE_CA_PEM: &[u8] = include_bytes!("../certs/supabase-ca-2021.pem");
 
-/// Query-string params `tokio_postgres::Config` understands. Anything else — an
-/// unknown param (Supabase's `supa=base-pooler.x`) or `sslmode` (whose
-/// `verify-*` values `Config::from_str` rejects) — is stripped before parsing;
-/// `sslmode` is then re-applied by `ssl_mode_from`.
+/// Query-string params `tokio_postgres::Config` understands
 const KNOWN_PARAMS: &[&str] = &[
     "sslnegotiation",
     "application_name",
@@ -51,9 +45,6 @@ pub async fn build_pool(
     Ok(Pool::builder(manager).max_size(max_size).build()?)
 }
 
-/// Drops unknown query params (and `sslmode`), touching only the `?...` portion
-/// so a password with URL-special characters is left for `tokio_postgres` to
-/// decode itself.
 fn parse_config(
     db_url: &str,
 ) -> Result<tokio_postgres::Config, Box<dyn std::error::Error + Send + Sync>> {
@@ -85,12 +76,6 @@ fn sslmode_param(db_url: &str) -> Option<String> {
         .map(str::to_ascii_lowercase)
 }
 
-/// Maps libpq's `sslmode` onto the three modes `tokio_postgres` exposes. TLS is
-/// always negotiated with full chain + hostname verification (see `make_tls`);
-/// this only decides whether TLS is mandatory. `verify-ca` / `verify-full` map
-/// to `Require` — the verification they add is already unconditional. An absent
-/// `sslmode` defaults to `Require`, so a production URL with no param still
-/// verifies; local dev / CI opt out with an explicit `?sslmode=disable`.
 fn ssl_mode_from(sslmode: Option<&str>) -> SslMode {
     match sslmode {
         Some("disable") => SslMode::Disable,
@@ -99,9 +84,7 @@ fn ssl_mode_from(sslmode: Option<&str>) -> SslMode {
     }
 }
 
-/// rustls connector trusting only Supabase's private root, with the ring
-/// provider (explicit — no reliance on a process-default) and the default
-/// verifier's full chain + hostname checks, i.e. `sslmode=verify-full`.
+/// rustls connector trusting only Supabase's private root
 fn make_tls()
 -> Result<tokio_postgres_rustls::MakeRustlsConnect, Box<dyn std::error::Error + Send + Sync>> {
     let mut roots = rustls::RootCertStore::empty();

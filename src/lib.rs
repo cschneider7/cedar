@@ -28,7 +28,6 @@ pub struct AppState {
 impl AppState {
     /// Connects to Postgres and builds the shared application state
     pub async fn build() -> Arc<AppState> {
-        // Injected by the Supabase Vercel integration; set in .env for local dev.
         let db_url = std::env::var("POSTGRES_URL").expect("POSTGRES_URL must be set");
         let s3_endpoint = std::env::var("S3_ENDPOINT").expect("S3_ENDPOINT must be set");
         let s3_region = std::env::var("S3_REGION").expect("S3_REGION must be set");
