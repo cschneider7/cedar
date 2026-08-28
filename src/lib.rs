@@ -1,10 +1,9 @@
-use std::{str::FromStr, sync::Arc};
-
-use sqlx::postgres::{PgConnectOptions, PgPool, PgPoolOptions};
+use std::sync::Arc;
 
 pub mod auth;
 pub mod blob;
 pub mod cold_call;
+pub mod db;
 pub mod error;
 pub mod handlers;
 pub mod model;
@@ -16,11 +15,11 @@ pub mod test_support;
 
 pub use routes::create_router;
 
-const MAX_CONNECTIONS: u32 = 4;
+const MAX_CONNECTIONS: usize = 4;
 
 /// Shared state threaded through every handler via `Arc<AppState>`.
 pub struct AppState {
-    db: PgPool,
+    db: db::Db,
     blob_deleter: Arc<dyn blob::BlobDeleter>,
     blob_reader: Arc<dyn blob::BlobReader>,
     blob_uploader: Arc<dyn blob::BlobUploader>,
@@ -29,10 +28,8 @@ pub struct AppState {
 impl AppState {
     /// Connects to Postgres and builds the shared application state
     pub async fn build() -> Arc<AppState> {
-        // Prefer DATABASE_URL in local dev and preview environments
-        let db_url = std::env::var("DATABASE_URL")
-            .or_else(|_| std::env::var("POSTGRES_URL"))
-            .expect("DATABASE_URL or POSTGRES_URL must be set");
+        // Injected by the Supabase Vercel integration; set in .env for local dev.
+        let db_url = std::env::var("POSTGRES_URL").expect("POSTGRES_URL must be set");
         let s3_endpoint = std::env::var("S3_ENDPOINT").expect("S3_ENDPOINT must be set");
         let s3_region = std::env::var("S3_REGION").expect("S3_REGION must be set");
         let s3_bucket = std::env::var("S3_BUCKET").expect("S3_BUCKET must be set");
@@ -41,24 +38,20 @@ impl AppState {
         let s3_secret_access_key =
             std::env::var("S3_SECRET_ACCESS_KEY").expect("S3_SECRET_ACCESS_KEY must be set");
 
-        let connect_options = PgConnectOptions::from_str(&db_url)
-            .expect("DATABASE_URL must be a valid Postgres connection string")
-            .statement_cache_capacity(0);
-
-        let pool = match PgPoolOptions::new()
-            .max_connections(MAX_CONNECTIONS)
-            .connect_with(connect_options)
-            .await
-        {
-            Ok(pool) => {
-                println!("Connected to DB successfully");
-                pool
+        let pool = match db::build_pool(&db_url, MAX_CONNECTIONS).await {
+            Ok(pool) => pool,
+            Err(err) => {
+                println!("Failed to build DB pool: {}", err);
+                std::process::exit(1);
             }
+        };
+        match pool.get().await {
+            Ok(_) => println!("Connected to DB successfully"),
             Err(err) => {
                 println!("Failed to connect to DB: {}", err);
                 std::process::exit(1);
             }
-        };
+        }
 
         let blob = Arc::new(blob::S3BlobDeleter::new(
             &s3_endpoint,

@@ -12,8 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Development image
 FROM backend-system-deps AS backend-dev
-RUN cargo install cargo-watch \
-    && cargo install sqlx-cli --version 0.9.0 --no-default-features --features postgres,rustls
+RUN cargo install cargo-watch
 
 COPY Cargo.toml Cargo.lock ./
 RUN mkdir -p src \

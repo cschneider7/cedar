@@ -70,12 +70,15 @@ impl IntoResponse for AppError {
     }
 }
 
-impl From<sqlx::Error> for AppError {
-    fn from(e: sqlx::Error) -> Self {
-        match &e {
-            sqlx::Error::RowNotFound => AppError::NotFound("Resource not found".to_string()),
-            _ => AppError::Internal(e.to_string()),
-        }
+impl From<tokio_postgres::Error> for AppError {
+    fn from(e: tokio_postgres::Error) -> Self {
+        AppError::Internal(e.to_string())
+    }
+}
+
+impl From<deadpool_postgres::PoolError> for AppError {
+    fn from(e: deadpool_postgres::PoolError) -> Self {
+        AppError::Internal(e.to_string())
     }
 }
 
