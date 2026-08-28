@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres
+      POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
     services:
       postgres:
         image: postgres:18
