@@ -16,38 +16,9 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      pr: ${{ steps.release.outputs.pr }}
     steps:
       - uses: googleapis/release-please-action@v5
-        id: release
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-
-  sync-cargo-lock:
-    needs: release-please
-    if: ${{ needs.release-please.outputs.pr }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    env:
-      RELEASE_BRANCH: ${{ fromJSON(needs.release-please.outputs.pr).headBranchName }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ env.RELEASE_BRANCH }}
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-      - name: Sync Cargo.lock to Cargo.toml version
-        run: |
-          version="$(perl -ne 'if (/^version = "(.+)"/) { print $1; exit }' Cargo.toml)"
-          perl -0pi -e 's/(name = "class_management"\nversion = ")[^"]*/${1}'"$version"'/' Cargo.lock
-          if git diff --quiet Cargo.lock; then
-            echo "Cargo.lock already in sync."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "chore: sync Cargo.lock to release version"
-          git push
