@@ -6,7 +6,9 @@ use axum::{
     http::{StatusCode, header},
     response::IntoResponse,
 };
+use postgres_from_row::FromRow;
 use serde_json::json;
+use tokio_postgres::types::{ToSql, Type};
 use uuid::Uuid;
 
 use crate::{
@@ -22,12 +24,22 @@ use crate::{
 
 const MAX_STUDENTS_PER_USER: i64 = 850;
 
+fn not_found(what: &str) -> AppError {
+    AppError::NotFound(format!("{what} not found"))
+}
+
 /// Rejects a new student if `user_id` is already at `MAX_STUDENTS_PER_USER`.
-async fn check_student_limit(db: &sqlx::PgPool, user_id: &str) -> Result<(), AppError> {
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM students WHERE user_id = $1")
-        .bind(user_id)
-        .fetch_one(db)
-        .await?;
+async fn check_student_limit(
+    client: &tokio_postgres::Client,
+    user_id: &str,
+) -> Result<(), AppError> {
+    let count: i64 = client
+        .query_typed_one(
+            "SELECT COUNT(*) FROM students WHERE user_id = $1",
+            &[(&user_id, Type::TEXT)],
+        )
+        .await?
+        .get(0);
     if count >= MAX_STUDENTS_PER_USER {
         return Err(AppError::BadRequest(
             "Student limit reached (850 students per account).".to_string(),
@@ -38,20 +50,20 @@ async fn check_student_limit(db: &sqlx::PgPool, user_id: &str) -> Result<(), App
 
 /// Confirms that a classroom is owned by the user
 async fn check_classroom_ownership(
-    db: &sqlx::PgPool,
+    client: &tokio_postgres::Client,
     classroom_id: Option<Uuid>,
     user_id: &str,
 ) -> Result<(), AppError> {
     let Some(classroom_id) = classroom_id else {
         return Ok(());
     };
-    let exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM classrooms WHERE id = $1 AND user_id = $2)",
-    )
-    .bind(classroom_id)
-    .bind(user_id)
-    .fetch_one(db)
-    .await?;
+    let exists: bool = client
+        .query_typed_one(
+            "SELECT EXISTS(SELECT 1 FROM classrooms WHERE id = $1 AND user_id = $2)",
+            &[(&classroom_id, Type::UUID), (&user_id, Type::TEXT)],
+        )
+        .await?
+        .get(0);
     if !exists {
         return Err(AppError::NotFound("Classroom not found".to_string()));
     }
@@ -80,17 +92,24 @@ pub async fn student_list_handler(
     State(data): State<Arc<AppState>>,
     Query(params): Query<StudentListParams>,
 ) -> Result<impl IntoResponse, AppError> {
+    let conn = data.db.get().await?;
+
     if params.page.is_none()
         && params.page_size.is_none()
         && params.q.is_none()
         && params.sort_by.is_none()
         && params.sort_dir.is_none()
     {
-        let students: Vec<StudentModel> =
-            sqlx::query_as("SELECT * FROM students WHERE user_id = $1 ORDER BY name")
-                .bind(&user_id)
-                .fetch_all(&data.db)
-                .await?;
+        let rows = conn
+            .query_typed(
+                "SELECT * FROM students WHERE user_id = $1 ORDER BY name",
+                &[(&user_id, Type::TEXT)],
+            )
+            .await?;
+        let students = rows
+            .iter()
+            .map(StudentModel::try_from_row)
+            .collect::<Result<Vec<_>, _>>()?;
         return Ok((StatusCode::OK, Json(json!({"data": students}))));
     }
 
@@ -102,43 +121,27 @@ pub async fn student_list_handler(
     let sort_dir = params.sort_dir.unwrap_or(SortDir::Asc);
 
     let total_count: i64 = match &like_pattern {
-        Some(pattern) => {
-            sqlx::query_scalar("SELECT COUNT(*) FROM students WHERE user_id = $1 AND name ILIKE $2")
-                .bind(&user_id)
-                .bind(pattern)
-                .fetch_one(&data.db)
-                .await?
-        }
-        None => {
-            sqlx::query_scalar("SELECT COUNT(*) FROM students WHERE user_id = $1")
-                .bind(&user_id)
-                .fetch_one(&data.db)
-                .await?
-        }
+        Some(pattern) => conn
+            .query_typed_one(
+                "SELECT COUNT(*) FROM students WHERE user_id = $1 AND name ILIKE $2",
+                &[(&user_id, Type::TEXT), (pattern, Type::TEXT)],
+            )
+            .await?
+            .get(0),
+        None => conn
+            .query_typed_one(
+                "SELECT COUNT(*) FROM students WHERE user_id = $1",
+                &[(&user_id, Type::TEXT)],
+            )
+            .await?
+            .get(0),
     };
 
     let total_pages = ((total_count as f64) / (page_size as f64)).ceil().max(1.0) as i64;
     let page = requested_page.min(total_pages);
     let offset = (page - 1) * page_size;
 
-    let mut builder = sqlx::QueryBuilder::new(
-        "SELECT students.* FROM students \
-         LEFT JOIN classrooms ON classrooms.id = students.classroom_id \
-         WHERE students.user_id = ",
-    );
-    builder.push_bind(&user_id);
-    builder.push(" AND (");
-    match &like_pattern {
-        Some(pattern) => {
-            builder.push("students.name ILIKE ");
-            builder.push_bind(pattern);
-        }
-        None => {
-            builder.push("TRUE");
-        }
-    }
-    builder.push(") ORDER BY ");
-    builder.push(match (sort_by, sort_dir) {
+    let order_by = match (sort_by, sort_dir) {
         (StudentSortBy::Name, SortDir::Asc) => "students.name ASC",
         (StudentSortBy::Name, SortDir::Desc) => "students.name DESC",
         (StudentSortBy::StudentId, SortDir::Asc) => "students.student_id ASC, students.name ASC",
@@ -149,16 +152,33 @@ pub async fn student_list_handler(
         (StudentSortBy::Classroom, SortDir::Desc) => {
             "(students.classroom_id IS NULL) ASC, classrooms.period DESC, students.name ASC"
         }
-    });
-    builder.push(" LIMIT ");
-    builder.push_bind(page_size);
-    builder.push(" OFFSET ");
-    builder.push_bind(offset);
+    };
 
-    let students = builder
-        .build_query_as::<StudentModel>()
-        .fetch_all(&data.db)
-        .await?;
+    let mut sql = String::from(
+        "SELECT students.* FROM students \
+         LEFT JOIN classrooms ON classrooms.id = students.classroom_id \
+         WHERE students.user_id = $1 AND (",
+    );
+    let mut sql_params: Vec<(&(dyn ToSql + Sync), Type)> = vec![(&user_id, Type::TEXT)];
+    match &like_pattern {
+        Some(pattern) => {
+            sql_params.push((pattern, Type::TEXT));
+            sql.push_str(&format!("students.name ILIKE ${}", sql_params.len()));
+        }
+        None => sql.push_str("TRUE"),
+    }
+    sql.push_str(") ORDER BY ");
+    sql.push_str(order_by);
+    sql_params.push((&page_size, Type::INT8));
+    sql.push_str(&format!(" LIMIT ${}", sql_params.len()));
+    sql_params.push((&offset, Type::INT8));
+    sql.push_str(&format!(" OFFSET ${}", sql_params.len()));
+
+    let rows = conn.query_typed(&sql, &sql_params).await?;
+    let students = rows
+        .iter()
+        .map(StudentModel::try_from_row)
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok((
         StatusCode::OK,
@@ -180,12 +200,15 @@ pub async fn get_student_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let student: StudentModel =
-        sqlx::query_as("SELECT * FROM students WHERE id = $1 AND user_id = $2")
-            .bind(id)
-            .bind(user_id)
-            .fetch_one(&data.db)
-            .await?;
+    let conn = data.db.get().await?;
+    let row = conn
+        .query_typed_opt(
+            "SELECT * FROM students WHERE id = $1 AND user_id = $2",
+            &[(&id, Type::UUID), (&user_id, Type::TEXT)],
+        )
+        .await?
+        .ok_or_else(|| not_found("Student"))?;
+    let student = StudentModel::try_from_row(&row)?;
 
     Ok((StatusCode::OK, Json(json!({"data": student}))))
 }
@@ -196,12 +219,15 @@ pub async fn get_student_image_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let image_url: Option<String> =
-        sqlx::query_scalar("SELECT image_url FROM students WHERE id = $1 AND user_id = $2")
-            .bind(id)
-            .bind(&user_id)
-            .fetch_one(&data.db)
-            .await?;
+    let conn = data.db.get().await?;
+    let image_url: Option<String> = conn
+        .query_typed_opt(
+            "SELECT image_url FROM students WHERE id = $1 AND user_id = $2",
+            &[(&id, Type::UUID), (&user_id, Type::TEXT)],
+        )
+        .await?
+        .ok_or_else(|| not_found("Student"))?
+        .get(0);
 
     let key = image_url.ok_or_else(|| AppError::NotFound("Student has no photo".to_string()))?;
     if !key.starts_with(&student_image_prefix(&user_id)) {
@@ -273,13 +299,15 @@ pub async fn create_student_handler(
     State(data): State<Arc<AppState>>,
     Json(body): Json<StudentSchema>,
 ) -> Result<impl IntoResponse, AppError> {
-    check_student_limit(&data.db, &user_id).await?;
-    check_classroom_ownership(&data.db, body.classroom_id, &user_id).await?;
+    let conn = data.db.get().await?;
+    check_student_limit(&conn, &user_id).await?;
+    check_classroom_ownership(&conn, body.classroom_id, &user_id).await?;
     check_image_url_ownership(&body.image_url, &user_id)?;
 
     let seating_preference = body.seating_preference.map(|p| p.as_str());
-    let student: StudentModel = sqlx::query_as(
-        "INSERT INTO students (
+    let row = conn
+        .query_typed_one(
+            "INSERT INTO students (
             user_id,
             classroom_id,
             student_id,
@@ -289,15 +317,17 @@ pub async fn create_student_handler(
         )
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *",
-    )
-    .bind(user_id)
-    .bind(body.classroom_id)
-    .bind(body.student_id)
-    .bind(body.name)
-    .bind(body.image_url)
-    .bind(seating_preference)
-    .fetch_one(&data.db)
-    .await?;
+            &[
+                (&user_id, Type::TEXT),
+                (&body.classroom_id, Type::UUID),
+                (&body.student_id, Type::INT4),
+                (&body.name, Type::TEXT),
+                (&body.image_url, Type::TEXT),
+                (&seating_preference, Type::TEXT),
+            ],
+        )
+        .await?;
+    let student = StudentModel::try_from_row(&row)?;
 
     Ok((StatusCode::CREATED, Json(json!({"data": student}))))
 }
@@ -307,10 +337,14 @@ pub async fn count_students_handler(
     CurrentUserId(user_id): CurrentUserId,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM students WHERE user_id = $1")
-        .bind(user_id)
-        .fetch_one(&data.db)
-        .await?;
+    let conn = data.db.get().await?;
+    let count: i64 = conn
+        .query_typed_one(
+            "SELECT COUNT(*) FROM students WHERE user_id = $1",
+            &[(&user_id, Type::TEXT)],
+        )
+        .await?
+        .get(0);
 
     Ok((
         StatusCode::OK,
@@ -325,16 +359,19 @@ pub async fn update_student_handler(
     State(data): State<Arc<AppState>>,
     Json(body): Json<UpdateStudentSchema>,
 ) -> Result<impl IntoResponse, AppError> {
-    let student: StudentModel =
-        sqlx::query_as("SELECT * FROM students WHERE id = $1 AND user_id = $2")
-            .bind(id)
-            .bind(&user_id)
-            .fetch_one(&data.db)
-            .await?;
+    let mut conn = data.db.get().await?;
+    let row = conn
+        .query_typed_opt(
+            "SELECT * FROM students WHERE id = $1 AND user_id = $2",
+            &[(&id, Type::UUID), (&user_id, Type::TEXT)],
+        )
+        .await?
+        .ok_or_else(|| not_found("Student"))?;
+    let student = StudentModel::try_from_row(&row)?;
 
     let new_classroom_id = body.classroom_id.unwrap_or(student.classroom_id);
     let new_student_id = body.student_id.unwrap_or(student.student_id);
-    let new_name = body.name.as_ref().unwrap_or(&student.name);
+    let new_name = body.name.as_ref().unwrap_or(&student.name).as_str();
     let new_image_url = body
         .image_url
         .clone()
@@ -344,13 +381,14 @@ pub async fn update_student_handler(
         None => student.seating_preference.as_deref(),
     };
 
-    check_classroom_ownership(&data.db, new_classroom_id, &user_id).await?;
+    check_classroom_ownership(&conn, new_classroom_id, &user_id).await?;
     check_image_url_ownership(&new_image_url, &user_id)?;
 
-    let mut tx = data.db.begin().await?;
+    let tx = conn.transaction().await?;
 
-    let updated_student: StudentModel = sqlx::query_as(
-        "UPDATE students SET
+    let row = tx
+        .query_typed_one(
+            "UPDATE students SET
             classroom_id = $1,
             student_id = $2,
             name = $3,
@@ -358,26 +396,29 @@ pub async fn update_student_handler(
             seating_preference = $5
         WHERE id = $6
         RETURNING *",
-    )
-    .bind(new_classroom_id)
-    .bind(new_student_id)
-    .bind(new_name.as_str())
-    .bind(new_image_url)
-    .bind(new_seating_preference)
-    .bind(student.id)
-    .fetch_one(&mut *tx)
-    .await?;
+            &[
+                (&new_classroom_id, Type::UUID),
+                (&new_student_id, Type::INT4),
+                (&new_name, Type::TEXT),
+                (&new_image_url, Type::TEXT),
+                (&new_seating_preference, Type::TEXT),
+                (&student.id, Type::UUID),
+            ],
+        )
+        .await?;
+    let updated_student = StudentModel::try_from_row(&row)?;
 
     // Mark the deleted student's seat as empty
     if student.classroom_id.is_some() && new_classroom_id != student.classroom_id {
-        sqlx::query(
+        tx.execute_typed(
             "UPDATE seats SET student_id = NULL
             WHERE student_id = $1
               AND table_id IN (SELECT id FROM tables WHERE classroom_id = $2)",
+            &[
+                (&student.id, Type::UUID),
+                (&student.classroom_id, Type::UUID),
+            ],
         )
-        .bind(student.id)
-        .bind(student.classroom_id)
-        .execute(&mut *tx)
         .await?;
     }
 
@@ -398,12 +439,15 @@ pub async fn delete_student_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let student: StudentModel =
-        sqlx::query_as("DELETE FROM students WHERE id = $1 AND user_id = $2 RETURNING *")
-            .bind(id)
-            .bind(user_id)
-            .fetch_one(&data.db)
-            .await?;
+    let conn = data.db.get().await?;
+    let row = conn
+        .query_typed_opt(
+            "DELETE FROM students WHERE id = $1 AND user_id = $2 RETURNING *",
+            &[(&id, Type::UUID), (&user_id, Type::TEXT)],
+        )
+        .await?
+        .ok_or_else(|| not_found("Student"))?;
+    let student = StudentModel::try_from_row(&row)?;
 
     if let Some(url) = student.image_url.clone() {
         data.blob_deleter.delete(url).await;
@@ -418,13 +462,16 @@ pub async fn bulk_delete_students_handler(
     State(data): State<Arc<AppState>>,
     Json(body): Json<BulkDeleteStudentsSchema>,
 ) -> Result<impl IntoResponse, AppError> {
-    let deleted: Vec<Option<String>> = sqlx::query_scalar(
-        "DELETE FROM students WHERE user_id = $1 AND id = ANY($2) RETURNING image_url",
-    )
-    .bind(user_id)
-    .bind(&body.ids)
-    .fetch_all(&data.db)
-    .await?;
+    let conn = data.db.get().await?;
+    let deleted: Vec<Option<String>> = conn
+        .query_typed(
+            "DELETE FROM students WHERE user_id = $1 AND id = ANY($2) RETURNING image_url",
+            &[(&user_id, Type::TEXT), (&body.ids, Type::UUID_ARRAY)],
+        )
+        .await?
+        .iter()
+        .map(|row| row.get(0))
+        .collect();
 
     for url in deleted.iter().flatten() {
         data.blob_deleter.delete(url.clone()).await;
@@ -440,6 +487,7 @@ pub async fn bulk_delete_students_handler(
 mod tests {
     use axum::http::StatusCode;
     use serde_json::json;
+    use tokio_postgres::types::Type;
     use tower::ServiceExt;
     use uuid::Uuid;
 
@@ -447,140 +495,144 @@ mod tests {
     use crate::model::{SeatModel, TableModel};
     use crate::test_support::{
         RecordingBlobDeleter, app, app_with_blob_deleter, authenticated_json_request,
-        authenticated_request, body_json, insert_classroom, test_user_id,
+        authenticated_request, body_json, insert_classroom, seed_exec, seed_one, seed_opt,
+        test_user_id,
     };
 
     async fn insert_table(
-        pool: &sqlx::PgPool,
+        pool: &crate::db::Db,
         classroom_id: Uuid,
         table_number: i32,
     ) -> TableModel {
-        sqlx::query_as(
+        seed_one(
+            pool,
             "INSERT INTO tables (classroom_id, table_number, rows, cols, x_pos, y_pos)
             VALUES ($1, $2, 2, 2, 0, 0)
             RETURNING *",
+            &[(&classroom_id, Type::UUID), (&table_number, Type::INT4)],
         )
-        .bind(classroom_id)
-        .bind(table_number)
-        .fetch_one(pool)
         .await
-        .unwrap()
     }
 
     async fn insert_seat(
-        pool: &sqlx::PgPool,
+        pool: &crate::db::Db,
         table_id: Uuid,
         student_id: Option<Uuid>,
         seat_number: i16,
     ) -> SeatModel {
-        sqlx::query_as(
+        seed_one(
+            pool,
             "INSERT INTO seats (table_id, student_id, seat_number)
             VALUES ($1, $2, $3)
             RETURNING *",
+            &[
+                (&table_id, Type::UUID),
+                (&student_id, Type::UUID),
+                (&seat_number, Type::INT2),
+            ],
         )
-        .bind(table_id)
-        .bind(student_id)
-        .bind(seat_number)
-        .fetch_one(pool)
         .await
-        .unwrap()
     }
 
-    async fn fetch_seat(pool: &sqlx::PgPool, id: Uuid) -> SeatModel {
-        sqlx::query_as("SELECT * FROM seats WHERE id = $1")
-            .bind(id)
-            .fetch_one(pool)
-            .await
-            .unwrap()
+    async fn fetch_seat(pool: &crate::db::Db, id: Uuid) -> SeatModel {
+        seed_one(
+            pool,
+            "SELECT * FROM seats WHERE id = $1",
+            &[(&id, Type::UUID)],
+        )
+        .await
     }
 
     async fn insert_student(
-        pool: &sqlx::PgPool,
+        pool: &crate::db::Db,
         user_id: &str,
         classroom_id: Option<Uuid>,
         student_id: i32,
         name: &str,
     ) -> StudentModel {
-        sqlx::query_as(
+        seed_one(
+            pool,
             "INSERT INTO students (user_id, classroom_id, student_id, name)
             VALUES ($1, $2, $3, $4)
             RETURNING *",
+            &[
+                (&user_id, Type::TEXT),
+                (&classroom_id, Type::UUID),
+                (&student_id, Type::INT4),
+                (&name, Type::TEXT),
+            ],
         )
-        .bind(user_id)
-        .bind(classroom_id)
-        .bind(student_id)
-        .bind(name)
-        .fetch_one(pool)
         .await
-        .unwrap()
     }
 
     async fn insert_student_with_image_url(
-        pool: &sqlx::PgPool,
+        pool: &crate::db::Db,
         user_id: &str,
         student_id: i32,
         name: &str,
         image_url: &str,
     ) -> StudentModel {
-        sqlx::query_as(
+        seed_one(
+            pool,
             "INSERT INTO students (user_id, classroom_id, student_id, name, image_url)
             VALUES ($1, NULL, $2, $3, $4)
             RETURNING *",
+            &[
+                (&user_id, Type::TEXT),
+                (&student_id, Type::INT4),
+                (&name, Type::TEXT),
+                (&image_url, Type::TEXT),
+            ],
         )
-        .bind(user_id)
-        .bind(student_id)
-        .bind(name)
-        .bind(image_url)
-        .fetch_one(pool)
         .await
-        .unwrap()
     }
 
     async fn insert_student_with_seating_preference(
-        pool: &sqlx::PgPool,
+        pool: &crate::db::Db,
         user_id: &str,
         student_id: i32,
         name: &str,
         preference: &str,
     ) -> StudentModel {
-        sqlx::query_as(
+        seed_one(
+            pool,
             "INSERT INTO students (user_id, classroom_id, student_id, name, seating_preference)
             VALUES ($1, NULL, $2, $3, $4)
             RETURNING *",
+            &[
+                (&user_id, Type::TEXT),
+                (&student_id, Type::INT4),
+                (&name, Type::TEXT),
+                (&preference, Type::TEXT),
+            ],
         )
-        .bind(user_id)
-        .bind(student_id)
-        .bind(name)
-        .bind(preference)
-        .fetch_one(pool)
         .await
-        .unwrap()
     }
 
-    async fn fetch_student(pool: &sqlx::PgPool, id: Uuid) -> Option<StudentModel> {
-        sqlx::query_as("SELECT * FROM students WHERE id = $1")
-            .bind(id)
-            .fetch_optional(pool)
-            .await
-            .unwrap()
+    async fn fetch_student(pool: &crate::db::Db, id: Uuid) -> Option<StudentModel> {
+        seed_opt(
+            pool,
+            "SELECT * FROM students WHERE id = $1",
+            &[(&id, Type::UUID)],
+        )
+        .await
     }
 
-    async fn seed_students(pool: &sqlx::PgPool, user_id: &str, count: i64) {
-        sqlx::query(
+    async fn seed_students(pool: &crate::db::Db, user_id: &str, count: i64) {
+        let count = count as i32;
+        seed_exec(
+            pool,
             "INSERT INTO students (user_id, student_id, name)
             SELECT $1, gs, 'Student ' || gs FROM generate_series(1, $2::int) AS gs",
+            &[(&user_id, Type::TEXT), (&count, Type::INT4)],
         )
-        .bind(user_id)
-        .bind(count as i32)
-        .execute(pool)
-        .await
-        .unwrap();
+        .await;
     }
 
-    #[sqlx::test]
-    async fn image_upload_url_rejects_invalid_content_length(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn image_upload_url_rejects_invalid_content_length() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
 
@@ -601,8 +653,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn create_student_success(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn create_student_success() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let body = json!({
@@ -631,8 +685,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn create_student_rejects_at_limit(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn create_student_rejects_at_limit() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         seed_students(&pool, &user_id, 850).await;
@@ -652,8 +708,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn create_student_allows_up_to_limit(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn create_student_allows_up_to_limit() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         seed_students(&pool, &user_id, 849).await;
@@ -673,8 +731,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn create_student_limit_is_per_user(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn create_student_limit_is_per_user() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_a = test_user_id();
         let user_b = test_user_id();
@@ -695,10 +755,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn count_students_handler_returns_count_and_limit(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn count_students_handler_returns_count_and_limit() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let other_user_id = test_user_id();
@@ -722,8 +782,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn create_student_with_image_url_success(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn create_student_with_image_url_success() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let image_url = format!("students/{user_id}/bob.jpg");
@@ -751,10 +813,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn create_student_rejects_image_url_outside_own_prefix(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn create_student_rejects_image_url_outside_own_prefix() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let other_id = test_user_id();
@@ -779,10 +841,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn create_student_with_seating_preference_success(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn create_student_with_seating_preference_success() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let body = json!({
@@ -809,10 +871,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn create_student_omits_seating_preference_defaults_to_null(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn create_student_omits_seating_preference_defaults_to_null() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let body = json!({
@@ -839,8 +901,10 @@ mod tests {
     }
 
     // `student_id` has no uniqueness constraint, so duplicates are accepted.
-    #[sqlx::test]
-    async fn create_student_allows_duplicate_student_id(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn create_student_allows_duplicate_student_id() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let body =
@@ -873,10 +937,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn create_student_rejects_another_users_classroom_id(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn create_student_rejects_another_users_classroom_id() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let owner_id = test_user_id();
         let other_id = test_user_id();
@@ -902,10 +966,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_student_partial_leaves_other_fields_unchanged(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_student_partial_leaves_other_fields_unchanged() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let existing = insert_student(&pool, &user_id, None, 7, "Original Name").await;
@@ -931,8 +995,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_student_nonexistent_id_returns_404(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_student_nonexistent_id_returns_404() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let body = json!({"name": "Doesn't Matter"});
@@ -955,10 +1021,10 @@ mod tests {
     }
 
     // Double-Option deserialization: omitted keeps, explicit null clears.
-    #[sqlx::test]
-    async fn update_student_omitted_classroom_id_keeps_existing_value(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_student_omitted_classroom_id_keeps_existing_value() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -982,10 +1048,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_student_explicit_null_classroom_id_clears_value(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_student_explicit_null_classroom_id_clears_value() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -1009,8 +1075,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_student_new_classroom_id_sets_value(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_student_new_classroom_id_sets_value() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let existing = insert_student(&pool, &user_id, None, 1, "Bob").await;
@@ -1034,10 +1102,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_student_rejects_another_users_classroom_id(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_student_rejects_another_users_classroom_id() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let owner_id = test_user_id();
         let other_id = test_user_id();
@@ -1059,10 +1127,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_student_rejects_image_url_outside_own_prefix(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_student_rejects_image_url_outside_own_prefix() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let other_id = test_user_id();
@@ -1085,10 +1153,10 @@ mod tests {
 
     // Double-Option deserialization for image_url: omitted keeps, explicit
     // null clears — same pattern as classroom_id above.
-    #[sqlx::test]
-    async fn update_student_omitted_image_url_keeps_existing_value(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_student_omitted_image_url_keeps_existing_value() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let image_url = format!("students/{user_id}/bob.jpg");
@@ -1112,10 +1180,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_student_explicit_null_image_url_clears_value(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_student_explicit_null_image_url_clears_value() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let existing =
@@ -1142,10 +1210,11 @@ mod tests {
 
     // Double-Option deserialization for seating_preference: omitted keeps,
     // explicit null clears — same pattern as classroom_id/image_url above.
-    #[sqlx::test]
-    async fn update_student_omitted_seating_preference_keeps_existing_value(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_student_omitted_seating_preference_keeps_existing_value() -> anyhow::Result<()>
+    {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let existing =
@@ -1169,10 +1238,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_student_explicit_null_seating_preference_clears_value(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_student_explicit_null_seating_preference_clears_value() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let existing =
@@ -1196,10 +1265,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_student_new_seating_preference_sets_value(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_student_new_seating_preference_sets_value() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let existing = insert_student(&pool, &user_id, None, 1, "Bob").await;
@@ -1222,10 +1291,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_student_unassign_clears_seat_in_old_classroom(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_student_unassign_clears_seat_in_old_classroom() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let classroom = insert_classroom(&pool, &user_id, "Math", 1).await;
@@ -1251,10 +1320,11 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_student_moved_to_new_classroom_clears_seat_in_old_classroom(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_student_moved_to_new_classroom_clears_seat_in_old_classroom()
+    -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let old_classroom = insert_classroom(&pool, &user_id, "Math", 1).await;
@@ -1281,10 +1351,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_student_same_classroom_id_does_not_clear_seat(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_student_same_classroom_id_does_not_clear_seat() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let classroom = insert_classroom(&pool, &user_id, "Math", 1).await;
@@ -1310,10 +1380,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_student_replacing_image_url_deletes_old_blob(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_student_replacing_image_url_deletes_old_blob() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let recorder = std::sync::Arc::new(RecordingBlobDeleter::default());
         let app = app_with_blob_deleter(pool.clone(), recorder.clone());
         let user_id = test_user_id();
@@ -1337,10 +1407,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_student_unchanged_image_url_does_not_delete_blob(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_student_unchanged_image_url_does_not_delete_blob() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let recorder = std::sync::Arc::new(RecordingBlobDeleter::default());
         let app = app_with_blob_deleter(pool.clone(), recorder.clone());
         let user_id = test_user_id();
@@ -1364,8 +1434,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn delete_student_success(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn delete_student_success() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let existing = insert_student(&pool, &user_id, None, 1, "Bob").await;
@@ -1388,8 +1460,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn delete_student_with_image_url_deletes_blob(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn delete_student_with_image_url_deletes_blob() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let recorder = std::sync::Arc::new(RecordingBlobDeleter::default());
         let app = app_with_blob_deleter(pool.clone(), recorder.clone());
         let user_id = test_user_id();
@@ -1415,8 +1489,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn delete_student_nonexistent_id_returns_404(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn delete_student_nonexistent_id_returns_404() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
 
@@ -1438,8 +1514,10 @@ mod tests {
 
     // --- auth/scoping coverage ---
 
-    #[sqlx::test]
-    async fn unauthenticated_requests_return_401(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn unauthenticated_requests_return_401() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let student_id = Uuid::new_v4();
 
@@ -1474,10 +1552,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn cross_user_get_update_delete_student_returns_404(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn cross_user_get_update_delete_student_returns_404() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let owner_id = test_user_id();
         let other_id = test_user_id();
@@ -1521,8 +1599,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn get_student_image_without_photo_returns_404(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn get_student_image_without_photo_returns_404() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let student = insert_student(&pool, &user_id, None, 1, "Bob").await;
@@ -1540,8 +1620,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn get_student_image_scoped_to_owner(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn get_student_image_scoped_to_owner() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let owner_id = test_user_id();
         let other_id = test_user_id();
@@ -1562,10 +1644,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn get_student_image_rejects_key_outside_own_prefix(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn get_student_image_rejects_key_outside_own_prefix() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         // A row with a mismatched image_url can't be produced through the
         // API anymore (see check_image_url_ownership), but this defends a
         // pre-existing row (or a future write path that forgets the check)
@@ -1595,8 +1677,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn list_students_excludes_other_users_students(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn list_students_excludes_other_users_students() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_a_id = test_user_id();
         let user_b_id = test_user_id();
@@ -1619,10 +1703,11 @@ mod tests {
 
     // --- pagination/search coverage ---
 
-    #[sqlx::test]
-    async fn list_students_unpaginated_when_no_params_matches_current_behavior(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn list_students_unpaginated_when_no_params_matches_current_behavior()
+    -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         for (i, name) in ["Alice", "Bob", "Carl"].iter().enumerate() {
@@ -1642,10 +1727,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn list_students_paginated_returns_correct_slice_and_count(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn list_students_paginated_returns_correct_slice_and_count() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         for (i, name) in ["Alice", "Bob", "Carl", "Dana", "Eve"].iter().enumerate() {
@@ -1675,10 +1760,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn list_students_paginated_second_page_returns_remaining_slice(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn list_students_paginated_second_page_returns_remaining_slice() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         for (i, name) in ["Alice", "Bob", "Carl", "Dana", "Eve"].iter().enumerate() {
@@ -1704,10 +1789,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn list_students_search_filters_by_name_case_insensitively(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn list_students_search_filters_by_name_case_insensitively() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         insert_student(&pool, &user_id, None, 1, "Alice").await;
@@ -1732,10 +1817,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn list_students_search_no_matches_returns_empty_with_zero_count(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn list_students_search_no_matches_returns_empty_with_zero_count() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         insert_student(&pool, &user_id, None, 1, "Alice").await;
@@ -1759,10 +1844,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn list_students_out_of_range_page_clamps_to_last_page(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn list_students_out_of_range_page_clamps_to_last_page() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         for (i, name) in ["Alice", "Bob", "Carl"].iter().enumerate() {
@@ -1788,8 +1873,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn list_students_respects_page_size(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn list_students_respects_page_size() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         for i in 0..10 {
@@ -1813,8 +1900,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn list_students_page_size_is_capped_at_100(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn list_students_page_size_is_capped_at_100() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
 
@@ -1834,10 +1923,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn list_students_pagination_excludes_other_users_students(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn list_students_pagination_excludes_other_users_students() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_a_id = test_user_id();
         let user_b_id = test_user_id();
@@ -1860,10 +1949,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn list_students_q_alone_without_page_triggers_paginated_branch(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn list_students_q_alone_without_page_triggers_paginated_branch() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         insert_student(&pool, &user_id, None, 1, "Alice").await;
@@ -1888,8 +1977,10 @@ mod tests {
 
     // --- sorting coverage ---
 
-    #[sqlx::test]
-    async fn list_students_sorts_by_name_desc(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn list_students_sorts_by_name_desc() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         for (i, name) in ["Alice", "Bob", "Carl"].iter().enumerate() {
@@ -1915,8 +2006,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn list_students_sorts_by_student_id_asc(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn list_students_sorts_by_student_id_asc() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         insert_student(&pool, &user_id, None, 30, "Zed").await;
@@ -1942,8 +2035,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn list_students_sorts_by_student_id_desc(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn list_students_sorts_by_student_id_desc() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         insert_student(&pool, &user_id, None, 30, "Zed").await;
@@ -1969,8 +2064,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn list_students_sorts_by_classroom_period_asc(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn list_students_sorts_by_classroom_period_asc() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let period5 = insert_classroom(&pool, &user_id, "History", 5).await;
@@ -1996,10 +2093,11 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn list_students_sorts_by_classroom_puts_unassigned_last_regardless_of_direction(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn list_students_sorts_by_classroom_puts_unassigned_last_regardless_of_direction()
+    -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let classroom = insert_classroom(&pool, &user_id, "Math", 2).await;
@@ -2029,10 +2127,10 @@ mod tests {
 
     // --- bulk delete coverage ---
 
-    #[sqlx::test]
-    async fn bulk_delete_students_removes_only_callers_own_students(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn bulk_delete_students_removes_only_callers_own_students() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_a_id = test_user_id();
         let user_b_id = test_user_id();
@@ -2061,10 +2159,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn bulk_delete_students_deletes_blobs_for_each_row(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn bulk_delete_students_deletes_blobs_for_each_row() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let recorder = std::sync::Arc::new(RecordingBlobDeleter::default());
         let app = app_with_blob_deleter(pool.clone(), recorder.clone());
         let user_id = test_user_id();
@@ -2092,8 +2190,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn bulk_delete_students_ignores_nonexistent_ids(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn bulk_delete_students_ignores_nonexistent_ids() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let existing = insert_student(&pool, &user_id, None, 1, "Bob").await;
@@ -2117,8 +2217,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn bulk_delete_students_empty_ids_is_a_noop(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn bulk_delete_students_empty_ids_is_a_noop() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let existing = insert_student(&pool, &user_id, None, 1, "Bob").await;

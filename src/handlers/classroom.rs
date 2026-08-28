@@ -6,7 +6,9 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use postgres_from_row::FromRow;
 use serde_json::json;
+use tokio_postgres::types::Type;
 use uuid::Uuid;
 
 use crate::{
@@ -25,12 +27,22 @@ use crate::{
 const MAX_CLASSROOMS_PER_USER: i64 = 50;
 const MAX_PINNED_CLASSROOMS_PER_USER: i64 = 10;
 
+fn not_found(what: &str) -> AppError {
+    AppError::NotFound(format!("{what} not found"))
+}
+
 /// Rejects a new classroom if `user_id` is already at `MAX_CLASSROOMS_PER_USER`.
-async fn check_classroom_limit(db: &sqlx::PgPool, user_id: &str) -> Result<(), AppError> {
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM classrooms WHERE user_id = $1")
-        .bind(user_id)
-        .fetch_one(db)
-        .await?;
+async fn check_classroom_limit(
+    client: &tokio_postgres::Client,
+    user_id: &str,
+) -> Result<(), AppError> {
+    let count: i64 = client
+        .query_typed_one(
+            "SELECT COUNT(*) FROM classrooms WHERE user_id = $1",
+            &[(&user_id, Type::TEXT)],
+        )
+        .await?
+        .get(0);
     if count >= MAX_CLASSROOMS_PER_USER {
         return Err(AppError::BadRequest(
             "Classroom limit reached (50 classrooms per account).".to_string(),
@@ -40,13 +52,17 @@ async fn check_classroom_limit(db: &sqlx::PgPool, user_id: &str) -> Result<(), A
 }
 
 /// Rejects newly pinning a classroom if user reached maximum pinned number
-async fn check_pinned_classroom_limit(db: &sqlx::PgPool, user_id: &str) -> Result<(), AppError> {
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM classrooms WHERE user_id = $1 AND pinned_at IS NOT NULL",
-    )
-    .bind(user_id)
-    .fetch_one(db)
-    .await?;
+async fn check_pinned_classroom_limit(
+    client: &tokio_postgres::Client,
+    user_id: &str,
+) -> Result<(), AppError> {
+    let count: i64 = client
+        .query_typed_one(
+            "SELECT COUNT(*) FROM classrooms WHERE user_id = $1 AND pinned_at IS NOT NULL",
+            &[(&user_id, Type::TEXT)],
+        )
+        .await?
+        .get(0);
     if count >= MAX_PINNED_CLASSROOMS_PER_USER {
         return Err(AppError::BadRequest(
             "Pinned classroom limit reached (10 pinned classrooms per account).".to_string(),
@@ -60,11 +76,17 @@ pub async fn classroom_list_handler(
     CurrentUserId(user_id): CurrentUserId,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let classrooms: Vec<ClassroomModel> =
-        sqlx::query_as("SELECT * FROM classrooms WHERE user_id = $1 ORDER BY period")
-            .bind(user_id)
-            .fetch_all(&data.db)
-            .await?;
+    let conn = data.db.get().await?;
+    let rows = conn
+        .query_typed(
+            "SELECT * FROM classrooms WHERE user_id = $1 ORDER BY period",
+            &[(&user_id, Type::TEXT)],
+        )
+        .await?;
+    let classrooms = rows
+        .iter()
+        .map(ClassroomModel::try_from_row)
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok((StatusCode::OK, Json(json!({"data": classrooms}))))
 }
@@ -75,12 +97,15 @@ pub async fn get_classroom_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let classroom: ClassroomModel =
-        sqlx::query_as("SELECT * FROM classrooms WHERE id = $1 AND user_id = $2")
-            .bind(id)
-            .bind(user_id)
-            .fetch_one(&data.db)
-            .await?;
+    let conn = data.db.get().await?;
+    let row = conn
+        .query_typed_opt(
+            "SELECT * FROM classrooms WHERE id = $1 AND user_id = $2",
+            &[(&id, Type::UUID), (&user_id, Type::TEXT)],
+        )
+        .await?
+        .ok_or_else(|| not_found("Classroom"))?;
+    let classroom = ClassroomModel::try_from_row(&row)?;
 
     Ok((StatusCode::OK, Json(json!({"data": classroom}))))
 }
@@ -91,10 +116,13 @@ pub async fn create_classroom_handler(
     State(data): State<Arc<AppState>>,
     Json(body): Json<ClassroomSchema>,
 ) -> Result<impl IntoResponse, AppError> {
-    check_classroom_limit(&data.db, &user_id).await?;
+    let conn = data.db.get().await?;
+    check_classroom_limit(&conn, &user_id).await?;
 
-    let classroom: ClassroomModel = sqlx::query_as(
-        "INSERT INTO classrooms (
+    let term_season = body.term_season.as_str();
+    let row = conn
+        .query_typed_one(
+            "INSERT INTO classrooms (
             user_id,
             subject,
             period,
@@ -103,14 +131,16 @@ pub async fn create_classroom_handler(
         )
         VALUES ($1, $2, $3, $4, $5)
         RETURNING *",
-    )
-    .bind(user_id)
-    .bind(body.subject)
-    .bind(body.period)
-    .bind(body.term_season.as_str())
-    .bind(body.term_year)
-    .fetch_one(&data.db)
-    .await?;
+            &[
+                (&user_id, Type::TEXT),
+                (&body.subject, Type::TEXT),
+                (&body.period, Type::INT2),
+                (&term_season, Type::TEXT),
+                (&body.term_year, Type::INT2),
+            ],
+        )
+        .await?;
+    let classroom = ClassroomModel::try_from_row(&row)?;
 
     Ok((StatusCode::CREATED, Json(json!({"data": classroom}))))
 }
@@ -122,14 +152,17 @@ pub async fn update_classroom_handler(
     State(data): State<Arc<AppState>>,
     Json(body): Json<UpdateClassroomSchema>,
 ) -> Result<impl IntoResponse, AppError> {
-    let classroom: ClassroomModel =
-        sqlx::query_as("SELECT * FROM classrooms WHERE id = $1 AND user_id = $2")
-            .bind(id)
-            .bind(&user_id)
-            .fetch_one(&data.db)
-            .await?;
+    let conn = data.db.get().await?;
+    let row = conn
+        .query_typed_opt(
+            "SELECT * FROM classrooms WHERE id = $1 AND user_id = $2",
+            &[(&id, Type::UUID), (&user_id, Type::TEXT)],
+        )
+        .await?
+        .ok_or_else(|| not_found("Classroom"))?;
+    let classroom = ClassroomModel::try_from_row(&row)?;
 
-    let new_subject = body.subject.as_ref().unwrap_or(&classroom.subject);
+    let new_subject = body.subject.as_ref().unwrap_or(&classroom.subject).as_str();
     let new_period = body.period.unwrap_or(classroom.period);
     let new_term_season = body
         .term_season
@@ -141,11 +174,12 @@ pub async fn update_classroom_handler(
     let new_pinned_at = body.pinned_at.unwrap_or(classroom.pinned_at);
 
     if classroom.pinned_at.is_none() && new_pinned_at.is_some() {
-        check_pinned_classroom_limit(&data.db, &user_id).await?;
+        check_pinned_classroom_limit(&conn, &user_id).await?;
     }
 
-    let updated_classroom: ClassroomModel = sqlx::query_as(
-        "UPDATE classrooms SET
+    let row = conn
+        .query_typed_one(
+            "UPDATE classrooms SET
             subject = $1,
             period = $2,
             term_season = $3,
@@ -155,17 +189,19 @@ pub async fn update_classroom_handler(
             pinned_at = $7
         WHERE id = $8
         RETURNING *",
-    )
-    .bind(new_subject.as_str())
-    .bind(new_period)
-    .bind(new_term_season)
-    .bind(new_term_year)
-    .bind(new_boundary_width)
-    .bind(new_boundary_height)
-    .bind(new_pinned_at)
-    .bind(classroom.id)
-    .fetch_one(&data.db)
-    .await?;
+            &[
+                (&new_subject, Type::TEXT),
+                (&new_period, Type::INT2),
+                (&new_term_season, Type::TEXT),
+                (&new_term_year, Type::INT2),
+                (&new_boundary_width, Type::INT4),
+                (&new_boundary_height, Type::INT4),
+                (&new_pinned_at, Type::TIMESTAMPTZ),
+                (&classroom.id, Type::UUID),
+            ],
+        )
+        .await?;
+    let updated_classroom = ClassroomModel::try_from_row(&row)?;
 
     Ok((StatusCode::OK, Json(json!({"data": updated_classroom}))))
 }
@@ -176,12 +212,15 @@ pub async fn delete_classroom_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let classroom: ClassroomModel =
-        sqlx::query_as("DELETE FROM classrooms WHERE id = $1 AND user_id = $2 RETURNING *")
-            .bind(id)
-            .bind(user_id)
-            .fetch_one(&data.db)
-            .await?;
+    let conn = data.db.get().await?;
+    let row = conn
+        .query_typed_opt(
+            "DELETE FROM classrooms WHERE id = $1 AND user_id = $2 RETURNING *",
+            &[(&id, Type::UUID), (&user_id, Type::TEXT)],
+        )
+        .await?
+        .ok_or_else(|| not_found("Classroom"))?;
+    let classroom = ClassroomModel::try_from_row(&row)?;
 
     Ok((StatusCode::OK, Json(json!({"data": classroom}))))
 }
@@ -192,16 +231,21 @@ pub async fn get_seating_chart_handler(
     Path(classroom_id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let (boundary_width, boundary_height): (i32, i32) = sqlx::query_as(
-        "SELECT boundary_width, boundary_height FROM classrooms WHERE id = $1 AND user_id = $2",
-    )
-    .bind(classroom_id)
-    .bind(user_id)
-    .fetch_one(&data.db)
-    .await?;
+    let conn = data.db.get().await?;
 
-    let tables: Vec<TableSchema> = sqlx::query_as(
-        r#"SELECT
+    let classroom_row = conn
+        .query_typed_opt(
+            "SELECT boundary_width, boundary_height FROM classrooms WHERE id = $1 AND user_id = $2",
+            &[(&classroom_id, Type::UUID), (&user_id, Type::TEXT)],
+        )
+        .await?
+        .ok_or_else(|| not_found("Classroom"))?;
+    let boundary_width: i32 = classroom_row.try_get("boundary_width")?;
+    let boundary_height: i32 = classroom_row.try_get("boundary_height")?;
+
+    let table_rows = conn
+        .query_typed(
+            r#"SELECT
             t.table_number,
             t.rows,
             t.cols,
@@ -213,10 +257,13 @@ pub async fn get_seating_chart_handler(
         WHERE t.classroom_id = $1
         GROUP BY t.table_number, t.rows, t.cols, t.x_pos, t.y_pos
         "#,
-    )
-    .bind(classroom_id)
-    .fetch_all(&data.db)
-    .await?;
+            &[(&classroom_id, Type::UUID)],
+        )
+        .await?;
+    let tables = table_rows
+        .iter()
+        .map(TableSchema::try_from_row)
+        .collect::<Result<Vec<_>, _>>()?;
 
     let response = json!({
         "data": {
@@ -236,55 +283,63 @@ pub async fn update_seating_chart_handler(
     State(data): State<Arc<AppState>>,
     Json(body): Json<SeatingChartSchema>,
 ) -> Result<impl IntoResponse, AppError> {
-    let mut tx = data.db.begin().await?;
+    let mut conn = data.db.get().await?;
+    let tx = conn.transaction().await?;
 
-    let result = sqlx::query(
-        "UPDATE classrooms SET boundary_width = $1, boundary_height = $2 WHERE id = $3 AND user_id = $4",
-    )
-    .bind(body.boundary_width)
-    .bind(body.boundary_height)
-    .bind(classroom_id)
-    .bind(&user_id)
-    .execute(&mut *tx)
-    .await?;
-    if result.rows_affected() == 0 {
+    let updated = tx
+        .execute_typed(
+            "UPDATE classrooms SET boundary_width = $1, boundary_height = $2 WHERE id = $3 AND user_id = $4",
+            &[
+                (&body.boundary_width, Type::INT4),
+                (&body.boundary_height, Type::INT4),
+                (&classroom_id, Type::UUID),
+                (&user_id, Type::TEXT),
+            ],
+        )
+        .await?;
+    if updated == 0 {
         return Err(AppError::NotFound("Classroom not found".to_string()));
     }
 
-    sqlx::query("DELETE FROM tables WHERE classroom_id = $1")
-        .bind(classroom_id)
-        .execute(&mut *tx)
-        .await?;
+    tx.execute_typed(
+        "DELETE FROM tables WHERE classroom_id = $1",
+        &[(&classroom_id, Type::UUID)],
+    )
+    .await?;
 
     let mut chart_tables: Vec<TableSchema> = Vec::new();
     for (index, table) in body.tables.iter().enumerate() {
         let table_number = index as i32;
 
-        let table_id: Uuid = sqlx::query_scalar(
-            "INSERT INTO tables (classroom_id, table_number, rows, cols, x_pos, y_pos)
+        let table_id: Uuid = tx
+            .query_typed_one(
+                "INSERT INTO tables (classroom_id, table_number, rows, cols, x_pos, y_pos)
             VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING id",
-        )
-        .bind(classroom_id)
-        .bind(table_number)
-        .bind(table.rows)
-        .bind(table.cols)
-        .bind(table.x_pos)
-        .bind(table.y_pos)
-        .fetch_one(&mut *tx)
-        .await?;
+                &[
+                    (&classroom_id, Type::UUID),
+                    (&table_number, Type::INT4),
+                    (&table.rows, Type::INT2),
+                    (&table.cols, Type::INT2),
+                    (&table.x_pos, Type::INT4),
+                    (&table.y_pos, Type::INT4),
+                ],
+            )
+            .await?
+            .get("id");
 
         for (index, student_id) in table.seat_assignments.iter().enumerate() {
             let seat_number = index as i16;
 
-            sqlx::query(
+            tx.execute_typed(
                 "INSERT INTO seats (table_id, student_id, seat_number)
                 VALUES ($1, $2, $3)",
+                &[
+                    (&table_id, Type::UUID),
+                    (student_id, Type::UUID),
+                    (&seat_number, Type::INT2),
+                ],
             )
-            .bind(table_id)
-            .bind(student_id.as_ref())
-            .bind(seat_number)
-            .execute(&mut *tx)
             .await?;
         }
 
@@ -334,36 +389,45 @@ pub async fn randomize_seating_chart_handler(
         )));
     }
 
-    let _classroom: ClassroomModel =
-        sqlx::query_as("SELECT * FROM classrooms WHERE id = $1 AND user_id = $2")
-            .bind(classroom_id)
-            .bind(user_id)
-            .fetch_one(&data.db)
-            .await?;
+    let conn = data.db.get().await?;
 
-    let students: Vec<(Uuid, Option<String>)> =
-        sqlx::query_as("SELECT id, seating_preference FROM students WHERE classroom_id = $1")
-            .bind(classroom_id)
-            .fetch_all(&data.db)
-            .await?;
-    let students: Vec<(Uuid, Option<SeatingPreference>)> = students
-        .into_iter()
-        .map(|(id, seating_preference)| {
-            (
+    conn.query_typed_opt(
+        "SELECT 1 FROM classrooms WHERE id = $1 AND user_id = $2",
+        &[(&classroom_id, Type::UUID), (&user_id, Type::TEXT)],
+    )
+    .await?
+    .ok_or_else(|| not_found("Classroom"))?;
+
+    let student_rows = conn
+        .query_typed(
+            "SELECT id, seating_preference FROM students WHERE classroom_id = $1",
+            &[(&classroom_id, Type::UUID)],
+        )
+        .await?;
+    let students: Vec<(Uuid, Option<SeatingPreference>)> = student_rows
+        .iter()
+        .map(|row| {
+            let id: Uuid = row.try_get("id")?;
+            let seating_preference: Option<String> = row.try_get("seating_preference")?;
+            Ok((
                 id,
                 seating_preference.and_then(|s| SeatingPreference::from_db_str(&s)),
-            )
+            ))
         })
-        .collect();
+        .collect::<Result<_, AppError>>()?;
 
     let roster_ids: Vec<Uuid> = students.iter().map(|(id, _)| *id).collect();
-    let separations: Vec<(Uuid, Uuid)> = sqlx::query_as(
-        "SELECT student_id_a, student_id_b FROM student_separations
+    let separation_rows = conn
+        .query_typed(
+            "SELECT student_id_a, student_id_b FROM student_separations
         WHERE student_id_a = ANY($1) AND student_id_b = ANY($1)",
-    )
-    .bind(&roster_ids)
-    .fetch_all(&data.db)
-    .await?;
+            &[(&roster_ids, Type::UUID_ARRAY)],
+        )
+        .await?;
+    let separations: Vec<(Uuid, Uuid)> = separation_rows
+        .iter()
+        .map(|row| Ok((row.try_get("student_id_a")?, row.try_get("student_id_b")?)))
+        .collect::<Result<_, AppError>>()?;
 
     let tables = seating_chart::build_randomized_chart(
         students,
@@ -426,6 +490,7 @@ pub async fn cold_call_handler(
 mod tests {
     use axum::http::StatusCode;
     use serde_json::json;
+    use tokio_postgres::types::Type;
     use tower::ServiceExt;
     use uuid::Uuid;
 
@@ -434,20 +499,21 @@ mod tests {
         model::{SeatModel, TableModel},
         test_support::{
             app, authenticated_json_request, authenticated_request, body_json, insert_classroom,
-            test_user_id,
+            seed_all, seed_exec, seed_one, seed_opt, seed_scalar, test_user_id,
         },
     };
 
-    async fn fetch_classroom(pool: &sqlx::PgPool, id: Uuid) -> Option<ClassroomModel> {
-        sqlx::query_as("SELECT * FROM classrooms WHERE id = $1")
-            .bind(id)
-            .fetch_optional(pool)
-            .await
-            .unwrap()
+    async fn fetch_classroom(pool: &crate::db::Db, id: Uuid) -> Option<ClassroomModel> {
+        seed_opt(
+            pool,
+            "SELECT * FROM classrooms WHERE id = $1",
+            &[(&id, Type::UUID)],
+        )
+        .await
     }
 
     async fn insert_table(
-        pool: &sqlx::PgPool,
+        pool: &crate::db::Db,
         classroom_id: Uuid,
         table_number: i32,
         rows: i16,
@@ -455,138 +521,146 @@ mod tests {
         x_pos: i32,
         y_pos: i32,
     ) -> TableModel {
-        sqlx::query_as(
+        seed_one(
+            pool,
             "INSERT INTO tables (classroom_id, table_number, rows, cols, x_pos, y_pos)
             VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING *",
+            &[
+                (&classroom_id, Type::UUID),
+                (&table_number, Type::INT4),
+                (&rows, Type::INT2),
+                (&cols, Type::INT2),
+                (&x_pos, Type::INT4),
+                (&y_pos, Type::INT4),
+            ],
         )
-        .bind(classroom_id)
-        .bind(table_number)
-        .bind(rows)
-        .bind(cols)
-        .bind(x_pos)
-        .bind(y_pos)
-        .fetch_one(pool)
         .await
-        .unwrap()
     }
 
     async fn insert_seat(
-        pool: &sqlx::PgPool,
+        pool: &crate::db::Db,
         table_id: Uuid,
         student_id: Option<Uuid>,
         seat_number: i16,
     ) -> SeatModel {
-        sqlx::query_as(
+        seed_one(
+            pool,
             "INSERT INTO seats (table_id, student_id, seat_number)
             VALUES ($1, $2, $3)
             RETURNING *",
+            &[
+                (&table_id, Type::UUID),
+                (&student_id, Type::UUID),
+                (&seat_number, Type::INT2),
+            ],
         )
-        .bind(table_id)
-        .bind(student_id)
-        .bind(seat_number)
-        .fetch_one(pool)
         .await
-        .unwrap()
     }
 
     async fn insert_student_in_classroom(
-        pool: &sqlx::PgPool,
+        pool: &crate::db::Db,
         user_id: &str,
         classroom_id: Uuid,
         student_id: i32,
         name: &str,
     ) -> Uuid {
-        sqlx::query_scalar(
+        seed_scalar(
+            pool,
             "INSERT INTO students (user_id, classroom_id, student_id, name)
             VALUES ($1, $2, $3, $4)
             RETURNING id",
+            &[
+                (&user_id, Type::TEXT),
+                (&classroom_id, Type::UUID),
+                (&student_id, Type::INT4),
+                (&name, Type::TEXT),
+            ],
         )
-        .bind(user_id)
-        .bind(classroom_id)
-        .bind(student_id)
-        .bind(name)
-        .fetch_one(pool)
         .await
-        .unwrap()
     }
 
     async fn insert_student_in_classroom_with_preference(
-        pool: &sqlx::PgPool,
+        pool: &crate::db::Db,
         user_id: &str,
         classroom_id: Uuid,
         student_id: i32,
         name: &str,
         preference: &str,
     ) -> Uuid {
-        sqlx::query_scalar(
+        seed_scalar(
+            pool,
             "INSERT INTO students (user_id, classroom_id, student_id, name, seating_preference)
             VALUES ($1, $2, $3, $4, $5)
             RETURNING id",
+            &[
+                (&user_id, Type::TEXT),
+                (&classroom_id, Type::UUID),
+                (&student_id, Type::INT4),
+                (&name, Type::TEXT),
+                (&preference, Type::TEXT),
+            ],
         )
-        .bind(user_id)
-        .bind(classroom_id)
-        .bind(student_id)
-        .bind(name)
-        .bind(preference)
-        .fetch_one(pool)
         .await
-        .unwrap()
     }
 
     async fn insert_student(
-        pool: &sqlx::PgPool,
+        pool: &crate::db::Db,
         user_id: &str,
         student_id: i32,
         name: &str,
     ) -> Uuid {
-        sqlx::query_scalar(
+        seed_scalar(
+            pool,
             "INSERT INTO students (user_id, classroom_id, student_id, name)
             VALUES ($1, NULL, $2, $3)
             RETURNING id",
+            &[
+                (&user_id, Type::TEXT),
+                (&student_id, Type::INT4),
+                (&name, Type::TEXT),
+            ],
         )
-        .bind(user_id)
-        .bind(student_id)
-        .bind(name)
-        .fetch_one(pool)
         .await
-        .unwrap()
     }
 
     async fn fetch_tables_for_classroom(
-        pool: &sqlx::PgPool,
+        pool: &crate::db::Db,
         classroom_id: Uuid,
     ) -> Vec<TableModel> {
-        sqlx::query_as("SELECT * FROM tables WHERE classroom_id = $1 ORDER BY table_number")
-            .bind(classroom_id)
-            .fetch_all(pool)
-            .await
-            .unwrap()
+        seed_all(
+            pool,
+            "SELECT * FROM tables WHERE classroom_id = $1 ORDER BY table_number",
+            &[(&classroom_id, Type::UUID)],
+        )
+        .await
     }
 
-    async fn seed_classrooms(pool: &sqlx::PgPool, user_id: &str, count: i64) {
-        sqlx::query(
+    async fn seed_classrooms(pool: &crate::db::Db, user_id: &str, count: i64) {
+        let count = count as i32;
+        seed_exec(
+            pool,
             "INSERT INTO classrooms (user_id, subject, period, term_season, term_year)
             SELECT $1, 'Subject ' || gs, gs, 'fall', 2026 FROM generate_series(1, $2::int) AS gs",
+            &[(&user_id, Type::TEXT), (&count, Type::INT4)],
         )
-        .bind(user_id)
-        .bind(count as i32)
-        .execute(pool)
-        .await
-        .unwrap();
+        .await;
     }
 
-    async fn seed_pinned_classrooms(pool: &sqlx::PgPool, user_id: &str, count: i64) {
+    async fn seed_pinned_classrooms(pool: &crate::db::Db, user_id: &str, count: i64) {
         seed_classrooms(pool, user_id, count).await;
-        sqlx::query("UPDATE classrooms SET pinned_at = now() WHERE user_id = $1")
-            .bind(user_id)
-            .execute(pool)
-            .await
-            .unwrap();
+        seed_exec(
+            pool,
+            "UPDATE classrooms SET pinned_at = now() WHERE user_id = $1",
+            &[(&user_id, Type::TEXT)],
+        )
+        .await;
     }
 
-    #[sqlx::test]
-    async fn create_classroom_rejects_at_limit(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn create_classroom_rejects_at_limit() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         seed_classrooms(&pool, &user_id, 50).await;
@@ -606,8 +680,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn create_classroom_allows_up_to_limit(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn create_classroom_allows_up_to_limit() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         seed_classrooms(&pool, &user_id, 49).await;
@@ -628,8 +704,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn create_classroom_limit_is_per_user(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn create_classroom_limit_is_per_user() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_a = test_user_id();
         let user_b = test_user_id();
@@ -651,8 +729,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn create_classroom_success(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn create_classroom_success() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let body =
@@ -678,8 +758,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn create_classroom_defaults_boundary_dimensions(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn create_classroom_defaults_boundary_dimensions() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let body =
@@ -704,10 +786,10 @@ mod tests {
     }
 
     // No uniqueness constraint on (subject, period), so duplicates are accepted.
-    #[sqlx::test]
-    async fn create_classroom_allows_duplicate_subject_and_period(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn create_classroom_allows_duplicate_subject_and_period() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let body =
@@ -740,10 +822,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_classroom_partial_leaves_other_fields_unchanged(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_classroom_partial_leaves_other_fields_unchanged() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let existing = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -767,10 +849,11 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_classroom_partial_boundary_patch_leaves_other_boundary_field_unchanged(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_classroom_partial_boundary_patch_leaves_other_boundary_field_unchanged()
+    -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let existing = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -794,10 +877,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_classroom_term_leaves_other_fields_unchanged(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_classroom_term_leaves_other_fields_unchanged() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let existing = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -823,8 +906,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_classroom_pin_sets_pinned_at(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_classroom_pin_sets_pinned_at() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let existing = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -848,8 +933,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_classroom_unpin_clears_pinned_at(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_classroom_unpin_clears_pinned_at() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let existing = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -883,10 +970,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_classroom_omitted_pinned_at_leaves_it_unchanged(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_classroom_omitted_pinned_at_leaves_it_unchanged() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let existing = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -923,8 +1010,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_classroom_pin_rejects_at_pin_limit(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_classroom_pin_rejects_at_pin_limit() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         seed_pinned_classrooms(&pool, &user_id, 10).await;
@@ -944,8 +1033,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_classroom_pin_limit_is_per_user(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_classroom_pin_limit_is_per_user() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_a = test_user_id();
         let user_b = test_user_id();
@@ -966,8 +1057,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_classroom_nonexistent_id_returns_404(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_classroom_nonexistent_id_returns_404() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let body = json!({"subject": "Doesn't Matter"});
@@ -989,8 +1082,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn delete_classroom_success(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn delete_classroom_success() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let existing = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -1013,8 +1108,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn delete_classroom_nonexistent_id_returns_404(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn delete_classroom_nonexistent_id_returns_404() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
 
@@ -1034,10 +1131,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_seating_chart_replaces_existing_tables_and_seats(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_seating_chart_replaces_existing_tables_and_seats() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -1071,12 +1168,12 @@ mod tests {
         assert_eq!(tables[0].x_pos, 20);
         assert_eq!(tables[0].y_pos, 40);
 
-        let seats: Vec<SeatModel> =
-            sqlx::query_as("SELECT * FROM seats WHERE table_id = $1 ORDER BY seat_number")
-                .bind(tables[0].id)
-                .fetch_all(&pool)
-                .await
-                .unwrap();
+        let seats: Vec<SeatModel> = seed_all(
+            &pool,
+            "SELECT * FROM seats WHERE table_id = $1 ORDER BY seat_number",
+            &[(&tables[0].id, Type::UUID)],
+        )
+        .await;
         assert_eq!(seats.len(), 2);
         assert_eq!(seats[0].seat_number, 0);
         assert_eq!(seats[0].student_id, Some(student_id));
@@ -1090,10 +1187,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_seating_chart_nonexistent_classroom_returns_404(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_seating_chart_nonexistent_classroom_returns_404() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
 
@@ -1116,10 +1213,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_seating_chart_assigns_table_number_from_request_index(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_seating_chart_assigns_table_number_from_request_index() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -1159,10 +1256,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn update_seating_chart_with_no_tables_clears_everything(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn update_seating_chart_with_no_tables_clears_everything() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -1193,8 +1290,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn get_seating_chart_returns_only_assigned_seats(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn get_seating_chart_returns_only_assigned_seats() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -1226,10 +1325,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn get_seating_chart_groups_assignments_in_table_insertion_order(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn get_seating_chart_groups_assignments_in_table_insertion_order() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -1263,10 +1362,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn get_seating_chart_with_no_tables_returns_empty_list(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn get_seating_chart_with_no_tables_returns_empty_list() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -1289,10 +1388,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn get_seating_chart_nonexistent_classroom_returns_404(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn get_seating_chart_nonexistent_classroom_returns_404() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
 
@@ -1309,10 +1408,11 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn randomize_seating_chart_rejects_out_of_range_new_table_dimensions(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn randomize_seating_chart_rejects_out_of_range_new_table_dimensions()
+    -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -1345,10 +1445,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn randomize_seating_chart_nonexistent_classroom_returns_404(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn randomize_seating_chart_nonexistent_classroom_returns_404() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
 
@@ -1377,10 +1477,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn randomize_seating_chart_only_seats_students_in_this_classroom(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn randomize_seating_chart_only_seats_students_in_this_classroom() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -1425,10 +1525,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn randomize_seating_chart_honors_front_preference(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn randomize_seating_chart_honors_front_preference() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -1481,10 +1581,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn randomize_seating_chart_respects_separation_when_feasible(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn randomize_seating_chart_respects_separation_when_feasible() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -1492,16 +1592,17 @@ mod tests {
         let b = insert_student_in_classroom(&pool, &user_id, classroom.id, 2, "Bob").await;
 
         let (id_a, id_b) = if a < b { (a, b) } else { (b, a) };
-        sqlx::query(
+        seed_exec(
+            &pool,
             "INSERT INTO student_separations (user_id, student_id_a, student_id_b)
             VALUES ($1, $2, $3)",
+            &[
+                (&user_id, Type::TEXT),
+                (&id_a, Type::UUID),
+                (&id_b, Type::UUID),
+            ],
         )
-        .bind(&user_id)
-        .bind(id_a)
-        .bind(id_b)
-        .execute(&pool)
-        .await
-        .unwrap();
+        .await;
 
         // 5 single-seat tables gives structurally guaranteed room to avoid
         // seating the pair together (see seating_chart.rs's own tests for
@@ -1547,10 +1648,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn randomize_seating_chart_never_persists_anything(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn randomize_seating_chart_never_persists_anything() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -1587,21 +1688,22 @@ mod tests {
         assert_eq!(tables_after.len(), 1);
         assert_eq!(tables_after[0].id, table.id);
 
-        let seats_after: Vec<SeatModel> = sqlx::query_as("SELECT * FROM seats WHERE table_id = $1")
-            .bind(table.id)
-            .fetch_all(&pool)
-            .await
-            .unwrap();
+        let seats_after: Vec<SeatModel> = seed_all(
+            &pool,
+            "SELECT * FROM seats WHERE table_id = $1",
+            &[(&table.id, Type::UUID)],
+        )
+        .await;
         assert_eq!(seats_after.len(), 1);
         assert_eq!(seats_after[0].student_id, Some(student_id));
 
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn randomize_seating_chart_errors_when_boundary_too_small(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn randomize_seating_chart_errors_when_boundary_too_small() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -1638,10 +1740,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn randomize_seating_chart_packs_within_constrained_boundary(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn randomize_seating_chart_packs_within_constrained_boundary() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let classroom = insert_classroom(&pool, &user_id, "Math 2", 3).await;
@@ -1702,10 +1804,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn cold_call_success_returns_pick_and_adjusted_weights(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn cold_call_success_returns_pick_and_adjusted_weights() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let classroom_id = Uuid::new_v4();
@@ -1748,8 +1850,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn cold_call_empty_students_returns_400(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn cold_call_empty_students_returns_400() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let classroom_id = Uuid::new_v4();
@@ -1774,8 +1878,10 @@ mod tests {
 
     // --- auth/scoping coverage ---
 
-    #[sqlx::test]
-    async fn unauthenticated_requests_return_401(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn unauthenticated_requests_return_401() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let classroom_id = Uuid::new_v4();
 
@@ -1824,10 +1930,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn cross_user_get_update_delete_classroom_returns_404(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn cross_user_get_update_delete_classroom_returns_404() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let owner_id = test_user_id();
         let other_id = test_user_id();
@@ -1871,10 +1977,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn list_classrooms_excludes_other_users_classrooms(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn list_classrooms_excludes_other_users_classrooms() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_a_id = test_user_id();
         let user_b_id = test_user_id();
@@ -1899,8 +2005,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn cross_user_seating_chart_returns_404(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn cross_user_seating_chart_returns_404() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let owner_id = test_user_id();
         let other_id = test_user_id();

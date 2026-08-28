@@ -62,8 +62,7 @@ impl SeatingPreference {
     }
 }
 
-/// Request body for creating a classroom; boundary dimensions are not
-/// accepted here and instead take their DB column defaults.
+/// Request body for creating a classroom.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ClassroomSchema {
     pub subject: String,
@@ -72,8 +71,7 @@ pub struct ClassroomSchema {
     pub term_year: i16,
 }
 
-/// Request body for partially updating a classroom; omitted fields keep
-/// their existing value.
+/// Request body for partially updating a classroom.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateClassroomSchema {
     pub subject: Option<String>,
@@ -96,9 +94,7 @@ pub struct StudentSchema {
     pub seating_preference: Option<SeatingPreference>,
 }
 
-/// Request body for partially updating a student; omitted fields keep their
-/// existing value, while an explicit `null` `classroom_id`/`image_url`/
-/// `seating_preference` clears it.
+/// Request body for partially updating a student.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateStudentSchema {
     #[serde(default, deserialize_with = "deserialize_some")]
@@ -153,9 +149,8 @@ pub struct SeatingChartSchema {
     pub tables: Vec<TableSchema>,
 }
 
-/// A single table's grid shape, canvas position, and seat assignments; a
-/// seat's index within `seat_assignments` is its `seat_number`.
-#[derive(Serialize, Deserialize, Debug, sqlx::FromRow)]
+/// A single table's grid shape, canvas position, and seat assignments.
+#[derive(Serialize, Deserialize, Debug, postgres_from_row::FromRow)]
 pub struct TableSchema {
     pub table_number: i32,
     pub rows: i16,
@@ -165,9 +160,7 @@ pub struct TableSchema {
     pub seat_assignments: Vec<Option<Uuid>>,
 }
 
-/// Request body for proposing a randomized seating chart. Carries the
-/// frontend's current, possibly-unsaved canvas geometry rather than relying
-/// on persisted state, since the proposal is never itself persisted.
+/// Request body for proposing a randomized seating chart.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RandomizeSeatingChartSchema {
     pub keep_existing_tables: bool,
@@ -185,9 +178,7 @@ pub struct ColdCallCandidateSchema {
     pub weight: u32,
 }
 
-/// Request body for picking a cold-call student. Carries the frontend's
-/// current per-student weights rather than relying on persisted state, since
-/// weights are never themselves persisted.
+/// Request body for picking a cold-call student.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ColdCallSchema {
     pub students: Vec<ColdCallCandidateSchema>,

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Row shape of the `classrooms` table
-#[derive(Debug, Deserialize, Serialize, sqlx::FromRow)]
+#[derive(Debug, Deserialize, Serialize, postgres_from_row::FromRow)]
 pub struct ClassroomModel {
     pub id: Uuid,
     pub user_id: String,
@@ -17,7 +17,7 @@ pub struct ClassroomModel {
 }
 
 /// Row shape of the `students` table
-#[derive(Debug, Deserialize, Serialize, sqlx::FromRow)]
+#[derive(Debug, Deserialize, Serialize, postgres_from_row::FromRow)]
 pub struct StudentModel {
     pub id: Uuid,
     pub user_id: String,
@@ -30,7 +30,7 @@ pub struct StudentModel {
 }
 
 /// Row shape of the `student_separations` table
-#[derive(Debug, Deserialize, Serialize, sqlx::FromRow)]
+#[derive(Debug, Deserialize, Serialize, postgres_from_row::FromRow)]
 pub struct StudentSeparationModel {
     pub id: Uuid,
     pub user_id: String,
@@ -40,7 +40,7 @@ pub struct StudentSeparationModel {
 }
 
 /// Row shape of the `tables` table
-#[derive(Debug, Deserialize, Serialize, sqlx::FromRow)]
+#[derive(Debug, Deserialize, Serialize, postgres_from_row::FromRow)]
 pub struct TableModel {
     pub id: Uuid,
     pub classroom_id: Uuid,
@@ -52,7 +52,7 @@ pub struct TableModel {
 }
 
 /// Row shape of the `seats` table
-#[derive(Debug, Deserialize, Serialize, sqlx::FromRow)]
+#[derive(Debug, Deserialize, Serialize, postgres_from_row::FromRow)]
 pub struct SeatModel {
     pub id: Uuid,
     pub table_id: Uuid,

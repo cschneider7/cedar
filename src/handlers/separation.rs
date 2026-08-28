@@ -6,7 +6,9 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use postgres_from_row::FromRow;
 use serde_json::json;
+use tokio_postgres::types::Type;
 use uuid::Uuid;
 
 use crate::{
@@ -16,16 +18,17 @@ use crate::{
 
 /// Confirms `student_id` is owned by `user_id`.
 async fn check_student_ownership(
-    db: &sqlx::PgPool,
+    client: &tokio_postgres::Client,
     student_id: Uuid,
     user_id: &str,
 ) -> Result<(), AppError> {
-    let exists: bool =
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM students WHERE id = $1 AND user_id = $2)")
-            .bind(student_id)
-            .bind(user_id)
-            .fetch_one(db)
-            .await?;
+    let exists: bool = client
+        .query_typed_one(
+            "SELECT EXISTS(SELECT 1 FROM students WHERE id = $1 AND user_id = $2)",
+            &[(&student_id, Type::UUID), (&user_id, Type::TEXT)],
+        )
+        .await?
+        .get(0);
     if !exists {
         return Err(AppError::NotFound("Student not found".to_string()));
     }
@@ -37,11 +40,17 @@ pub async fn list_separations_handler(
     CurrentUserId(user_id): CurrentUserId,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let separations: Vec<StudentSeparationModel> =
-        sqlx::query_as("SELECT * FROM student_separations WHERE user_id = $1")
-            .bind(user_id)
-            .fetch_all(&data.db)
-            .await?;
+    let conn = data.db.get().await?;
+    let rows = conn
+        .query_typed(
+            "SELECT * FROM student_separations WHERE user_id = $1",
+            &[(&user_id, Type::TEXT)],
+        )
+        .await?;
+    let separations = rows
+        .iter()
+        .map(StudentSeparationModel::try_from_row)
+        .collect::<Result<Vec<_>, _>>()?;
     Ok((StatusCode::OK, Json(json!({"data": separations}))))
 }
 
@@ -56,8 +65,9 @@ pub async fn create_separation_handler(
             "A student can't be separated from themselves".to_string(),
         ));
     }
-    check_student_ownership(&data.db, body.student_id_a, &user_id).await?;
-    check_student_ownership(&data.db, body.student_id_b, &user_id).await?;
+    let conn = data.db.get().await?;
+    check_student_ownership(&conn, body.student_id_a, &user_id).await?;
+    check_student_ownership(&conn, body.student_id_b, &user_id).await?;
 
     let (id_a, id_b) = if body.student_id_a < body.student_id_b {
         (body.student_id_a, body.student_id_b)
@@ -65,29 +75,31 @@ pub async fn create_separation_handler(
         (body.student_id_b, body.student_id_a)
     };
 
-    let inserted: Option<StudentSeparationModel> = sqlx::query_as(
-        "INSERT INTO student_separations (user_id, student_id_a, student_id_b)
+    let inserted = conn
+        .query_typed_opt(
+            "INSERT INTO student_separations (user_id, student_id_a, student_id_b)
         VALUES ($1, $2, $3)
         ON CONFLICT (student_id_a, student_id_b) DO NOTHING
         RETURNING *",
-    )
-    .bind(user_id)
-    .bind(id_a)
-    .bind(id_b)
-    .fetch_optional(&data.db)
-    .await?;
+            &[
+                (&user_id, Type::TEXT),
+                (&id_a, Type::UUID),
+                (&id_b, Type::UUID),
+            ],
+        )
+        .await?;
 
-    let separation =
-        match inserted {
-            Some(separation) => separation,
-            None => sqlx::query_as(
+    let row = match inserted {
+        Some(row) => row,
+        None => {
+            conn.query_typed_one(
                 "SELECT * FROM student_separations WHERE student_id_a = $1 AND student_id_b = $2",
+                &[(&id_a, Type::UUID), (&id_b, Type::UUID)],
             )
-            .bind(id_a)
-            .bind(id_b)
-            .fetch_one(&data.db)
-            .await?,
-        };
+            .await?
+        }
+    };
+    let separation = StudentSeparationModel::try_from_row(&row)?;
 
     Ok((StatusCode::CREATED, Json(json!({"data": separation}))))
 }
@@ -98,13 +110,15 @@ pub async fn delete_separation_handler(
     Path(id): Path<Uuid>,
     State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let separation: StudentSeparationModel = sqlx::query_as(
-        "DELETE FROM student_separations WHERE id = $1 AND user_id = $2 RETURNING *",
-    )
-    .bind(id)
-    .bind(user_id)
-    .fetch_one(&data.db)
-    .await?;
+    let conn = data.db.get().await?;
+    let row = conn
+        .query_typed_opt(
+            "DELETE FROM student_separations WHERE id = $1 AND user_id = $2 RETURNING *",
+            &[(&id, Type::UUID), (&user_id, Type::TEXT)],
+        )
+        .await?
+        .ok_or_else(|| AppError::NotFound("Separation not found".to_string()))?;
+    let separation = StudentSeparationModel::try_from_row(&row)?;
 
     Ok((StatusCode::OK, Json(json!({"data": separation}))))
 }
@@ -113,34 +127,39 @@ pub async fn delete_separation_handler(
 mod tests {
     use axum::http::StatusCode;
     use serde_json::json;
+    use tokio_postgres::types::Type;
     use tower::ServiceExt;
     use uuid::Uuid;
 
     use crate::test_support::{
-        app, authenticated_json_request, authenticated_request, body_json, test_user_id,
+        app, authenticated_json_request, authenticated_request, body_json, seed_exec, seed_scalar,
+        test_user_id,
     };
 
     async fn insert_student(
-        pool: &sqlx::PgPool,
+        pool: &crate::db::Db,
         user_id: &str,
         student_id: i32,
         name: &str,
     ) -> Uuid {
-        sqlx::query_scalar(
+        seed_scalar(
+            pool,
             "INSERT INTO students (user_id, classroom_id, student_id, name)
             VALUES ($1, NULL, $2, $3)
             RETURNING id",
+            &[
+                (&user_id, Type::TEXT),
+                (&student_id, Type::INT4),
+                (&name, Type::TEXT),
+            ],
         )
-        .bind(user_id)
-        .bind(student_id)
-        .bind(name)
-        .fetch_one(pool)
         .await
-        .unwrap()
     }
 
-    #[sqlx::test]
-    async fn list_separations_scoped_to_user(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn list_separations_scoped_to_user() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let other_id = test_user_id();
@@ -185,8 +204,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn create_separation_success(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn create_separation_success() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let a = insert_student(&pool, &user_id, 1, "Alice").await;
@@ -215,10 +236,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn create_separation_is_idempotent_regardless_of_order(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn create_separation_is_idempotent_regardless_of_order() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let a = insert_student(&pool, &user_id, 1, "Alice").await;
@@ -254,8 +275,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn create_separation_rejects_self_pair(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn create_separation_rejects_self_pair() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let a = insert_student(&pool, &user_id, 1, "Alice").await;
@@ -274,10 +297,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn create_separation_rejects_another_users_student(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn create_separation_rejects_another_users_student() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let other_id = test_user_id();
@@ -298,8 +321,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn delete_separation_success(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn delete_separation_success() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let a = insert_student(&pool, &user_id, 1, "Alice").await;
@@ -331,8 +356,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn delete_separation_rejects_another_users_pair(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn delete_separation_rejects_another_users_pair() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let other_id = test_user_id();
@@ -365,10 +392,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
-    async fn deleting_a_student_cascades_to_its_separations(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
+    #[tokio::test]
+    async fn deleting_a_student_cascades_to_its_separations() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
         let a = insert_student(&pool, &user_id, 1, "Alice").await;
@@ -384,11 +411,12 @@ mod tests {
             .await
             .unwrap();
 
-        sqlx::query("DELETE FROM students WHERE id = $1")
-            .bind(a)
-            .execute(&pool)
-            .await
-            .unwrap();
+        seed_exec(
+            &pool,
+            "DELETE FROM students WHERE id = $1",
+            &[(&a, Type::UUID)],
+        )
+        .await;
 
         let response = app
             .oneshot(authenticated_request(

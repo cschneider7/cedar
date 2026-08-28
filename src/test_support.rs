@@ -3,7 +3,10 @@
 use std::{
     future::Future,
     pin::Pin,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 use axum::{Router, body::Body, http::Request, response::Response};
@@ -11,15 +14,31 @@ use http_body_util::BodyExt;
 use serde_json::Value;
 use uuid::Uuid;
 
+use postgres_from_row::FromRow;
+use tokio_postgres::types::{FromSqlOwned, ToSql, Type};
+
 use crate::{
     AppState,
     auth::SupabaseAuthClaims,
     blob::{BlobDeleter, BlobObject, BlobReader, BlobUploader},
+    db,
     model::ClassroomModel,
     routes::create_router,
 };
 
+/// A `query_typed` parameter, spelled out for the seed helpers below.
+pub type P<'a> = (&'a (dyn ToSql + Sync), Type);
+
 const TEST_FRONTEND_ORIGIN: &str = "http://localhost:5173";
+
+/// Table DDL only — the migration file's trailing `preview_readonly` role/grant
+/// block is cluster-global and races when many per-test databases apply it.
+fn migration_sql() -> &'static str {
+    let full = include_str!("../supabase/migrations/20260826203344_create_tables.sql");
+    full.split_once("-- Preview-environment read-only role")
+        .map(|(tables, _)| tables)
+        .unwrap_or(full)
+}
 
 /// A `BlobDeleter` test double that records every URL passed to `delete`
 #[derive(Clone, Default)]
@@ -57,12 +76,106 @@ impl BlobUploader for EmptyBlobUploader {
     }
 }
 
+/// An isolated database for one test
+pub struct TestDb {
+    admin_url: String,
+    db_name: String,
+    pool: db::Db,
+}
+
+fn base_url() -> String {
+    std::env::var("POSTGRES_URL").expect("POSTGRES_URL must be set to run tests")
+}
+
+fn with_db_name(url: &str, name: &str) -> String {
+    let mut url = url::Url::parse(url).expect("POSTGRES_URL must be a valid URL");
+    url.set_path(&format!("/{name}"));
+    url.into()
+}
+
+impl TestDb {
+    pub async fn new() -> Self {
+        static LOAD_ENV: std::sync::Once = std::sync::Once::new();
+        LOAD_ENV.call_once(|| {
+            dotenv::dotenv().ok();
+        });
+
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let admin_url = base_url();
+        let db_name = format!(
+            "cedar_test_{}_{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+
+        let admin = db::build_pool(&admin_url, 1)
+            .await
+            .expect("failed to connect admin pool");
+        admin
+            .get()
+            .await
+            .expect("failed to acquire admin connection")
+            .batch_execute(&format!("CREATE DATABASE \"{db_name}\""))
+            .await
+            .expect("failed to create test database");
+
+        let pool = db::build_pool(&with_db_name(&admin_url, &db_name), 4)
+            .await
+            .expect("failed to connect test pool");
+        pool.get()
+            .await
+            .expect("failed to acquire test connection")
+            .batch_execute(migration_sql())
+            .await
+            .expect("failed to run migrations");
+
+        Self {
+            admin_url,
+            db_name,
+            pool,
+        }
+    }
+
+    pub fn pool(&self) -> db::Db {
+        self.pool.clone()
+    }
+}
+
+impl Drop for TestDb {
+    fn drop(&mut self) {
+        let admin_url = self.admin_url.clone();
+        let db_name = self.db_name.clone();
+        // The pool must be closed before the database can be dropped.
+        self.pool.close();
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("failed to build teardown runtime");
+            rt.block_on(async {
+                let Ok(admin) = db::build_pool(&admin_url, 1).await else {
+                    return;
+                };
+                if let Ok(client) = admin.get().await {
+                    let _ = client
+                        .batch_execute(&format!(
+                            "DROP DATABASE IF EXISTS \"{db_name}\" WITH (FORCE)"
+                        ))
+                        .await;
+                }
+            });
+        })
+        .join()
+        .ok();
+    }
+}
+
 /// Builds the app router for tests
-pub fn app(pool: sqlx::PgPool) -> Router {
+pub fn app(pool: db::Db) -> Router {
     app_with_blob_deleter(pool, Arc::new(RecordingBlobDeleter::default()))
 }
 
-pub fn app_with_blob_deleter(pool: sqlx::PgPool, blob_deleter: Arc<dyn BlobDeleter>) -> Router {
+pub fn app_with_blob_deleter(pool: db::Db, blob_deleter: Arc<dyn BlobDeleter>) -> Router {
     let app_state = Arc::new(AppState {
         db: pool,
         blob_deleter,
@@ -116,19 +229,60 @@ pub fn authenticated_request(method: &str, uri: &str, user_id: &str) -> Request<
 
 /// Inserts a classroom with a hardcoded default term ("fall" 2026)
 pub async fn insert_classroom(
-    pool: &sqlx::PgPool,
+    pool: &db::Db,
     user_id: &str,
     subject: &str,
     period: i16,
 ) -> ClassroomModel {
-    sqlx::query_as(
+    seed_one(
+        pool,
         "INSERT INTO classrooms (user_id, subject, period, term_season, term_year)
         VALUES ($1, $2, $3, 'fall', 2026) RETURNING *",
+        &[
+            (&user_id, Type::TEXT),
+            (&subject, Type::TEXT),
+            (&period, Type::INT2),
+        ],
     )
-    .bind(user_id)
-    .bind(subject)
-    .bind(period)
-    .fetch_one(pool)
     .await
-    .unwrap()
+}
+
+// --- unwrapping fixture helpers for handler test modules ---
+
+/// `query_typed_one` + `FromRow`, unwrapping.
+pub async fn seed_one<T: FromRow>(pool: &db::Db, sql: &str, params: &[P<'_>]) -> T {
+    let conn = pool.get().await.unwrap();
+    T::from_row(&conn.query_typed_one(sql, params).await.unwrap())
+}
+
+/// `query_typed_opt` + `FromRow`, unwrapping.
+pub async fn seed_opt<T: FromRow>(pool: &db::Db, sql: &str, params: &[P<'_>]) -> Option<T> {
+    let conn = pool.get().await.unwrap();
+    conn.query_typed_opt(sql, params)
+        .await
+        .unwrap()
+        .map(|row| T::from_row(&row))
+}
+
+/// `query_typed` + `FromRow`, unwrapping.
+pub async fn seed_all<T: FromRow>(pool: &db::Db, sql: &str, params: &[P<'_>]) -> Vec<T> {
+    let conn = pool.get().await.unwrap();
+    conn.query_typed(sql, params)
+        .await
+        .unwrap()
+        .iter()
+        .map(T::from_row)
+        .collect()
+}
+
+/// `query_typed_one` returning the first column, unwrapping.
+pub async fn seed_scalar<T: FromSqlOwned>(pool: &db::Db, sql: &str, params: &[P<'_>]) -> T {
+    let conn = pool.get().await.unwrap();
+    conn.query_typed_one(sql, params).await.unwrap().get(0)
+}
+
+/// `execute_typed`, unwrapping.
+pub async fn seed_exec(pool: &db::Db, sql: &str, params: &[P<'_>]) {
+    let conn = pool.get().await.unwrap();
+    conn.execute_typed(sql, params).await.unwrap();
 }
