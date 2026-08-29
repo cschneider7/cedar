@@ -1,18 +1,16 @@
 import path from "node:path"
 
 import { expect, test } from "../../playwright/fixtures.ts"
+import { query } from "./db.ts"
 import {
   gotoStable,
   storageObjectCount,
   studentImageUrl,
   waitForHydration,
 } from "./helpers.ts"
-import { query } from "./db.ts"
 
 /**
  * Real photo upload against local Supabase Storage's S3-compatible endpoint
- * (see playwright.config.ts's backend `env`). Kept in its own file so it can be
- * skipped in isolation if the storage container misbehaves.
  */
 
 const ASSET = path.resolve("tests/e2e/assets/avatar.png")

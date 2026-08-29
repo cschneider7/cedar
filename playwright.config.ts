@@ -16,10 +16,7 @@ const POSTGRES_URL =
 const SUPABASE_URL = process.env.SUPABASE_URL ?? "http://127.0.0.1:54321"
 
 /**
- * The backend blob layer talks to local Supabase Storage's S3-compatible
- * endpoint for the e2e run (not Cloudflare R2). The trailing slash on the
- * endpoint is REQUIRED — without it aws-sdk-s3's path-style join yields
- * `.../s3students/...` and every upload 404s.
+ * Backend blob layer that talks to local Supabase's S3-compatible endpoint
  */
 function resolveStorageS3() {
   const fallback = {
@@ -73,8 +70,6 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  // One worker per usable pool user (highest index is the empty-state account).
-  // Override with --workers; global-setup asserts it never exceeds the pool.
   workers: POOL_SIZE - 1,
   globalSetup: "./tests/e2e/global-setup.ts",
   use: {
@@ -110,9 +105,6 @@ export default defineConfig({
       testIgnore: /\.empty\.spec\.ts$/,
     },
     {
-      // All empty-state specs share the single highest-index pool account. They
-      // are read-only and the reseed only deletes, so concurrent workers are
-      // safe (Playwright has no per-project worker cap).
       name: "empty-state",
       use: { ...chromium },
       metadata: { userIndexBase: POOL_SIZE - 1, variant: "empty" },

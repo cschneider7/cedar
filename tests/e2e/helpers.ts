@@ -7,10 +7,7 @@ import { ROSTER_A_SIDS } from "./fixtures.ts"
 export { ids } from "./fixtures.ts"
 
 /**
- * Wait for React Router's client hydration to finish. Filling a controlled
- * input before this races — the value gets reverted when the field hydrates to
- * its empty default. `__reactRouterDataRouter` is only set post-hydration
- * (`__reactRouterContext` is present from SSR, so it's not a usable signal).
+ * Wait for React Router's client hydration to finish
  */
 export async function waitForHydration(page: Page) {
   await page.waitForFunction(
@@ -20,14 +17,18 @@ export async function waitForHydration(page: Page) {
   )
 }
 
-/** Fill a field once the page has hydrated. */
+/**
+ * Fill a field once the page has hydrated
+ */
 export async function fillHydrated(locator: Locator, value: string) {
   await waitForHydration(locator.page())
   await locator.fill(value)
   await expect(locator).toHaveValue(value)
 }
 
-/** `page.reload()` then wait for hydration. */
+/**
+ * `page.reload()` then wait for hydration
+ */
 export async function reloadHydrated(page: Page) {
   await page.reload()
   await waitForHydration(page)
@@ -61,7 +62,9 @@ export async function gotoStable(page: Page, path: string) {
   }
 }
 
-/** Drive the real `/login` form. Assumes the page is already at `/login`. */
+/**
+ * Drive the real `/login` form. Assumes the page is already at `/login`
+ */
 export async function submitLogin(page: Page, email: string, password: string) {
   await waitForHydration(page)
   await page.getByLabel(/email/i).fill(email)
@@ -72,7 +75,9 @@ export async function submitLogin(page: Page, email: string, password: string) {
 
 type ClassroomTab = "overview" | "roster" | "seating-chart" | "cold-call"
 
-/** Names on Classroom A's canonical roster, in roster-number order. */
+/**
+ * Names on Classroom A's canonical roster, in roster-number order
+ */
 export function rosterANames(): string[] {
   return ROSTER_A_SIDS.map(
     (sid) => `Homeroom Student ${String(sid).padStart(2, "0")}`
@@ -168,7 +173,9 @@ export async function waitForSeatingChart(page: Page) {
   })
 }
 
-/** Click "Edit Chart" and wait for edit mode (Save button visible). */
+/**
+ * Click "Edit Chart" and wait for edit mode (Save button visible)
+ */
 export async function enterSeatingEditMode(page: Page) {
   await page.getByRole("button", { name: "Edit seating chart" }).click()
   await expect(
@@ -176,7 +183,9 @@ export async function enterSeatingEditMode(page: Page) {
   ).toBeVisible()
 }
 
-/** Create a classroom straight through the API — fast setup for bulk scenarios. */
+/**
+ * Create a classroom straight through the API — fast setup for bulk scenarios
+ */
 export async function createClassroomViaApi(
   request: APIRequestContext,
   token: string,

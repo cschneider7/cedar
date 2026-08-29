@@ -1,10 +1,5 @@
 import { expect, test } from "../../playwright/fixtures.ts"
-import {
-  gotoStable,
-  paginationNext,
-  reloadHydrated,
-  waitForHydration,
-} from "./helpers.ts"
+import { gotoStable, paginationNext, waitForHydration } from "./helpers.ts"
 
 /** 29 canonical students: 24 on Homeroom, 4 on Lab, 1 unassigned. */
 const TOTAL = 29

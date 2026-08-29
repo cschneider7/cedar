@@ -1,18 +1,13 @@
-/**
- * One-shot local-stack preparation for the Playwright e2e suite. Run by the
- * `test:e2e` npm script *before* `playwright test`, because Playwright starts its
- * `webServer` processes (which include `cargo run`, and the backend hard-exits if
- * Supabase is down) before `globalSetup` runs — so `supabase start` can't live
- * there.
- *
- * Idempotent. Safe to run repeatedly and while the stack is already up.
- */
 import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 
 import { pool } from "./db.ts"
 import { provisionAuthPool } from "./fixtures.ts"
+
+/**
+ * One-shot local-stack preparation for the Playwright e2e suite
+ */
 
 const POOL_SIZE = Number(process.env.E2E_USER_POOL_SIZE ?? 6)
 const AUTH_DIR = path.resolve("playwright/.auth")

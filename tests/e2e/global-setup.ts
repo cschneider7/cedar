@@ -7,8 +7,7 @@ import { pool } from "./db.ts"
 /**
  * Thin, Playwright-native setup: the heavy one-shot work (supabase start,
  * migrations, auth pool) is done by `tests/e2e/prepare-stack.ts` via the
- * `test:e2e` npm script. This only does what needs `FullConfig` — the
- * worker-count assertion — plus a fast "is the stack up?" guard.
+ * `test:e2e` npm script.
  */
 export default async function globalSetup(config: FullConfig) {
   const poolSize = Number(process.env.E2E_USER_POOL_SIZE ?? 6)

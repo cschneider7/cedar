@@ -4,8 +4,7 @@ import { pool } from "./db.ts"
 
 /**
  * Per-worker test accounts + per-test canonical data, all keyed on a user index
- * so `fullyParallel` workers never collide. Ids are deterministic so specs can
- * target rows without first querying for them.
+ * so `fullyParallel` workers never collide.
  */
 
 export const E2E_USER_PASSWORD = "e2e-password-1"
@@ -28,7 +27,9 @@ export function poolUserCredentials(i: number): {
   return { email: poolUserEmail(i), password: E2E_USER_PASSWORD }
 }
 
-/** Deterministic ids for the canonical fixture set of pool user `i`. */
+/**
+ * Deterministic ids for the canonical fixture set of pool user `i`
+ */
 export function ids(i: number) {
   const classroom = (prefix: string) =>
     `${prefix}0000000-0000-4000-a000-${pad(i, 12)}`
@@ -43,7 +44,9 @@ export function ids(i: number) {
   }
 }
 
-/** Roster numbers used by the canonical fixture set. */
+/**
+ * Roster numbers used by the canonical fixture set
+ */
 export const ROSTER_A_SIDS = Array.from({ length: 24 }, (_, k) => k + 1)
 export const ROSTER_C_SIDS = [101, 102, 103, 104]
 export const UNASSIGNED_SID = 999

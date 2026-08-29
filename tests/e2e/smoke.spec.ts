@@ -4,8 +4,7 @@ import { gotoStable, waitForSeatingChart } from "./helpers.ts"
 /**
  * Every routeable page renders for a signed-in user with the canonical fixture
  * set: lands on the expected URL (some routes redirect) and shows a landmark,
- * with no uncaught page errors. (Only `pageerror` — uncaught exceptions — is
- * asserted; the app emits benign Base UI dev `console.error` warnings.)
+ * with no uncaught page errors.
  */
 
 test("no route throws an uncaught error and every landmark renders", async ({
