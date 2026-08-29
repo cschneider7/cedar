@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
-import { makeArgs, stubFetch } from "~/lib/test-utils"
-import { action } from "./create-student"
+import { makeArgs, stubFetch } from "~test/support/test-utils"
+import { action } from "~/routes/students/create-student"
 
 const validPayload = {
   student_id: 123,

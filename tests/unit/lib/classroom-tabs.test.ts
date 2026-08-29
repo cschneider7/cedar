@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { classroomTabFromPathname, isClassroomTab } from "./classroom-tabs"
+import { classroomTabFromPathname, isClassroomTab } from "~/lib/classroom-tabs"
 
 describe("isClassroomTab", () => {
   it("accepts every known tab value", () => {

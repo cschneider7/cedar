@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
-import { stubFetch } from "~/lib/test-utils"
+import { stubFetch } from "~test/support/test-utils"
 import type { Classroom } from "~/lib/schemas"
-import { fetchRootData } from "./use-root-data"
+import { fetchRootData } from "~/hooks/use-root-data"
 
 function jsonResponse(data: unknown) {
   return new Response(JSON.stringify({ data }), { status: 200 })

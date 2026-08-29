@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import type { Student } from "~/lib/schemas"
-import { makeArgs, stubFetch } from "~/lib/test-utils"
-import { loader } from "./quick-search"
+import { makeArgs, stubFetch } from "~test/support/test-utils"
+import { loader } from "~/routes/api/quick-search"
 
 const args = (q?: string) =>
   makeArgs(

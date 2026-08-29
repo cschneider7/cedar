@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest"
-import { createTestContext } from "~/lib/auth-test-setup"
+import { createTestContext } from "~test/support/auth-test-setup"
 import type { Classroom, Student } from "~/lib/schemas"
-import { stubFetch } from "~/lib/test-utils"
-import { loader } from "./home"
+import { stubFetch } from "~test/support/test-utils"
+import { loader } from "~/routes/home"
 
 function jsonResponse(data: unknown) {
   return new Response(JSON.stringify({ data }), { status: 200 })

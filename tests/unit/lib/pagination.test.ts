@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { getPageNumbers } from "./pagination"
+import { getPageNumbers } from "~/lib/pagination"
 
 describe("getPageNumbers", () => {
   it("returns just page 1 when there's only one page", () => {

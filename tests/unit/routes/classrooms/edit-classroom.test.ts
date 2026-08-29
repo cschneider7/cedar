@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
-import { makeArgs, stubFetch } from "~/lib/test-utils"
-import { action } from "./edit-classroom"
+import { makeArgs, stubFetch } from "~test/support/test-utils"
+import { action } from "~/routes/classrooms/edit-classroom"
 
 const classroomId = "classroom-1"
 

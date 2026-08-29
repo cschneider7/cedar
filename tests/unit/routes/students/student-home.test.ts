@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import type { Classroom, StudentsPage } from "~/lib/schemas"
-import { expectLoaderData, makeArgs, stubFetch } from "~/lib/test-utils"
-import { loader } from "./student-home"
+import { expectLoaderData, makeArgs, stubFetch } from "~test/support/test-utils"
+import { loader } from "~/routes/students/student-home"
 
 function jsonResponse(data: unknown) {
   return new Response(JSON.stringify({ data }), { status: 200 })

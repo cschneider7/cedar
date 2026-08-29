@@ -5,8 +5,8 @@ import type {
   Separation,
   Student,
 } from "~/lib/schemas"
-import { expectLoaderData, makeArgs, stubFetch } from "~/lib/test-utils"
-import { loader } from "./classroom"
+import { expectLoaderData, makeArgs, stubFetch } from "~test/support/test-utils"
+import { loader } from "~/routes/classrooms/classroom"
 
 const classroomId = "classroom-1"
 

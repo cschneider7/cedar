@@ -26,7 +26,7 @@ import {
   TABLE_OFFSET,
   type SeatingChartNode,
   type TableGeometry,
-} from "./seating-chart-utils"
+} from "~/lib/seating-chart-utils"
 
 const DEFAULT_BOUNDARY = { width: 1080, height: 820 }
 

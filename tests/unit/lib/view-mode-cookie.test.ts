@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   parseViewModeCookie,
   serializeViewModeCookie,
-} from "./view-mode-cookie"
+} from "~/lib/view-mode-cookie"
 
 describe("parseViewModeCookie", () => {
   it("defaults to grid when there's no cookie header", () => {

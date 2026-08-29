@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { computeResizedDimensions, validateImageFile } from "./image-utils"
+import { computeResizedDimensions, validateImageFile } from "~/lib/image-utils"
 
 describe("computeResizedDimensions", () => {
   it("leaves dimensions unchanged when already under the max edge", () => {

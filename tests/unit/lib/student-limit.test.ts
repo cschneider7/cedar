@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { isAtStudentLimit } from "./student-limit"
+import { isAtStudentLimit } from "~/lib/student-limit"
 
 describe("isAtStudentLimit", () => {
   it("returns false when under the limit", () => {

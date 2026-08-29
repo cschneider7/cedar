@@ -1,6 +1,6 @@
 import type { RouterContextProvider } from "react-router"
 import { afterEach, beforeEach, vi } from "vitest"
-import { createTestContext } from "~/lib/auth-test-setup"
+import { createTestContext } from "./auth-test-setup"
 
 /**
  * Registers the fetch-stub lifecycle every action/loader test file needs.

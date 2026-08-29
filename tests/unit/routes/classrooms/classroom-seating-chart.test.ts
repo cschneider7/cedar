@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import type { SeatingChart } from "~/lib/schemas"
-import { makeArgs, stubFetch } from "~/lib/test-utils"
-import { action } from "./classroom-seating-chart"
+import { makeArgs, stubFetch } from "~test/support/test-utils"
+import { action } from "~/routes/classrooms/classroom-seating-chart"
 
 const classroomId = "classroom-1"
 

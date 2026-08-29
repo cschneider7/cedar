@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { formatClassroomName, formatTermAbbreviation } from "./classroom-term"
+import {
+  formatClassroomName,
+  formatTermAbbreviation,
+} from "~/lib/classroom-term"
 
 describe("formatTermAbbreviation", () => {
   it("abbreviates fall", () => {
