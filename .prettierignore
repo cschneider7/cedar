@@ -19,3 +19,5 @@ app/components/base-handle.tsx
 app/components/labeled-handle.tsx
 # Hand-maintained project instructions, not reformatted as a side effect of app code changes
 CLAUDE.md
+# Playwright e2e binary test assets
+tests/e2e/assets/

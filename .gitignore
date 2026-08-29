@@ -17,6 +17,7 @@ target
 # Playwright
 /test-results/
 /playwright-report/
+/playwright/.auth/
 
 # Claude Code specs
 .claude/specs/
