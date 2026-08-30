@@ -2,7 +2,7 @@
 .env
 /node_modules/
 .vscode
-.claude/settings.local.json
+.claude
 
 # React Router
 /.react-router/
@@ -19,5 +19,3 @@ target
 /playwright-report/
 /playwright/.auth/
 
-# Claude Code specs
-.claude/specs/
