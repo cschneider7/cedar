@@ -5,26 +5,26 @@ import {
 } from "~/lib/view-mode-cookie"
 
 describe("parseViewModeCookie", () => {
-  it("defaults to grid when there's no cookie header", () => {
-    expect(parseViewModeCookie(null)).toBe("grid")
-    expect(parseViewModeCookie(undefined)).toBe("grid")
-    expect(parseViewModeCookie("")).toBe("grid")
+  it("defaults to list when there's no cookie header", () => {
+    expect(parseViewModeCookie(null)).toBe("list")
+    expect(parseViewModeCookie(undefined)).toBe("list")
+    expect(parseViewModeCookie("")).toBe("list")
   })
 
-  it("defaults to grid when the cookie is missing or not 'list'", () => {
-    expect(parseViewModeCookie("other=1")).toBe("grid")
-    expect(parseViewModeCookie("students-view-mode=grid")).toBe("grid")
-    expect(parseViewModeCookie("students-view-mode=bogus")).toBe("grid")
-  })
-
-  it("reads 'list' out of a single cookie", () => {
+  it("defaults to list when the cookie is missing or not 'grid'", () => {
+    expect(parseViewModeCookie("other=1")).toBe("list")
     expect(parseViewModeCookie("students-view-mode=list")).toBe("list")
+    expect(parseViewModeCookie("students-view-mode=bogus")).toBe("list")
   })
 
-  it("reads 'list' out of a multi-cookie header", () => {
+  it("reads 'grid' out of a single cookie", () => {
+    expect(parseViewModeCookie("students-view-mode=grid")).toBe("grid")
+  })
+
+  it("reads 'grid' out of a multi-cookie header", () => {
     expect(
-      parseViewModeCookie("theme=dark; students-view-mode=list; other=1")
-    ).toBe("list")
+      parseViewModeCookie("theme=dark; students-view-mode=grid; other=1")
+    ).toBe("grid")
   })
 })
 

@@ -6,21 +6,21 @@ export const VIEW_MODE_COOKIE_NAME = "students-view-mode"
  * Reads the stored view-mode preference out of a `Cookie` header value —
  * the same format works for both a request's `Cookie` header and `document.cookie`.
  * @param cookieHeader - The raw `Cookie` header (or `document.cookie`) value.
- * @returns The stored view mode, defaulting to `"grid"` if unset.
+ * @returns The stored view mode, defaulting to `"list"` if unset.
  */
 export function parseViewModeCookie(
   cookieHeader: string | null | undefined
 ): StudentViewMode {
   if (!cookieHeader) {
-    return "grid"
+    return "list"
   }
   const match = cookieHeader
     .split(";")
     .map((entry) => entry.trim())
     .find((entry) => entry.startsWith(`${VIEW_MODE_COOKIE_NAME}=`))
-  return match?.slice(VIEW_MODE_COOKIE_NAME.length + 1) === "list"
-    ? "list"
-    : "grid"
+  return match?.slice(VIEW_MODE_COOKIE_NAME.length + 1) === "grid"
+    ? "grid"
+    : "list"
 }
 
 /**

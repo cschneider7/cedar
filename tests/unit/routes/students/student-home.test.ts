@@ -19,9 +19,9 @@ const emptyPage: StudentsPage = {
 const noClassrooms: Classroom[] = []
 
 describe("student-home loader", () => {
-  it("defaults to page 1, no q, grid page_size (24) with no search params", async () => {
+  it("defaults to page 1, no q, list page_size (20) with no search params", async () => {
     vi.mocked(fetch)
-      .mockResolvedValueOnce(jsonResponse(emptyPage))
+      .mockResolvedValueOnce(jsonResponse({ ...emptyPage, page_size: 20 }))
       .mockResolvedValueOnce(jsonResponse(noClassrooms))
 
     await loader(makeArgs("http://test/students"))
@@ -29,8 +29,39 @@ describe("student-home loader", () => {
     const [url] = vi.mocked(fetch).mock.calls[0]
     const params = new URL(String(url)).searchParams
     expect(params.get("page")).toBe("1")
-    expect(params.get("page_size")).toBe("24")
+    expect(params.get("page_size")).toBe("20")
     expect(params.has("q")).toBe(false)
+  })
+
+  it("uses grid page_size (24) when view=grid", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse(emptyPage))
+      .mockResolvedValueOnce(jsonResponse(noClassrooms))
+
+    await loader(makeArgs("http://test/students?view=grid"))
+
+    const [url] = vi.mocked(fetch).mock.calls[0]
+    expect(new URL(String(url)).searchParams.get("page_size")).toBe("24")
+  })
+
+  it("sets the view-mode cookie only when a ?view= param is present", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse(emptyPage))
+      .mockResolvedValueOnce(jsonResponse(noClassrooms))
+    const withParam = (await loader(
+      makeArgs("http://test/students?view=grid")
+    )) as { init?: { headers?: Record<string, string> } }
+    expect(withParam.init?.headers?.["Set-Cookie"]).toContain(
+      "students-view-mode=grid"
+    )
+
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse({ ...emptyPage, page_size: 20 }))
+      .mockResolvedValueOnce(jsonResponse(noClassrooms))
+    const noParam = (await loader(makeArgs("http://test/students"))) as {
+      init?: { headers?: Record<string, string> } | null
+    }
+    expect(noParam.init?.headers?.["Set-Cookie"]).toBeUndefined()
   })
 
   it("passes page and q through from URL search params", async () => {
@@ -180,7 +211,7 @@ describe("student-home loader", () => {
     expect(result.studentsPage).toEqual(page)
     expect(result.page).toBe(1)
     expect(result.q).toBe("")
-    expect(result.viewMode).toBe("grid")
+    expect(result.viewMode).toBe("list")
     expect(result.classrooms).toEqual(classrooms)
     expect(result.sortBy).toBe("name")
     expect(result.sortDir).toBe("asc")

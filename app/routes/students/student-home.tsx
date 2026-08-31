@@ -5,7 +5,13 @@ import {
 } from "@tanstack/react-table"
 import { LayoutGrid, List, Plus, Search, UsersIcon } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Link, useLocation, useNavigate, useNavigation } from "react-router"
+import {
+  data,
+  Link,
+  useLocation,
+  useNavigate,
+  useNavigation,
+} from "react-router"
 import { DeleteConfirmDialog } from "~/components/delete-confirm-dialog"
 import { RouteHydrateFallback } from "~/components/route-hydrate-fallback"
 import { SearchInput } from "~/components/search-input"
@@ -14,6 +20,7 @@ import { StudentFormDialog } from "~/components/student-form-dialog"
 import { Alert, AlertDescription } from "~/components/ui/alert"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
+import { Checkbox } from "~/components/ui/checkbox"
 import {
   Empty,
   EmptyContent,
@@ -51,18 +58,18 @@ import {
 import { toast } from "~/components/ui/toast"
 import { useDeleteResource } from "~/hooks/use-delete-resource"
 import { useRootData } from "~/hooks/use-root-data"
-import {
-  useStudentViewMode,
-  type StudentViewMode,
-} from "~/hooks/use-student-view-mode"
 import { getClassrooms, getStudentsPage } from "~/lib/api"
-import { getAccessToken } from "~/lib/supabase/token"
 import { formatClassroomName } from "~/lib/classroom-term"
 import { getPageNumbers } from "~/lib/pagination"
 import type { Classroom, Student } from "~/lib/schemas"
 import { isAtStudentLimit } from "~/lib/student-limit"
+import { getAccessToken } from "~/lib/supabase/token"
 import { cn } from "~/lib/utils"
-import { parseViewModeCookie } from "~/lib/view-mode-cookie"
+import {
+  parseViewModeCookie,
+  serializeViewModeCookie,
+  type StudentViewMode,
+} from "~/lib/view-mode-cookie"
 import type { Route } from "./+types/student-home"
 import {
   getStudentColumns,
@@ -78,10 +85,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const page = Math.max(1, Number(url.searchParams.get("page")) || 1)
   const q = url.searchParams.get("q") ?? ""
   const viewParam = url.searchParams.get("view")
+  const explicitView: StudentViewMode | null =
+    viewParam === "list" || viewParam === "grid" ? viewParam : null
   const viewMode: StudentViewMode =
-    viewParam === "list" || viewParam === "grid"
-      ? viewParam
-      : parseViewModeCookie(request.headers.get("Cookie"))
+    explicitView ?? parseViewModeCookie(request.headers.get("Cookie"))
   const pageSize = viewMode === "list" ? 20 : 24
   const sortByParam = url.searchParams.get("sort_by")
   const sortBy: StudentSortKey =
@@ -101,16 +108,21 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       () => ({ classrooms: [] as Classroom[], failed: true })
     ),
   ])
-  return {
-    studentsPage,
-    page,
-    q,
-    viewMode,
-    classrooms: classroomsResult.classrooms,
-    classroomsError: classroomsResult.failed,
-    sortBy,
-    sortDir,
-  }
+  return data(
+    {
+      studentsPage,
+      page,
+      q,
+      viewMode,
+      classrooms: classroomsResult.classrooms,
+      classroomsError: classroomsResult.failed,
+      sortBy,
+      sortDir,
+    },
+    explicitView
+      ? { headers: { "Set-Cookie": serializeViewModeCookie(viewMode) } }
+      : undefined
+  )
 }
 
 export function HydrateFallback() {
@@ -151,28 +163,59 @@ function ViewToggle({
 function StudentCard({
   student,
   classroom,
+  selected,
+  onSelectedChange,
 }: {
   student: Student
   classroom?: Classroom
+  selected: boolean
+  onSelectedChange: (checked: boolean) => void
 }) {
   return (
-    <Item variant="outline" render={<Link to={`/students/${student.id}`} />}>
-      <ItemHeader>
-        <ItemMedia variant="image" className="aspect-square size-auto w-full">
-          <StudentAvatar student={student} className="size-full text-4xl" />
-        </ItemMedia>
-      </ItemHeader>
-      <ItemContent>
-        <ItemTitle>{student.name}</ItemTitle>
-      </ItemContent>
-      <ItemFooter>
-        {classroom ? (
-          <Badge variant="secondary">{formatClassroomName(classroom)}</Badge>
-        ) : (
-          <Badge variant="outline">Unassigned</Badge>
+    <div className="group relative">
+      <Item
+        variant="outline"
+        className={cn(
+          selected && "border-primary bg-primary/5 ring-2 ring-primary"
         )}
-      </ItemFooter>
-    </Item>
+        render={<Link to={`/students/${student.id}`} />}
+      >
+        <ItemHeader>
+          <ItemMedia variant="image" className="aspect-square size-auto w-full">
+            <StudentAvatar student={student} className="size-full text-4xl" />
+          </ItemMedia>
+        </ItemHeader>
+        <ItemContent className="min-w-0">
+          <ItemTitle className="block w-full truncate">
+            {student.name}
+          </ItemTitle>
+        </ItemContent>
+        <ItemFooter className="min-w-0">
+          {classroom ? (
+            <Badge
+              variant="secondary"
+              className="min-w-0 shrink"
+              title={formatClassroomName(classroom)}
+            >
+              <span className="truncate">{formatClassroomName(classroom)}</span>
+            </Badge>
+          ) : (
+            <Badge variant="outline">Unassigned</Badge>
+          )}
+        </ItemFooter>
+      </Item>
+      <Checkbox
+        checked={selected}
+        onCheckedChange={(checked) => onSelectedChange(Boolean(checked))}
+        onClick={(e) => e.stopPropagation()}
+        aria-label={`Select ${student.name}`}
+        className={cn(
+          "absolute top-2 left-2 z-10 bg-background shadow-sm transition-opacity",
+          "group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100",
+          selected ? "opacity-100" : "opacity-0"
+        )}
+      />
+    </div>
   )
 }
 
@@ -292,7 +335,6 @@ function PaginationControl({
 export default function Component({ loaderData }: Route.ComponentProps) {
   const {
     studentsPage,
-    page,
     q,
     viewMode,
     classrooms,
@@ -311,7 +353,6 @@ export default function Component({ loaderData }: Route.ComponentProps) {
   const isLoading =
     navigation.state !== "idle" &&
     navigation.location?.pathname === location.pathname
-  const [, setStoredViewMode] = useStudentViewMode()
   const [searchInput, setSearchInput] = useState(q)
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
@@ -356,7 +397,6 @@ export default function Component({ loaderData }: Route.ComponentProps) {
   }
 
   function handleViewModeChange(mode: StudentViewMode) {
-    setStoredViewMode(mode)
     updateParams((p) => {
       p.set("view", mode)
       p.set("page", "1")
@@ -478,55 +518,55 @@ export default function Component({ loaderData }: Route.ComponentProps) {
         <EmptySearchNoResults onClear={handleClearSearch} />
       ) : (
         <div className={isLoading ? "pointer-events-none opacity-50" : ""}>
+          <div
+            className={cn(
+              "mb-2 flex h-9 items-center justify-between rounded-md border bg-muted/50 px-3 py-2",
+              selectedCount > 0 ? "visible" : "invisible"
+            )}
+          >
+            <span className="text-sm">{selectedCount} selected</span>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setRowSelection({})}
+              >
+                Clear
+              </Button>
+              <DeleteConfirmDialog
+                trigger={
+                  <Button variant="destructive" size="sm">
+                    Delete
+                  </Button>
+                }
+                open={bulkDeleteOpen}
+                onOpenChange={setBulkDeleteOpen}
+                title={`Delete ${selectedCount} student${selectedCount === 1 ? "" : "s"}?`}
+                description="This will permanently delete the selected students and cannot be undone. Are you sure you want to continue?"
+                isDeleting={isBulkDeleting}
+                error={bulkDeleteError}
+                onConfirm={handleBulkDelete}
+              />
+            </div>
+          </div>
           {viewMode === "grid" ? (
             <ItemGroup className="grid grid-cols-[repeat(auto-fill,160px)] gap-3">
-              {studentsPage.students.map((student) => (
+              {table.getRowModel().rows.map((row) => (
                 <StudentCard
-                  key={student.id}
-                  student={student}
+                  key={row.id}
+                  student={row.original}
                   classroom={
-                    student.classroom_id
-                      ? classroomById.get(student.classroom_id)
+                    row.original.classroom_id
+                      ? classroomById.get(row.original.classroom_id)
                       : undefined
                   }
+                  selected={row.getIsSelected()}
+                  onSelectedChange={(checked) => row.toggleSelected(checked)}
                 />
               ))}
             </ItemGroup>
           ) : (
             <>
-              {/* Fixed height + visibility (not conditional mount) so the
-                  table below never shifts as the selection count changes. */}
-              <div
-                className={cn(
-                  "mb-2 flex h-9 items-center justify-between rounded-md border bg-muted/50 px-3 py-2",
-                  selectedCount > 0 ? "visible" : "invisible"
-                )}
-              >
-                <span className="text-sm">{selectedCount} selected</span>
-                <div className="flex gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setRowSelection({})}
-                  >
-                    Clear
-                  </Button>
-                  <DeleteConfirmDialog
-                    trigger={
-                      <Button variant="destructive" size="sm">
-                        Delete
-                      </Button>
-                    }
-                    open={bulkDeleteOpen}
-                    onOpenChange={setBulkDeleteOpen}
-                    title={`Delete ${selectedCount} student${selectedCount === 1 ? "" : "s"}?`}
-                    description="This will permanently delete the selected students and cannot be undone. Are you sure you want to continue?"
-                    isDeleting={isBulkDeleting}
-                    error={bulkDeleteError}
-                    onConfirm={handleBulkDelete}
-                  />
-                </div>
-              </div>
               <Table>
                 <TableHeader>
                   {table.getHeaderGroups().map((headerGroup) => (
