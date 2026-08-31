@@ -14,17 +14,7 @@ test("grid/list toggle persists via cookie", async ({ page, context }) => {
     (await context.cookies()).find((c) => c.name === "students-view-mode")
       ?.value
 
-  // Default is grid: cards, no table.
-  await expect(page.getByRole("table")).toBeHidden()
-
-  await page.getByLabel("List view").click()
-  await expect(page).toHaveURL(/view=list/)
-  await expect(page.getByRole("table")).toBeVisible()
-  expect(await viewCookie()).toBe("list")
-
-  // Persisted: a fresh visit with no ?view param still renders list.
-  await gotoStable(page, "/students")
-  await waitForHydration(page)
+  // Default is list: table, no cards.
   await expect(page.getByRole("table")).toBeVisible()
 
   await page.getByLabel("Grid view").click()
@@ -32,9 +22,19 @@ test("grid/list toggle persists via cookie", async ({ page, context }) => {
   await expect(page.getByRole("table")).toBeHidden()
   expect(await viewCookie()).toBe("grid")
 
+  // Persisted: a fresh visit with no ?view param still renders grid.
   await gotoStable(page, "/students")
   await waitForHydration(page)
   await expect(page.getByRole("table")).toBeHidden()
+
+  await page.getByLabel("List view").click()
+  await expect(page).toHaveURL(/view=list/)
+  await expect(page.getByRole("table")).toBeVisible()
+  expect(await viewCookie()).toBe("list")
+
+  await gotoStable(page, "/students")
+  await waitForHydration(page)
+  await expect(page.getByRole("table")).toBeVisible()
 })
 
 test("?view=list overrides the default", async ({ page }) => {
@@ -57,6 +57,8 @@ test("server-side pagination in list view", async ({ page }) => {
 })
 
 test("server-side pagination in grid view", async ({ page }) => {
+  await gotoStable(page, "/students?view=grid")
+  await waitForHydration(page)
   await expect(
     page.getByText(`Showing 1–24 of ${TOTAL} students`)
   ).toBeVisible()
@@ -73,7 +75,7 @@ test("search filters server-side", async ({ page }) => {
 
   await page.getByLabel("Search students").fill("")
   await expect(
-    page.getByText(`Showing 1–24 of ${TOTAL} students`)
+    page.getByText(`Showing 1–20 of ${TOTAL} students`)
   ).toBeVisible()
 })
 
@@ -158,7 +160,30 @@ test("bulk delete a selection in list view", async ({ page }) => {
   ).toBeVisible()
 })
 
+test("bulk delete a selection in grid view", async ({ page }) => {
+  await gotoStable(page, "/students?view=grid")
+  await waitForHydration(page)
+
+  for (const n of ["02", "03"]) {
+    await page.getByLabel(`Select Homeroom Student ${n}`).click()
+  }
+  await expect(page.getByText("2 selected")).toBeVisible()
+
+  await page.getByRole("button", { name: "Delete", exact: true }).click()
+  const dialog = page.getByRole("alertdialog")
+  await expect(dialog.getByText("Delete 2 students?")).toBeVisible()
+  await dialog.getByRole("button", { name: "Delete" }).click()
+
+  await expect(page.getByText("2 students deleted")).toBeVisible()
+  await expect(
+    page.getByText(`Showing 1–24 of ${TOTAL - 2} students`)
+  ).toBeVisible()
+  await expect(page.getByText("2 selected")).toBeHidden()
+})
+
 test("open a student's detail page from the grid", async ({ page, d }) => {
+  await gotoStable(page, "/students?view=grid")
+  await waitForHydration(page)
   await page.getByLabel("Search students").fill("Homeroom Student 05")
   await page.getByRole("link", { name: /homeroom student 05/i }).click()
   await expect(page).toHaveURL(new RegExp(`/students/${d.student(5)}$`))

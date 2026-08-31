@@ -42,13 +42,29 @@ export function makeArgs(
   } as any
 }
 
+type LoaderPayload<R> = R extends Response
+  ? never
+  : R extends { data: infer D; init: ResponseInit | null }
+    ? D
+    : R
+
 /**
- * Narrows a clientLoader's result, failing the test if it redirected instead
- * of returning data.
+ * Narrows a loader's result to its data payload, failing the test if it
+ * redirected instead. Unwraps a `data(payload, init)` return (React Router's
+ * `DataWithResponseInit`) so callers see the same payload the route component
+ * would.
  */
-export function expectLoaderData<T>(result: Response | T): T {
+export function expectLoaderData<R>(result: R): LoaderPayload<R> {
   if (result instanceof Response) {
     throw new Error("expected loader data but got a redirect Response")
   }
-  return result
+  if (
+    result &&
+    typeof result === "object" &&
+    "data" in result &&
+    "init" in result
+  ) {
+    return (result as { data: LoaderPayload<R> }).data
+  }
+  return result as LoaderPayload<R>
 }
