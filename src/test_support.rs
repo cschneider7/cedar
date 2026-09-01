@@ -31,11 +31,10 @@ pub type P<'a> = (&'a (dyn ToSql + Sync), Type);
 
 const TEST_FRONTEND_ORIGIN: &str = "http://localhost:5173";
 
-/// Table DDL only — the migration file's trailing `preview_readonly` role/grant
-/// block is cluster-global and races when many per-test databases apply it.
+/// Table DDL + indexes only
 fn migration_sql() -> &'static str {
     let full = include_str!("../supabase/migrations/20260826203344_create_tables.sql");
-    full.split_once("-- Preview-environment read-only role")
+    full.split_once("-- Cluster roles and Data API lockdown")
         .map(|(tables, _)| tables)
         .unwrap_or(full)
 }

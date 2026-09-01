@@ -23,6 +23,7 @@ import {
 } from "~/components/ui/card"
 import { Toaster } from "~/components/ui/toast"
 import { TooltipProvider } from "~/components/ui/tooltip"
+import { useNonce } from "~/lib/nonce"
 import { supabaseContext } from "~/lib/supabase/context"
 import { supabaseSessionMiddleware } from "~/middleware/supabase-session"
 import type { Route } from "./+types/root"
@@ -55,6 +56,7 @@ export function HydrateFallback() {
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  const nonce = useNonce()
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -68,12 +70,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
           attribute="class"
           defaultTheme="light"
           storageKey="vite-ui-theme"
+          nonce={nonce}
         >
           {children}
           <Toaster />
         </ThemeProvider>
-        <ScrollRestoration />
-        <Scripts />
+        <ScrollRestoration nonce={nonce} />
+        <Scripts nonce={nonce} />
         <SpeedInsights />
       </body>
     </html>

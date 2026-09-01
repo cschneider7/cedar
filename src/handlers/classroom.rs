@@ -459,10 +459,19 @@ pub async fn randomize_seating_chart_handler(
 /// Picks a random student for a cold call from the given weighted roster,
 /// then returns adjusted weights for the next pick
 pub async fn cold_call_handler(
-    CurrentUserId(_user_id): CurrentUserId,
-    Path(_classroom_id): Path<Uuid>,
+    CurrentUserId(user_id): CurrentUserId,
+    Path(classroom_id): Path<Uuid>,
+    State(data): State<Arc<AppState>>,
     Json(body): Json<ColdCallSchema>,
 ) -> Result<impl IntoResponse, AppError> {
+    let conn = data.db.get().await?;
+    conn.query_typed_opt(
+        "SELECT 1 FROM classrooms WHERE id = $1 AND user_id = $2",
+        &[(&classroom_id, Type::UUID), (&user_id, Type::TEXT)],
+    )
+    .await?
+    .ok_or_else(|| not_found("Classroom"))?;
+
     let candidates: Vec<(Uuid, u32)> = body
         .students
         .iter()
@@ -1810,7 +1819,7 @@ mod tests {
         let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
-        let classroom_id = Uuid::new_v4();
+        let classroom_id = insert_classroom(&pool, &user_id, "Math", 1).await.id;
         let student_a = Uuid::new_v4();
         let student_b = Uuid::new_v4();
 
@@ -1856,7 +1865,7 @@ mod tests {
         let pool = __tdb.pool();
         let app = app(pool.clone());
         let user_id = test_user_id();
-        let classroom_id = Uuid::new_v4();
+        let classroom_id = insert_classroom(&pool, &user_id, "Math", 1).await.id;
 
         let body = json!({ "students": [] });
         let response = app
@@ -1872,6 +1881,30 @@ mod tests {
 
         let json = body_json(response).await;
         assert!(json["message"].is_string());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn cold_call_another_users_classroom_returns_404() -> anyhow::Result<()> {
+        let __tdb = crate::test_support::TestDb::new().await;
+        let pool = __tdb.pool();
+        let app = app(pool.clone());
+        let owner_id = test_user_id();
+        let other_id = test_user_id();
+        let classroom_id = insert_classroom(&pool, &owner_id, "Math", 1).await.id;
+
+        let body = json!({ "students": [{ "student_id": Uuid::new_v4(), "weight": 1 }] });
+        let response = app
+            .oneshot(authenticated_json_request(
+                "POST",
+                &format!("/api/v1/classrooms/{classroom_id}/cold-call"),
+                body,
+                &other_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
         Ok(())
     }
