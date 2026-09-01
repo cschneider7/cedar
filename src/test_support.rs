@@ -15,6 +15,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use postgres_from_row::FromRow;
+use tokio::sync::OnceCell;
 use tokio_postgres::types::{FromSqlOwned, ToSql, Type};
 
 use crate::{
@@ -31,12 +32,9 @@ pub type P<'a> = (&'a (dyn ToSql + Sync), Type);
 
 const TEST_FRONTEND_ORIGIN: &str = "http://localhost:5173";
 
-/// Table DDL + indexes only
+/// The migration, run verbatim into each per-test database.
 fn migration_sql() -> &'static str {
-    let full = include_str!("../supabase/migrations/20260826203344_create_tables.sql");
-    full.split_once("-- Cluster roles and Data API lockdown")
-        .map(|(tables, _)| tables)
-        .unwrap_or(full)
+    include_str!("../supabase/migrations/20260826203344_create_tables.sql")
 }
 
 /// A `BlobDeleter` test double that records every URL passed to `delete`
@@ -92,6 +90,27 @@ fn with_db_name(url: &str, name: &str) -> String {
     url.into()
 }
 
+async fn ensure_data_api_roles(admin_url: &str) {
+    static ONCE: OnceCell<()> = OnceCell::const_new();
+    ONCE.get_or_init(|| async {
+        db::build_pool(admin_url, 1)
+            .await
+            .expect("failed to connect admin pool for role setup")
+            .get()
+            .await
+            .expect("failed to acquire admin connection for role setup")
+            .batch_execute(
+                "DO $$ BEGIN CREATE ROLE anon NOLOGIN; \
+                   EXCEPTION WHEN duplicate_object THEN NULL; END $$; \
+                 DO $$ BEGIN CREATE ROLE authenticated NOLOGIN; \
+                   EXCEPTION WHEN duplicate_object THEN NULL; END $$;",
+            )
+            .await
+            .expect("failed to ensure anon/authenticated roles");
+    })
+    .await;
+}
+
 impl TestDb {
     pub async fn new() -> Self {
         static LOAD_ENV: std::sync::Once = std::sync::Once::new();
@@ -117,6 +136,8 @@ impl TestDb {
             .batch_execute(&format!("CREATE DATABASE \"{db_name}\""))
             .await
             .expect("failed to create test database");
+
+        ensure_data_api_roles(&admin_url).await;
 
         let pool = db::build_pool(&with_db_name(&admin_url, &db_name), 4)
             .await

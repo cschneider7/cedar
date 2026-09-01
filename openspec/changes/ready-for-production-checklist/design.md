@@ -16,9 +16,10 @@ See `proposal.md` for motivation. Constraints that shape the approach:
   locked even if the Data API is ever turned on.
 - **The backend connects as `postgres`** and continues to. It is the only client
   of the database; there is no PostgREST/`authenticated` path in play.
-- **Roles are cluster-global, not per-database.** The migration's `preview_readonly`
-  `DO`-block is stripped by the `TestDb` harness because it races across the
-  per-test databases.
+- **Roles are cluster-global, not per-database.** The migration's Data API
+  lockdown names `anon` / `authenticated`, which the local Supabase stack has but
+  CI's bare Postgres does not — the `TestDb` harness creates race-safe no-op
+  stand-ins before running the migration verbatim.
 - Frontend is React Router 8 framework mode (SSR) on Vercel; it emits an inline
   hydration script per document response. Static assets are served by Vercel's
   CDN, not the SSR handler.
@@ -140,12 +141,11 @@ needs no RLS.
 `preview_readonly` is a cluster-global role and cannot live in the
 per-test-database migration.
 
-- The forward migration file carries only the
-  `REVOKE ALL ON <tenant tables> FROM anon, authenticated` and the three
-  `user_id` indexes (both per-database, safe to replay), after the
-  `-- Cluster roles and Data API lockdown` marker for the REVOKE (the `TestDb`
-  harness strips everything past that marker — bare CI Postgres has no
-  `anon` / `authenticated`).
+- The forward migration file carries only the three `user_id` indexes and the
+  `REVOKE ALL ON <tenant tables> FROM anon, authenticated` Data API lockdown
+  (both per-database, safe to replay). The `TestDb` harness runs the file
+  verbatim; it first creates race-safe no-op `anon` / `authenticated` stand-ins
+  so CI's bare Postgres (which lacks them) doesn't choke on the `REVOKE`.
 - `preview_readonly` is provisioned once, by hand, in the Supabase SQL editor.
   **It already exists on the `Cedar` project** with exactly these grants — this
   block is idempotent if it ever needs re-running:
