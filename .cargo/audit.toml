@@ -1,0 +1,13 @@
+# cargo-audit configuration.
+# https://github.com/rustsec/rustsec/blob/main/cargo-audit/audit.toml.example
+
+[advisories]
+ignore = [
+    # RUSTSEC-2023-0071 — "Marvin Attack" timing side-channel in `rsa`.
+    # `rsa` is pulled in transitively by `jsonwebtoken` for the RSA JWT
+    # algorithms; this app only ever verifies ES256 (see src/auth.rs), so the
+    # RSA code path is never exercised. There is no fixed release of `rsa`
+    # (the mitigation is still in progress upstream), and `jsonwebtoken`
+    # exposes no feature flag to drop the dependency. Revisit when either ships.
+    "RUSTSEC-2023-0071",
+]

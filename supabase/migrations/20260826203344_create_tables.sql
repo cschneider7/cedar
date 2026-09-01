@@ -56,14 +56,11 @@ CREATE TABLE IF NOT EXISTS student_separations (
     UNIQUE (student_id_a, student_id_b)
 );
 
--- Preview-environment read-only role
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'preview_readonly') THEN
-    CREATE ROLE preview_readonly LOGIN;
-  END IF;
-END
-$$;
-GRANT USAGE ON SCHEMA public TO preview_readonly;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO preview_readonly;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO preview_readonly;
+-- Every handler's list query filters on `user_id`
+CREATE INDEX IF NOT EXISTS classrooms_user_id_idx          ON classrooms (user_id);
+CREATE INDEX IF NOT EXISTS students_user_id_idx            ON students (user_id);
+CREATE INDEX IF NOT EXISTS student_separations_user_id_idx ON student_separations (user_id);
+
+-- Cluster roles and Data API lockdown
+REVOKE ALL ON classrooms, students, tables, seats, student_separations
+  FROM anon, authenticated;

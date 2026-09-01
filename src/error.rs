@@ -16,6 +16,7 @@ pub enum AppError {
     Internal(String),
     BadRequest(String),
     Unauthorized(String),
+    ReadOnly,
 }
 
 impl IntoResponse for AppError {
@@ -52,6 +53,13 @@ impl IntoResponse for AppError {
             AppError::Unauthorized(message) => {
                 (StatusCode::UNAUTHORIZED, message.clone(), None, None, false)
             }
+            AppError::ReadOnly => (
+                StatusCode::FORBIDDEN,
+                "This environment is read-only.".to_string(),
+                None,
+                None,
+                false,
+            ),
         };
 
         let mut response = (
@@ -72,6 +80,9 @@ impl IntoResponse for AppError {
 
 impl From<tokio_postgres::Error> for AppError {
     fn from(e: tokio_postgres::Error) -> Self {
+        if e.code() == Some(&tokio_postgres::error::SqlState::INSUFFICIENT_PRIVILEGE) {
+            return AppError::ReadOnly;
+        }
         AppError::Internal(e.to_string())
     }
 }
@@ -89,6 +100,7 @@ impl AppError {
             | AppError::Internal(detail)
             | AppError::BadRequest(detail)
             | AppError::Unauthorized(detail) => detail,
+            AppError::ReadOnly => "read-only environment",
         }
     }
 }
