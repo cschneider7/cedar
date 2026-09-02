@@ -14,9 +14,6 @@ use crate::error::log_app_errors;
 use crate::{AppState, handlers};
 
 /// Builds the full api router
-///
-/// The frontend reaches this router same-origin (Vite dev-server proxy locally,
-/// `vercel.json` rewrite in prod), so there is no CORS layer.
 pub fn create_router(app_state: Arc<AppState>, jwks_verifier: Option<JwksVerifier>) -> Router {
     let health_routes =
         Router::new().route("/health", get(|| async { Json(json!({"message": "OK"})) }));

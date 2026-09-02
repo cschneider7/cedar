@@ -29,24 +29,18 @@ import {
   type StudentsPage,
 } from "~/lib/schemas"
 
-const RAW_API_URL = import.meta.env.VITE_API_URL
-if (!RAW_API_URL) {
-  throw new Error("VITE_API_URL is not set")
-}
-
-// VITE_API_URL ("/api/v1") is relative — the browser resolves it same-origin,
-// but SSR has no origin so it needs an absolute base (see the API_URL branch).
+// The backend is always same-origin under /api/v1 (Vite dev-server proxy
+// locally, vercel.json rewrite in prod), so the path is the source of truth.
+const API_BASE_PATH = "/api/v1"
 const IS_SSR = typeof window === "undefined"
-const IS_RELATIVE_API_URL = !RAW_API_URL.startsWith("http")
-const IS_INTERNAL_SSR_FETCH =
-  IS_SSR && IS_RELATIVE_API_URL && !!process.env.VERCEL_URL
-// SSR base: the deployment origin on Vercel, the local backend port in dev.
-const API_URL =
-  IS_SSR && IS_RELATIVE_API_URL
-    ? process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}${RAW_API_URL}`
-      : `http://localhost:3001${RAW_API_URL}`
-    : RAW_API_URL
+// SSR has no page origin to resolve a relative path against, so it needs an
+// absolute base: the deployment origin on Vercel, the local backend port in dev.
+const IS_INTERNAL_SSR_FETCH = IS_SSR && !!process.env.VERCEL_URL
+export const API_URL = IS_SSR
+  ? process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}${API_BASE_PATH}`
+    : `http://localhost:3001${API_BASE_PATH}`
+  : API_BASE_PATH
 
 /**
  * A failed API call — `kind` distinguishes a real HTTP error from a
