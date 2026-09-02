@@ -34,15 +34,19 @@ if (!RAW_API_URL) {
   throw new Error("VITE_API_URL is not set")
 }
 
-// VITE_API_URL is "/api/v1" (relative, same-origin) on Vercel — that only
-// resolves in the browser
+// VITE_API_URL ("/api/v1") is relative — the browser resolves it same-origin,
+// but SSR has no origin so it needs an absolute base (see the API_URL branch).
+const IS_SSR = typeof window === "undefined"
+const IS_RELATIVE_API_URL = !RAW_API_URL.startsWith("http")
 const IS_INTERNAL_SSR_FETCH =
-  typeof window === "undefined" &&
-  !RAW_API_URL.startsWith("http") &&
-  !!process.env.VERCEL_URL
-const API_URL = IS_INTERNAL_SSR_FETCH
-  ? `https://${process.env.VERCEL_URL}${RAW_API_URL}`
-  : RAW_API_URL
+  IS_SSR && IS_RELATIVE_API_URL && !!process.env.VERCEL_URL
+// SSR base: the deployment origin on Vercel, the local backend port in dev.
+const API_URL =
+  IS_SSR && IS_RELATIVE_API_URL
+    ? process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}${RAW_API_URL}`
+      : `http://localhost:3001${RAW_API_URL}`
+    : RAW_API_URL
 
 /**
  * A failed API call — `kind` distinguishes a real HTTP error from a

@@ -53,7 +53,6 @@ const s3 = resolveStorageS3()
 const backendEnv: Record<string, string> = {
   POSTGRES_URL,
   SUPABASE_URL,
-  FRONTEND_ORIGIN: "http://localhost:5173",
   RUST_LOG: process.env.RUST_LOG ?? "class_management=info",
   S3_BUCKET: process.env.S3_BUCKET ?? "students",
   S3_ENDPOINT: process.env.S3_ENDPOINT ?? s3.S3_ENDPOINT,

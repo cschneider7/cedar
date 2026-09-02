@@ -30,8 +30,6 @@ use crate::{
 /// A `query_typed` parameter, spelled out for the seed helpers below.
 pub type P<'a> = (&'a (dyn ToSql + Sync), Type);
 
-const TEST_FRONTEND_ORIGIN: &str = "http://localhost:5173";
-
 /// The migration, run verbatim into each per-test database.
 fn migration_sql() -> &'static str {
     include_str!("../supabase/migrations/20260826203344_create_tables.sql")
@@ -202,7 +200,7 @@ pub fn app_with_blob_deleter(pool: db::Db, blob_deleter: Arc<dyn BlobDeleter>) -
         blob_reader: Arc::new(EmptyBlobReader),
         blob_uploader: Arc::new(EmptyBlobUploader),
     });
-    create_router(app_state, None, TEST_FRONTEND_ORIGIN.to_string())
+    create_router(app_state, None)
 }
 
 pub async fn body_json(response: Response) -> Value {

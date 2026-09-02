@@ -7,9 +7,12 @@ export default defineConfig({
   resolve: {
     tsconfigPaths: true,
   },
-  ssr: {
-    // Required by @clerk/react-router on React Router v8 — otherwise Vite's
-    // SSR module externalization can produce a mismatched Router context.
-    noExternal: ["@clerk/react-router"],
+  // Keeps the browser same-origin in dev (mirrors the vercel.json rewrite in
+  // prod), so no cross-origin request is made and the backend needs no CORS.
+  server: {
+    proxy: {
+      "/api/v1": "http://localhost:3001",
+      "/health": "http://localhost:3001",
+    },
   },
 })

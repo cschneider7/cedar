@@ -3,39 +3,21 @@ use std::sync::Arc;
 use axum::{
     Json, Router,
     extract::{MatchedPath, Request},
-    http::{HeaderValue, Method, header},
     middleware::from_fn,
     routing::{delete, get, patch, post, put},
 };
 use serde_json::json;
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::trace::TraceLayer;
 
 use crate::auth::JwksVerifier;
 use crate::error::log_app_errors;
 use crate::{AppState, handlers};
 
 /// Builds the full api router
-pub fn create_router(
-    app_state: Arc<AppState>,
-    jwks_verifier: Option<JwksVerifier>,
-    frontend_origin: String,
-) -> Router {
-    let cors_layer = CorsLayer::new()
-        .allow_origin(
-            frontend_origin
-                .parse::<HeaderValue>()
-                .expect("FRONTEND_ORIGIN must be a valid header value"),
-        )
-        .allow_credentials(true)
-        .allow_methods([
-            Method::GET,
-            Method::POST,
-            Method::PATCH,
-            Method::PUT,
-            Method::DELETE,
-        ])
-        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
-
+///
+/// The frontend reaches this router same-origin (Vite dev-server proxy locally,
+/// `vercel.json` rewrite in prod), so there is no CORS layer.
+pub fn create_router(app_state: Arc<AppState>, jwks_verifier: Option<JwksVerifier>) -> Router {
     let health_routes =
         Router::new().route("/health", get(|| async { Json(json!({"message": "OK"})) }));
 
@@ -135,7 +117,6 @@ pub fn create_router(
 
     health_routes
         .merge(app_routes)
-        .layer(cors_layer)
         .layer(from_fn(log_app_errors))
         .layer(TraceLayer::new_for_http().make_span_with(|req: &Request| {
             let method = req.method();
