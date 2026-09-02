@@ -29,18 +29,20 @@ import {
   type StudentsPage,
 } from "~/lib/schemas"
 
-// The backend is always same-origin under /api/v1 (Vite dev-server proxy
-// locally, vercel.json rewrite in prod), so the path is the source of truth.
 const API_BASE_PATH = "/api/v1"
 const IS_SSR = typeof window === "undefined"
-// SSR has no page origin to resolve a relative path against, so it needs an
-// absolute base: the deployment origin on Vercel, the local backend port in dev.
-const IS_INTERNAL_SSR_FETCH = IS_SSR && !!process.env.VERCEL_URL
-export const API_URL = IS_SSR
-  ? process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}${API_BASE_PATH}`
-    : `http://localhost:3001${API_BASE_PATH}`
-  : API_BASE_PATH
+const IS_VERCEL_SSR = IS_SSR && !!process.env.VERCEL_URL
+
+function buildApiUrl(): string {
+  if (!IS_SSR) {
+    return API_BASE_PATH
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}${API_BASE_PATH}`
+  }
+  return `http://localhost:3001${API_BASE_PATH}`
+}
+export const API_URL = buildApiUrl()
 
 /**
  * A failed API call — `kind` distinguishes a real HTTP error from a
@@ -116,7 +118,7 @@ function withAuth(token?: string | null): HeadersInit | undefined {
  * @returns The bypass header, or `undefined` outside an internal SSR fetch.
  */
 function withProtectionBypass(): HeadersInit | undefined {
-  return IS_INTERNAL_SSR_FETCH && process.env.VERCEL_AUTOMATION_BYPASS_SECRET
+  return IS_VERCEL_SSR && process.env.VERCEL_AUTOMATION_BYPASS_SECRET
     ? {
         "x-vercel-protection-bypass":
           process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
