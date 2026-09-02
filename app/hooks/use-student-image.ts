@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react"
+import { API_URL } from "~/lib/api"
 import { getAccessTokenBrowser } from "~/lib/supabase/client"
-
-const API_URL = import.meta.env.VITE_API_URL
 
 /**
  * Fetches a student's private photo through the backend
