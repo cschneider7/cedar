@@ -7,8 +7,6 @@ export default defineConfig({
   resolve: {
     tsconfigPaths: true,
   },
-  // Keeps the browser same-origin in dev (mirrors the vercel.json rewrite in
-  // prod), so no cross-origin request is made and the backend needs no CORS.
   server: {
     proxy: {
       "/api/v1": "http://localhost:3001",
