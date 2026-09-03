@@ -23,3 +23,6 @@ CLAUDE.md
 CHANGELOG.md
 # Playwright e2e binary test assets
 tests/e2e/assets/
+# Auth email templates: hand-tuned for email-client compatibility (Prettier's
+# whitespace normalization around inline elements can change how they render)
+supabase/templates/
