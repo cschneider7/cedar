@@ -62,7 +62,16 @@ Artifacts (proposal/spec/design) updated to match. Remaining = 5.3 (local test),
 
 ## 6. Live end-to-end verification
 
-- [ ] 6.1 From a real Gmail account, request a password reset. Verify: email arrives, "Show original" reports `spf=pass`, `dkim=pass`, `dmarc=pass` aligned to `send.cedarchart.com`, and the link completes the reset.
+<!-- 2026-09-03: verification surfaced a latent frontend bug — `/auth/callback`
+only knew how to finish a PKCE `?code=` flow and had no way to tell a recovery
+apart, so the reset link landed on `/` instead of `/reset-password`. Never seen
+before because the dev relay never delivered reset mail. Fixed in a separate
+`fix(auth): ...` PR: `/auth/callback` now also verifies `?token_hash=&type=` via
+`verifyOtp` (cross-device), and the templates link to
+`{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=<type>`. Re-paste
+the 4 flow templates after that PR merges, then run 6.1–6.3. -->
+
+- [ ] 6.1 From a real Gmail account, request a password reset. Verify: email arrives, "Show original" reports `spf=pass`, `dkim=pass`, `dmarc=pass` aligned to `send.cedarchart.com` (confirmed 2026-09-02), and the link lands on `/reset-password` and completes the reset (needs the `fix(auth)` PR + template re-paste).
 - [ ] 6.2 Create a brand-new account with a Gmail address. Verify: the confirmation email arrives (check Spam too), the link confirms the account, and it can then sign in.
 - [ ] 6.3 Trigger an email-change (from the account page) and, if wired, a magic-link sign-in for a test account. Verify: the email-change confirmation and the two notifications (`password_changed` from 6.1, `email_changed` from this step) arrive from `no-reply@send.cedarchart.com`, render with the logo, and the change flow completes.
 - [ ] 6.4 _(Resend dashboard → Logs)_ Confirm the sends from 6.1–6.3 appear as delivered. Verify: no bounces or blocks logged; the `cedar-mark.png` requests from Gmail's image proxy succeed (no 404).
