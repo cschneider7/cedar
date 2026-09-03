@@ -36,10 +36,13 @@ Constraints that shape the approach:
 
 **Non-Goals:**
 
-- Serving the app from the new domain, redirecting `cedarcharts.vercel.app`, or
-  any frontend/`site_url` change (out of scope per the checklist non-goals). The
-  domain is acquired for email only; `site_url` and redirect URLs keep pointing
-  at the Vercel host.
+- Any frontend `site_url` / redirect-URL change, or making `cedarchart.com` the
+  canonical app URL (out of scope per the checklist non-goals). `site_url` and
+  auth redirect URLs keep pointing at the Vercel host. Note: registering the
+  domain through Vercel attached the apex to the `cedar` project, so
+  `cedarchart.com` already serves the app read-only alongside
+  `cedarcharts.vercel.app` — this change only relies on that for the logo asset
+  (`/email/cedar-mark.png`); a deliberate cutover is a separate decision.
 - Marketing / broadcast email, a contact form, inbound email, or a
   `send-email` auth hook.
 - Automated tests for delivery (verified live, matching the checklist's infra
@@ -119,8 +122,10 @@ styles only, dark-mode-safe colors, real text links.
 
 **Logo:** one small PNG (`public/email/cedar-mark.png`, generated from
 `public/favicon.svg`) referenced by absolute URL
-`https://cedarcharts.vercel.app/email/cedar-mark.png`. This is the one deliberate
-exception to "no external assets": a CSS-drawn mark can't reproduce the
+`https://cedarchart.com/email/cedar-mark.png` (the branded apex, which Vercel
+already serves the project on — a `.vercel.app` URL in transactional mail reads
+as less trustworthy). This is the one deliberate exception to "no external
+assets": a CSS-drawn mark can't reproduce the
 overlapping-circle tree (Gmail strips `position`, negative margins, and floats,
 and an earlier CSS attempt rendered as a clover), `data:` URI images are blocked
 by Gmail, and inline `<svg>` is stripped. The image is first-party (same project
