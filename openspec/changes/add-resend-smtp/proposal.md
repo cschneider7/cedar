@@ -79,7 +79,7 @@ capability fulfils and refines; no existing requirement's behavior changes. -->
 - **Repo:** `supabase/config.toml` (`[auth.email.smtp]` +
   `[auth.email.template.*]` + `[auth.email.notification.*]` blocks, documented),
   new `supabase/templates/{confirmation,recovery,email_change,magic_link,
-  password_changed,email_changed}.html`, new `public/email/cedar-mark.png` (the
+password_changed,email_changed}.html`, new `public/email/cedar-mark.png` (the
   logo, served at `cedarcharts.vercel.app/email/cedar-mark.png`), `CLAUDE.md`
   (Auth section note that email goes through Resend in Preview/Production and
   Inbucket locally). No application code (`app/`, `src/`) changes.

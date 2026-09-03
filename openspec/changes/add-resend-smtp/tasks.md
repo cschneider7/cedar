@@ -71,7 +71,7 @@ Artifacts (proposal/spec/design) updated to match. Remaining = 5.3 (local test),
 
 - [x] 7.1 Update `CLAUDE.md` (Supabase Auth section): note that Auth email is delivered via Resend custom SMTP from `no-reply@send.cedarchart.com` in Preview/Production, local dev uses the Inbucket/Mailpit catcher, and `supabase/templates/*.html` must be kept in sync with the dashboard template editor by hand. Verify: the note is present and accurate. — done 2026-09-02: new "Auth email delivery" bullet after the `auth.rs` bullet; covers the 6 templates, the notification blocks, and the `public/email/cedar-mark.png` logo + deploy-before-paste ordering.
 - [x] 7.2 Confirm no secret landed in the repo: `git grep -iE "re_[a-z0-9]{10,}|RESEND_API_KEY *= *\"[^e]"` returns nothing, and `config.toml` references `env(RESEND_API_KEY)`. Verify: the grep is clean. — done 2026-09-02: grep clean; `config.toml:246` has `pass = "env(RESEND_API_KEY)"` (commented).
-- [ ] 7.3 Open the PR with `supabase/config.toml`, `supabase/templates/*.html`, `public/email/cedar-mark.png`, and the `CLAUDE.md` note. Verify: CI (Backend Tests + Frontend Tests) green; after merge, `https://cedarcharts.vercel.app/email/cedar-mark.png` returns the PNG (gates 5.4).
+- [x] 7.3 Open the PR with `supabase/config.toml`, `supabase/templates/*.html`, `public/email/cedar-mark.png`, and the `CLAUDE.md` note. Verify: CI (Backend Tests + Frontend Tests) green; after merge, `https://cedarcharts.vercel.app/email/cedar-mark.png` returns the PNG (gates 5.4). — PR #101 opened 2026-09-02 (branch `feat/resend-auth-email`, off `main`, commit `4dd2b2e`). CI + merge + prod deploy pending; confirm the PNG URL 200s after deploy before doing 5.4.
 
 ## 8. Follow-up (not blocking this change)
 
