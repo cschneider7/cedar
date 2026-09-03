@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="supported-color-schemes" content="light dark" />
+    <title>Confirm your email for Cedar</title>
+  </head>
+  <body style="margin: 0; padding: 0; background-color: #f4f4f5;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f5; padding: 24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; max-width: 480px; background-color: #ffffff; border: 1px solid #e4e4e7; border-radius: 10px; padding: 32px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+            <tr>
+              <td style="padding-bottom: 20px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td valign="middle" style="padding-right: 10px;">
+                      <img src="https://cedarcharts.vercel.app/email/cedar-mark.png" width="22" height="27" alt="" style="display: block; border: 0; outline: none; text-decoration: none;" />
+                    </td>
+                    <td valign="middle" style="font-size: 18px; font-weight: 600; color: #0f172a;">Cedar</td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="font-size: 15px; line-height: 1.6; color: #334155; padding-bottom: 24px;">
+                Confirm your email address to finish setting up your Cedar account.
+              </td>
+            </tr>
+            <tr>
+              <td style="padding-bottom: 24px;">
+                <a href="{{ .ConfirmationURL }}" style="display: inline-block; background-color: #0f172a; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 500; padding: 12px 20px; border-radius: 6px;">Confirm email</a>
+              </td>
+            </tr>
+            <tr>
+              <td style="font-size: 13px; line-height: 1.6; color: #64748b; padding-bottom: 6px;">
+                Or paste this link into your browser:
+              </td>
+            </tr>
+            <tr>
+              <td style="font-size: 13px; line-height: 1.6; padding-bottom: 20px; word-break: break-all;">
+                <a href="{{ .ConfirmationURL }}" style="color: #2563eb;">{{ .ConfirmationURL }}</a>
+              </td>
+            </tr>
+            <tr>
+              <td style="font-size: 13px; line-height: 1.6; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 16px;">
+                If you didn't create a Cedar account, you can ignore this email.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
